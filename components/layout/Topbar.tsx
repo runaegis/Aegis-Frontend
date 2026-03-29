@@ -18,21 +18,26 @@ export default function Topbar({ title, subtitle, lastUpdated, onRefresh }: Topb
   };
 
   return (
-    <header className="flex items-center justify-between border-b border-zinc-200 bg-white px-8 py-5">
+    <header className="flex items-center justify-between border-b border-border px-6 py-4">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight text-zinc-900">{title}</h1>
-        {subtitle && <p className="mt-0.5 text-sm text-zinc-500">{subtitle}</p>}
+        <h1 className="text-lg font-semibold text-foreground">{title}</h1>
+        {subtitle && (
+          <p className="text-sm text-muted-foreground">{subtitle}</p>
+        )}
       </div>
       {onRefresh && (
         <div className="flex items-center gap-3">
           {lastUpdated && (
-            <span className="text-xs text-zinc-400">Updated {formatTime(lastUpdated)}</span>
+            <span className="text-xs text-muted-foreground">
+              Updated {formatTime(lastUpdated)}
+            </span>
           )}
           <button
             onClick={onRefresh}
-            className="rounded-lg border border-zinc-200 p-2 text-zinc-500 transition-colors hover:bg-zinc-50 hover:text-zinc-700"
+            className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
           >
-            <RefreshCw className="h-4 w-4" />
+            <RefreshCw className="h-3.5 w-3.5" />
+            Refresh
           </button>
         </div>
       )}

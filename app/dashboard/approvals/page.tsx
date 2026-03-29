@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { Bell, Clock } from 'lucide-react';
+import { Bell, Clock, Check, X } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useAutoRefresh } from '@/lib/hooks';
 import { SessionAction } from '@/lib/types';
@@ -19,10 +19,6 @@ export default function ApprovalsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionedIds, setActionedIds] = useState<Set<string>>(new Set());
-  const [confirmDialog, setConfirmDialog] = useState<{
-    id: string;
-    type: 'approve' | 'reject';
-  } | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
@@ -38,142 +34,100 @@ export default function ApprovalsPage() {
 
   const { lastUpdated } = useAutoRefresh(fetchData, 30000);
 
-  // TODO(jenil): needs POST /approvals endpoint to actually approve/reject actions
   const handleAction = (id: string) => {
     setActionedIds((prev) => new Set(prev).add(id));
-    setConfirmDialog(null);
   };
 
   const pendingApprovals = approvals.filter((a) => !actionedIds.has(a.id));
 
   if (loading) {
     return (
-      <div className="flex h-[calc(100vh-80px)] items-center justify-center">
+      <div className="flex h-[60vh] items-center justify-center">
         <LoadingSpinner size="lg" />
       </div>
     );
   }
 
   return (
-    <div>
-      <Topbar title="Approvals" subtitle="Actions requiring human review" lastUpdated={lastUpdated} onRefresh={fetchData} />
-      <div className="p-8">
+    <div className="min-h-screen">
+      <Topbar title="Approvals" subtitle="Actions requiring review" lastUpdated={lastUpdated} onRefresh={fetchData} />
+      <div className="p-6">
         {error && (
-          <div className="mb-6">
+          <div className="mb-4">
             <ErrorBanner message={error} onDismiss={() => setError(null)} onRetry={fetchData} />
           </div>
         )}
 
-        <div className="mb-6 flex items-center gap-2">
-          <span className="rounded-full bg-zinc-100 px-3 py-1 text-sm font-medium text-zinc-600">
-            {pendingApprovals.length} pending
-          </span>
-        </div>
+        {pendingApprovals.length > 0 && (
+          <div className="mb-4 text-sm text-muted-foreground">
+            {pendingApprovals.length} pending approval{pendingApprovals.length !== 1 ? 's' : ''}
+          </div>
+        )}
 
         {pendingApprovals.length === 0 ? (
-          <div className="rounded-xl border border-zinc-200 bg-white">
+          <div className="rounded-md border border-border bg-card">
             <EmptyState
-              icon={<Bell className="h-12 w-12" />}
+              icon={<Bell className="h-6 w-6" />}
               title="No pending approvals"
-              description="Actions requiring human review will appear here."
+              description="Actions requiring review will appear here."
             />
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-3">
             {pendingApprovals.map((approval) => (
-              <div key={approval.id} className="rounded-xl border border-zinc-200 bg-white p-6">
-                <div className="flex items-start justify-between">
+              <div key={approval.id} className="rounded-md border border-border bg-card">
+                <div className="flex items-center justify-between border-b border-border px-4 py-3">
                   <div className="flex items-center gap-3">
-                    <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-700">
-                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-500" />
-                      Pending
-                    </span>
-                    <DecisionBadge decision={approval.decision} />
-                  </div>
-                  <div className="flex items-center gap-1.5 text-xs text-zinc-400">
-                    <Clock className="h-3.5 w-3.5" />
-                    {formatRelativeTime(approval.timestamp)}
-                  </div>
-                </div>
-
-                <div className="mt-4 flex items-center gap-2">
-                  <AgentAvatar name={approval.agent_name || ''} size="sm" />
-                  <span className="text-sm font-medium text-zinc-900">{approval.agent_name}</span>
-                </div>
-
-                <div className="mt-4 grid grid-cols-2 gap-4 rounded-lg bg-zinc-50 p-4">
-                  <div>
-                    <p className="text-xs font-medium uppercase tracking-wider text-zinc-400">Tool</p>
-                    <code className="mt-1 font-mono text-sm text-zinc-700">{approval.tool_name}</code>
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium uppercase tracking-wider text-zinc-400">Repository</p>
-                    <p className="mt-1 text-sm text-zinc-700">{approval.target_repo}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium uppercase tracking-wider text-zinc-400">Branch</p>
-                    <p className="mt-1 text-sm text-zinc-700">{approval.target_branch || '—'}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium uppercase tracking-wider text-zinc-400">Summary</p>
-                    <p className="mt-1 text-sm text-zinc-700">{approval.action_summary}</p>
-                  </div>
-                </div>
-
-                {approval.arguments && (
-                  <div className="mt-4">
-                    <JsonViewer data={approval.arguments} />
-                  </div>
-                )}
-
-                <div className="mt-5 flex items-center gap-3">
-                  {confirmDialog?.id === approval.id ? (
-                    <div className="flex items-center gap-3 rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-2">
-                      <span className="text-sm text-zinc-600">
-                        {confirmDialog.type === 'approve' ? 'Approve this action?' : 'Reject this action?'}
-                      </span>
-                      <button
-                        onClick={() => handleAction(approval.id)}
-                        className={`rounded-lg px-3 py-1 text-sm font-medium text-white ${
-                          confirmDialog.type === 'approve' ? 'bg-green-600' : 'bg-red-600'
-                        }`}
-                      >
-                        Confirm
-                      </button>
-                      <button
-                        onClick={() => setConfirmDialog(null)}
-                        className="rounded-lg border border-zinc-200 px-3 py-1 text-sm font-medium text-zinc-600"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      <button
-                        onClick={() => setConfirmDialog({ id: approval.id, type: 'approve' })}
-                        className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-green-700"
-                      >
-                        Approve
-                      </button>
-                      <button
-                        onClick={() => setConfirmDialog({ id: approval.id, type: 'reject' })}
-                        className="rounded-lg border border-red-200 px-4 py-2 text-sm font-medium text-red-600 transition-colors hover:bg-red-50"
-                      >
-                        Reject
-                      </button>
-                      <div className="group relative">
-                        <button
-                          className="rounded-lg border border-zinc-200 px-4 py-2 text-sm font-medium text-zinc-400 cursor-not-allowed"
-                          disabled
-                        >
-                          Modify
-                        </button>
-                        <div className="absolute bottom-full left-1/2 mb-2 hidden -translate-x-1/2 rounded-md bg-zinc-800 px-2 py-1 text-xs text-white group-hover:block">
-                          Coming soon
-                        </div>
+                    <AgentAvatar name={approval.agent_name || ''} size="sm" />
+                    <div>
+                      <span className="text-sm font-medium text-foreground">{approval.agent_name}</span>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <Clock className="h-3 w-3" />
+                        {formatRelativeTime(approval.timestamp)}
                       </div>
-                    </>
+                    </div>
+                  </div>
+                  <DecisionBadge decision={approval.decision} />
+                </div>
+
+                <div className="p-4">
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <p className="text-xs text-muted-foreground">Tool</p>
+                      <code className="text-foreground">{approval.tool_name}</code>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Repository</p>
+                      <p className="text-foreground">{approval.target_repo}</p>
+                    </div>
+                    <div className="col-span-2">
+                      <p className="text-xs text-muted-foreground">Summary</p>
+                      <p className="text-foreground">{approval.action_summary}</p>
+                    </div>
+                  </div>
+
+                  {approval.arguments && (
+                    <div className="mt-4">
+                      <JsonViewer data={approval.arguments} />
+                    </div>
                   )}
+
+                  <div className="mt-4 flex items-center gap-2">
+                    <button
+                      onClick={() => handleAction(approval.id)}
+                      className="flex items-center gap-1.5 rounded-md bg-success px-3 py-1.5 text-sm font-medium text-white hover:bg-success/90"
+                    >
+                      <Check className="h-4 w-4" />
+                      Approve
+                    </button>
+                    <button
+                      onClick={() => handleAction(approval.id)}
+                      className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+                    >
+                      <X className="h-4 w-4" />
+                      Reject
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}

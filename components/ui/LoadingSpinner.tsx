@@ -2,19 +2,19 @@
 
 const sizes = {
   sm: 'h-4 w-4',
-  md: 'h-6 w-6',
-  lg: 'h-10 w-10',
+  md: 'h-5 w-5',
+  lg: 'h-6 w-6',
 };
 
 export default function LoadingSpinner({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) {
   return (
     <svg
-      className={`animate-spin text-zinc-400 ${sizes[size]}`}
+      className={`animate-spin text-muted-foreground ${sizes[size]}`}
       xmlns="http://www.w3.org/2000/svg"
       fill="none"
       viewBox="0 0 24 24"
     >
-      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
       <path
         className="opacity-75"
         fill="currentColor"
