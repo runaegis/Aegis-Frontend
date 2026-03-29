@@ -27,7 +27,7 @@ export default function OnboardingPage() {
 
   // Step 1 state
   const [username, setUsername] = useState(user?.username || '');
-  const [githubId, setGithubId] = useState(user?.github_user_id || '');
+  const [githubId, setGithubId] = useState(String(user?.github_user_id || ''));
   const [email, setEmail] = useState(user?.email || '');
   const [token, setToken] = useState(user?.access_token || '');
   const [step1Loading, setStep1Loading] = useState(false);
@@ -54,12 +54,27 @@ export default function OnboardingPage() {
     setStep1Loading(true);
     setStep1Error('');
     try {
-      const newUser = { github_user_id: githubId, username, email, access_token: token };
-      await api.saveUser(newUser);
-      setUser(newUser);
+      const githubUserIdNum = parseInt(githubId, 10);
+      if (isNaN(githubUserIdNum)) {
+        setStep1Error('GitHub User ID must be a valid number.');
+        setStep1Loading(false);
+        return;
+      }
+
+      const newUser = {
+        github_user_id: githubUserIdNum,
+        username,
+        email,
+        access_token: token,
+      };
+      
+      const response = await api.saveUser(newUser);
+      // Response contains: id (UUID), github_user_id, username, access_token, created_at
+      setUser(response);
       setStep(2);
-    } catch {
+    } catch (error) {
       setStep1Error('Failed to save profile. Please try again.');
+      console.error(error);
     } finally {
       setStep1Loading(false);
     }
@@ -68,19 +83,24 @@ export default function OnboardingPage() {
   const handleSync = async () => {
     setSyncing(true);
     try {
-      await api.syncRepos(user?.github_user_id || githubId);
-      const data = await api.getRepos(user?.github_user_id || githubId);
-      if (Array.isArray(data)) {
-        setRepos(
-          data.map((r: any) => ({
-            repo_name: r.repo_name || r.name,
-            owner: r.owner,
-            permission: r.permission || 'allow',
-          }))
-        );
+      if (!user?.github_user_id || !user?.access_token) {
+        throw new Error('User not properly initialized');
+      }
+
+      // Sync repositories using github_user_id (numeric)
+      const syncResponse = await api.syncRepos(user.github_user_id, user.access_token);
+      if (!syncResponse.success) {
+        throw new Error(syncResponse.message || 'Sync failed');
+      }
+
+      // Fetch the synced repositories using UUID id
+      const reposResponse = await api.getRepos(user.id || '');
+      if (reposResponse?.repos && Array.isArray(reposResponse.repos)) {
+        setRepos(reposResponse.repos);
       }
       setSynced(true);
-    } catch {
+    } catch (error) {
+      console.error('Sync error:', error);
       // repos may just be empty
     } finally {
       setSyncing(false);
@@ -88,23 +108,59 @@ export default function OnboardingPage() {
   };
 
   const handleSetPermission = (index: number, permission: 'allow' | 'deny' | 'require_approval') => {
-    setRepos((prev) => prev.map((r, i) => (i === index ? { ...r, permission } : r)));
+    setRepos((prev) =>
+      prev.map((r, i) => {
+        if (i === index) {
+          if (permission === 'allow') {
+            return { ...r, can_read: true, can_write: true };
+          } else if (permission === 'require_approval') {
+            return { ...r, can_read: true, can_write: false };
+          } else {
+            // deny
+            return { ...r, can_read: false, can_write: false };
+          }
+        }
+        return r;
+      })
+    );
   };
 
   const handleBulkPermission = (permission: 'allow' | 'deny' | 'require_approval') => {
-    setRepos((prev) => prev.map((r) => ({ ...r, permission })));
+    setRepos((prev) =>
+      prev.map((r) => {
+        if (permission === 'allow') {
+          return { ...r, can_read: true, can_write: true };
+        } else if (permission === 'require_approval') {
+          return { ...r, can_read: true, can_write: false };
+        } else {
+          // deny
+          return { ...r, can_read: false, can_write: false };
+        }
+      })
+    );
+  };
+
+  const getPermissionLabel = (repo: Repo): 'allow' | 'deny' | 'require_approval' => {
+    if (repo.can_write) return 'allow';
+    if (repo.can_read) return 'require_approval';
+    return 'deny';
   };
 
   const handleSavePermissions = async () => {
-    const uid = user?.github_user_id || githubId;
-    if (!uid) return;
+    if (!user?.id) {
+      console.error('User ID not available');
+      return;
+    }
     try {
-      await api.setPermissions(
-        uid,
-        repos.map(({ repo_name, owner, permission }) => ({ repo_name, owner, permission }))
-      );
+      const permissions = repos.map(({ github_repo_id, can_read, can_write }) => ({
+        github_repo_id,
+        can_read: can_read || false,
+        can_write: can_write || false,
+      }));
+      await api.setPermissions(user.id, permissions);
       setStep(4);
-    } catch {
+    } catch (error) {
+      console.error('Failed to save permissions:', error);
       // continue anyway
       setStep(4);
     }
@@ -151,7 +207,7 @@ export default function OnboardingPage() {
         'aegis-github': {
           url: 'https://app.runaegis.co/sse',
           headers: {
-            user_id: user?.github_user_id || githubId || '{USER_GITHUB_ID}',
+            user_id: String(user?.github_user_id || githubId || '{USER_GITHUB_ID}'),
           },
         },
       },
@@ -225,6 +281,9 @@ export default function OnboardingPage() {
                   placeholder="octocat"
                   className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm focus:border-transparent focus:ring-2 focus:ring-blue-500 focus:outline-none"
                 />
+                <p className="mt-1 text-xs text-zinc-400">
+                  Your GitHub account username
+                </p>
               </div>
               <div>
                 <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-zinc-400">
@@ -238,7 +297,7 @@ export default function OnboardingPage() {
                   className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm focus:border-transparent focus:ring-2 focus:ring-blue-500 focus:outline-none"
                 />
                 <p className="mt-1 text-xs text-zinc-400">
-                  Find this at github.com/settings/profile
+                  Your numeric GitHub User ID (different from username). Find it at github.com/api/v3/user or github.com/settings/profile
                 </p>
               </div>
               <div>
@@ -344,16 +403,16 @@ export default function OnboardingPage() {
                 <div className="max-h-80 space-y-1.5 overflow-y-auto">
                   {repos.map((repo) => (
                     <div
-                      key={`${repo.owner}/${repo.repo_name}`}
+                      key={`${repo.full_name}`}
                       className="flex items-center justify-between rounded-lg border border-zinc-100 px-4 py-2.5"
                     >
                       <div className="flex items-center gap-2.5">
                         <div className="flex h-7 w-7 items-center justify-center rounded-full bg-zinc-100 text-xs font-semibold text-zinc-600">
-                          {repo.owner?.[0]?.toUpperCase() || '?'}
+                          {repo.full_name?.[0]?.toUpperCase() || '?'}
                         </div>
                         <div>
-                          <span className="text-sm font-medium text-zinc-900">{repo.repo_name}</span>
-                          <span className="ml-2 text-xs text-zinc-400">{repo.owner}</span>
+                          <span className="text-sm font-medium text-zinc-900">{repo.name}</span>
+                          <span className="ml-2 text-xs text-zinc-400">{repo.full_name}</span>
                         </div>
                       </div>
                       <span className="rounded-full bg-[#F0FDF4] px-2 py-0.5 text-xs font-medium text-[#15803D]">
@@ -416,11 +475,11 @@ export default function OnboardingPage() {
             <div className="max-h-72 space-y-1.5 overflow-y-auto">
               {repos.map((repo, i) => (
                 <div
-                  key={`${repo.owner}/${repo.repo_name}`}
+                  key={`${repo.full_name}`}
                   className="flex items-center justify-between rounded-lg border border-zinc-100 px-4 py-2.5"
                 >
                   <span className="text-sm font-medium text-zinc-900">
-                    {repo.owner}/{repo.repo_name}
+                    {repo.full_name}
                   </span>
                   <div className="flex rounded-lg border border-zinc-200">
                     {permOptions.map((opt) => (
@@ -428,7 +487,7 @@ export default function OnboardingPage() {
                         key={opt.value}
                         onClick={() => handleSetPermission(i, opt.value)}
                         className={`px-3 py-1.5 text-xs font-medium transition-colors ${
-                          repo.permission === opt.value ? opt.activeClass : 'text-zinc-500 hover:bg-zinc-50'
+                          getPermissionLabel(repo) === opt.value ? opt.activeClass : 'text-zinc-500 hover:bg-zinc-50'
                         } ${opt.value === 'allow' ? 'rounded-l-lg' : ''} ${opt.value === 'deny' ? 'rounded-r-lg' : ''}`}
                       >
                         {opt.label}
@@ -518,7 +577,7 @@ export default function OnboardingPage() {
                     https://app.runaegis.co/sse
                   </code>
                   <p className="mt-2">
-                    With header: <code className="font-mono text-xs">user_id: {user?.github_user_id || githubId}</code>
+                    With header: <code className="font-mono text-xs">user_id: {String(user?.github_user_id || githubId)}</code>
                   </p>
                 </div>
               )}

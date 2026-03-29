@@ -27,22 +27,29 @@ export interface Session {
 }
 
 export interface User {
-  github_user_id: string;
+  id?: string; // UUID primary key from database
+  github_user_id: number;
   username: string;
   email: string;
   access_token: string;
+  created_at?: string;
 }
 
 export interface RepoPermission {
-  repo_name: string;
-  owner: string;
-  permission: 'allow' | 'deny' | 'require_approval';
+  github_repo_id: number;
+  can_read?: boolean;
+  can_write?: boolean;
 }
 
 export interface Repo {
-  repo_name: string;
-  owner: string;
-  permission: 'allow' | 'deny' | 'require_approval';
+  repo_id: string;
+  github_repo_id: number;
+  full_name: string;
+  name: string;
+  is_private: boolean;
+  can_read: boolean;
+  can_write: boolean;
+  granted_at?: string;
 }
 
 export interface Metrics {

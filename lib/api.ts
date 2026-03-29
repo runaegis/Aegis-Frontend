@@ -1,6 +1,6 @@
 import { SessionAction, Session, User, RepoPermission, Metrics } from './types';
 
-const API_BASE = 'https://api.runaegis.co';
+const API_BASE = 'http://localhost:8000';
 
 async function query<T>(sql: string, params: any[] = []): Promise<T[]> {
   const res = await fetch(`${API_BASE}/query`, {
@@ -87,27 +87,51 @@ export const api = {
       [`%${username}%`]
     ),
 
-  saveUser: (user: User) =>
-    fetch(`${API_BASE}/user`, {
+  saveUser: async (user: User) => {
+    // Step 1: Create user on backend
+    const createResponse = await fetch(`${API_BASE}/user`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(user),
-    }).then((r) => r.json()),
+      body: JSON.stringify({
+        github_user_id: user.github_user_id,
+        username: user.username,
+        email: user.email,
+        access_token: user.access_token,
+      }),
+    }).then((r) => r.json());
 
-  syncRepos: (userId: string) =>
+    if (!createResponse.success) {
+      throw new Error(createResponse.message || 'Failed to create user');
+    }
+
+    // Step 2: Fetch the created user to get the UUID id
+    const userResponse = await fetch(`${API_BASE}/user?email=${encodeURIComponent(user.email)}`)
+      .then((r) => r.json());
+
+    return userResponse; // Returns {id, github_user_id, username, access_token, created_at}
+  },
+
+  syncRepos: (github_user_id: number, github_pat: string) =>
     fetch(`${API_BASE}/sync`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_id: userId }),
+      body: JSON.stringify({ github_user_id, github_pat }),
     }).then((r) => r.json()),
 
-  getRepos: (userId: string) =>
-    fetch(`${API_BASE}/repos/${userId}`).then((r) => r.json()),
+  getRepos: (user_id: string) =>
+    fetch(`${API_BASE}/repos/${user_id}`).then((r) => r.json()),
 
-  setPermissions: (userId: string, permissions: RepoPermission[]) =>
+  setPermissions: (user_id: string, permissions: RepoPermission[]) =>
     fetch(`${API_BASE}/permissions/bulk`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_id: userId, permissions }),
+      body: JSON.stringify({
+        permissions: permissions.map((p) => ({
+          user_id,
+          github_repo_id: p.github_repo_id,
+          can_read: p.can_read || false,
+          can_write: p.can_write || false,
+        })),
+      }),
     }).then((r) => r.json()),
 };

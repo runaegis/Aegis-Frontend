@@ -12,7 +12,7 @@ import LoadingSpinner from '@/components/ui/LoadingSpinner';
 export default function SettingsPage() {
   const { user, setUser } = useUser();
   const [username, setUsername] = useState(user?.username || '');
-  const [userId, setUserId] = useState(user?.github_user_id || '');
+  const [userId, setUserId] = useState(String(user?.github_user_id || ''));
   const [email, setEmail] = useState(user?.email || '');
   const [token, setToken] = useState(user?.access_token || '');
   const [showToken, setShowToken] = useState(false);
@@ -27,23 +27,19 @@ export default function SettingsPage() {
   const [error, setError] = useState<string | null>(null);
 
   const fetchRepos = useCallback(async () => {
-    if (!user?.github_user_id) return;
+    if (!user?.id) return;
     setLoadingRepos(true);
     try {
-      const data = await api.getRepos(user.github_user_id);
-      if (Array.isArray(data)) {
-        setRepos(data.map((r: any) => ({
-          repo_name: r.repo_name || r.name,
-          owner: r.owner,
-          permission: r.permission || 'allow',
-        })));
+      const reposResponse = await api.getRepos(user.id);
+      if (reposResponse?.repos && Array.isArray(reposResponse.repos)) {
+        setRepos(reposResponse.repos);
       }
     } catch {
       setError('Failed to load repositories');
     } finally {
       setLoadingRepos(false);
     }
-  }, [user?.github_user_id]);
+  }, [user?.id]);
 
   useEffect(() => {
     fetchRepos();
@@ -52,47 +48,77 @@ export default function SettingsPage() {
   const handleSaveProfile = async () => {
     setSaving(true);
     try {
-      const updatedUser = { github_user_id: userId, username, email, access_token: token };
-      await api.saveUser(updatedUser);
-      setUser(updatedUser);
+      const githubUserIdNum = parseInt(userId, 10);
+      if (isNaN(githubUserIdNum)) {
+        setError('GitHub User ID must be a valid number');
+        setSaving(false);
+        return;
+      }
+      const updatedUser = { github_user_id: githubUserIdNum, username, email, access_token: token };
+      const response = await api.saveUser(updatedUser);
+      setUser(response);
       setProfileSaved(true);
       setTimeout(() => setProfileSaved(false), 2000);
-    } catch {
+    } catch (err) {
       setError('Failed to save profile');
+      console.error(err);
     } finally {
       setSaving(false);
     }
   };
 
   const handleSync = async () => {
-    if (!user?.github_user_id) return;
+    if (!user?.github_user_id || !user?.access_token) return;
     setSyncing(true);
     try {
-      await api.syncRepos(user.github_user_id);
+      await api.syncRepos(user.github_user_id, user.access_token);
       await fetchRepos();
-    } catch {
+    } catch (err) {
       setError('Failed to sync repositories');
+      console.error(err);
     } finally {
       setSyncing(false);
     }
   };
 
+  const getPermissionLabel = (repo: Repo): 'allow' | 'deny' | 'require_approval' => {
+    if (repo.can_write) return 'allow';
+    if (repo.can_read) return 'require_approval';
+    return 'deny';
+  };
+
   const setPermission = (index: number, permission: 'allow' | 'deny' | 'require_approval') => {
-    setRepos((prev) => prev.map((r, i) => (i === index ? { ...r, permission } : r)));
+    setRepos((prev) =>
+      prev.map((r, i) => {
+        if (i === index) {
+          if (permission === 'allow') {
+            return { ...r, can_read: true, can_write: true };
+          } else if (permission === 'require_approval') {
+            return { ...r, can_read: true, can_write: false };
+          } else {
+            return { ...r, can_read: false, can_write: false };
+          }
+        }
+        return r;
+      })
+    );
   };
 
   const handleSavePermissions = async () => {
-    if (!user?.github_user_id) return;
+    if (!user?.id) return;
     setSavingPerms(true);
     try {
-      await api.setPermissions(
-        user.github_user_id,
-        repos.map(({ repo_name, owner, permission }) => ({ repo_name, owner, permission }))
-      );
+      const permissions = repos.map(({ github_repo_id, can_read, can_write }) => ({
+        github_repo_id,
+        can_read: can_read || false,
+        can_write: can_write || false,
+      }));
+      await api.setPermissions(user.id, permissions);
       setPermsSaved(true);
       setTimeout(() => setPermsSaved(false), 2000);
-    } catch {
+    } catch (err) {
       setError('Failed to save permissions');
+      console.error(err);
     } finally {
       setSavingPerms(false);
     }
@@ -205,12 +231,12 @@ export default function SettingsPage() {
               <div className="mt-5 space-y-2">
                 {repos.map((repo, i) => (
                   <div
-                    key={`${repo.owner}/${repo.repo_name}`}
+                    key={`${repo.full_name}`}
                     className="flex items-center justify-between rounded-lg border border-zinc-100 px-4 py-3"
                   >
                     <div>
-                      <span className="text-sm font-medium text-zinc-900">{repo.repo_name}</span>
-                      <span className="ml-2 text-xs text-zinc-400">{repo.owner}</span>
+                      <span className="text-sm font-medium text-zinc-900">{repo.name}</span>
+                      <span className="ml-2 text-xs text-zinc-400">{repo.full_name}</span>
                     </div>
                     <div className="flex rounded-lg border border-zinc-200">
                       {permOptions.map((opt) => (
@@ -218,7 +244,7 @@ export default function SettingsPage() {
                           key={opt.value}
                           onClick={() => setPermission(i, opt.value)}
                           className={`px-3 py-1.5 text-xs font-medium transition-colors ${
-                            repo.permission === opt.value
+                            getPermissionLabel(repo) === opt.value
                               ? opt.activeClass
                               : 'text-zinc-500 hover:bg-zinc-50'
                           } ${opt.value === 'allow' ? 'rounded-l-lg' : ''} ${
