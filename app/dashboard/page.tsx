@@ -103,7 +103,7 @@ export default function DashboardPage() {
               action={
                 <Link
                   href="/onboarding"
-                  className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+                  className="inline-flex items-center gap-1.5 rounded-md bg-foreground px-3 py-1.5 text-sm font-medium text-background hover:bg-foreground/90"
                 >
                   Set up agent
                 </Link>
@@ -121,13 +121,13 @@ export default function DashboardPage() {
                   placeholder="Search..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  className="w-full rounded-md border border-border bg-muted py-1.5 pl-9 pr-3 text-sm placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+                  className="w-full rounded-md border border-border bg-muted py-1.5 pl-9 pr-3 text-sm placeholder:text-muted-foreground focus:border-foreground/40 focus:outline-none"
                 />
               </div>
               <select
                 value={decisionFilter}
                 onChange={(e) => setDecisionFilter(e.target.value)}
-                className="rounded-md border border-border bg-muted px-3 py-1.5 text-sm focus:border-primary focus:outline-none"
+                className="rounded-md border border-border bg-muted px-3 py-1.5 text-sm focus:border-foreground/40 focus:outline-none"
               >
                 <option value="all">All decisions</option>
                 <option value="ALLOW">Allow</option>
@@ -242,7 +242,7 @@ function RunRow({
                   <p className="text-xs text-muted-foreground">Session</p>
                   <Link
                     href={`/dashboard/sessions?id=${run.session_id}`}
-                    className="font-mono text-primary hover:underline"
+                    className="font-mono text-foreground/70 hover:text-foreground hover:underline"
                     onClick={(e) => e.stopPropagation()}
                   >
                     {run.session_id?.substring(0, 8)}...

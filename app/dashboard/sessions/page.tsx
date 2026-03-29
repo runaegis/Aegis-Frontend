@@ -170,7 +170,7 @@ function SessionCard({
               </div>
               <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
                 <span>Duration: {formatDuration(session.started_at, session.last_action_at)}</span>
-                <Link href={`/dashboard?session=${session.session_id}`} className="text-primary hover:underline">
+                <Link href={`/dashboard?session=${session.session_id}`} className="text-foreground/60 hover:text-foreground transition-colors">
                   View all runs
                 </Link>
               </div>

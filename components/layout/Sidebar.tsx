@@ -35,7 +35,7 @@ export default function Sidebar() {
     <aside className="fixed left-0 top-0 z-30 flex h-screen w-56 flex-col border-r border-border bg-background">
       {/* Logo */}
       <div className="flex items-center gap-2.5 px-4 py-5">
-        <Shield className="h-5 w-5 text-primary" />
+        <Shield className="h-5 w-5 text-foreground" />
         <span className="text-sm font-semibold text-foreground">Aegis</span>
       </div>
 

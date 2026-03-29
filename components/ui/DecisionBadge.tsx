@@ -4,7 +4,7 @@ const styles: Record<string, { bg: string; text: string; label: string }> = {
   ALLOW: { bg: 'bg-success/10', text: 'text-success', label: 'Allow' },
   DENY: { bg: 'bg-destructive/10', text: 'text-destructive', label: 'Deny' },
   REWRITE: { bg: 'bg-amber-500/10', text: 'text-amber-500', label: 'Rewrite' },
-  REQUIRE_APPROVAL: { bg: 'bg-primary/10', text: 'text-primary', label: 'Approval' },
+  REQUIRE_APPROVAL: { bg: 'bg-foreground/8', text: 'text-foreground/70', label: 'Approval' },
   ALLOW_ERROR: { bg: 'bg-muted', text: 'text-muted-foreground', label: 'Error' },
 };
 

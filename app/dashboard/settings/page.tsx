@@ -108,7 +108,7 @@ export default function SettingsPage() {
 
   const permOptions: Array<{ value: 'allow' | 'deny' | 'require_approval'; label: string; activeClass: string }> = [
     { value: 'allow', label: 'Allow', activeClass: 'bg-success text-white' },
-    { value: 'require_approval', label: 'Approval', activeClass: 'bg-primary text-white' },
+    { value: 'require_approval', label: 'Approval', activeClass: 'bg-foreground/10 text-foreground' },
     { value: 'deny', label: 'Deny', activeClass: 'bg-destructive text-white' },
   ];
 
@@ -164,7 +164,7 @@ export default function SettingsPage() {
                       type="text"
                       value={username}
                       onChange={(e) => setUsername(e.target.value)}
-                      className="w-full rounded-md border border-border bg-muted px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
+                      className="w-full rounded-md border border-border bg-muted px-3 py-2 text-sm text-foreground focus:border-foreground/40 focus:outline-none"
                     />
                   </div>
                   <div>
@@ -173,7 +173,7 @@ export default function SettingsPage() {
                       type="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      className="w-full rounded-md border border-border bg-muted px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
+                      className="w-full rounded-md border border-border bg-muted px-3 py-2 text-sm text-foreground focus:border-foreground/40 focus:outline-none"
                     />
                   </div>
                   <div>
@@ -186,14 +186,14 @@ export default function SettingsPage() {
                       type="password"
                       value={token}
                       onChange={(e) => setToken(e.target.value)}
-                      className="w-full rounded-md border border-border bg-muted px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
+                      className="w-full rounded-md border border-border bg-muted px-3 py-2 text-sm text-foreground focus:border-foreground/40 focus:outline-none"
                     />
                   </div>
                   <div className="flex justify-end">
                     <button
                       onClick={handleSaveProfile}
                       disabled={saving}
-                      className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                      className="flex items-center gap-1.5 rounded-md bg-foreground px-3 py-1.5 text-sm font-medium text-background hover:bg-foreground/90 disabled:opacity-50"
                     >
                       {saving && <RefreshCw className="h-3.5 w-3.5 animate-spin" />}
                       Save
@@ -245,7 +245,7 @@ export default function SettingsPage() {
                         <button
                           onClick={handleSavePermissions}
                           disabled={saving}
-                          className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                        className="flex items-center gap-1.5 rounded-md bg-foreground px-3 py-1.5 text-sm font-medium text-background hover:bg-foreground/90 disabled:opacity-50"
                         >
                           {saving && <RefreshCw className="h-3.5 w-3.5 animate-spin" />}
                           Save
@@ -272,7 +272,7 @@ export default function SettingsPage() {
                         </div>
                       ))}
                     </div>
-                    <a href="/dashboard/policies" className="mt-3 inline-flex items-center gap-1 text-sm text-primary hover:underline">
+                    <a href="/dashboard/policies" className="mt-3 inline-flex items-center gap-1 text-sm text-foreground/60 hover:text-foreground transition-colors">
                       Manage policies <ExternalLink className="h-3 w-3" />
                     </a>
                   </div>

@@ -55,7 +55,7 @@ export default function PoliciesPage() {
                   </div>
                   <button
                     onClick={() => togglePolicy(i)}
-                    className={`relative h-5 w-9 rounded-full transition-colors ${activeStates[i] ? 'bg-primary' : 'bg-muted'}`}
+                    className={`relative h-5 w-9 rounded-full transition-colors ${activeStates[i] ? 'bg-foreground/80' : 'bg-muted'}`}
                   >
                     <span className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white transition-transform ${activeStates[i] ? 'translate-x-4' : ''}`} />
                   </button>
@@ -73,7 +73,7 @@ export default function PoliciesPage() {
               <h3 className="text-sm font-medium text-foreground">Custom Policy Configuration</h3>
               <p className="text-xs text-muted-foreground">Contact us to customize policies for your organization.</p>
             </div>
-            <a href="mailto:deals@runaegis.com" className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90">
+              <a href="mailto:deals@runaegis.com" className="rounded-md bg-foreground px-3 py-1.5 text-sm font-medium text-background hover:bg-foreground/90">
               Contact Sales
             </a>
           </div>

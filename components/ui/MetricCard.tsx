@@ -11,7 +11,7 @@ const variantColors: Record<string, string> = {
   allow: 'text-success',
   deny: 'text-destructive',
   rewrite: 'text-amber-500',
-  approval: 'text-primary',
+  approval: 'text-foreground/70',
 };
 
 export default function MetricCard({ label, value, variant = 'default' }: MetricCardProps) {
