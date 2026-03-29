@@ -10,9 +10,9 @@ import {
   ChevronRight,
   ChevronLeft,
   ExternalLink,
-  Copy,
   CheckCircle2,
   Loader2,
+  Sparkles,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useUser, useOnboardingStep } from '@/lib/hooks';
@@ -69,7 +69,6 @@ export default function OnboardingPage() {
       };
       
       const response = await api.saveUser(newUser);
-      // Response contains: id (UUID), github_user_id, username, access_token, created_at
       setUser(response);
       setStep(2);
     } catch (error) {
@@ -87,13 +86,11 @@ export default function OnboardingPage() {
         throw new Error('User not properly initialized');
       }
 
-      // Sync repositories using github_user_id (numeric)
       const syncResponse = await api.syncRepos(user.github_user_id, user.access_token);
       if (!syncResponse.success) {
         throw new Error(syncResponse.message || 'Sync failed');
       }
 
-      // Fetch the synced repositories using UUID id
       const reposResponse = await api.getRepos(user.id || '');
       if (reposResponse?.repos && Array.isArray(reposResponse.repos)) {
         setRepos(reposResponse.repos);
@@ -101,7 +98,6 @@ export default function OnboardingPage() {
       setSynced(true);
     } catch (error) {
       console.error('Sync error:', error);
-      // repos may just be empty
     } finally {
       setSyncing(false);
     }
@@ -116,7 +112,6 @@ export default function OnboardingPage() {
           } else if (permission === 'require_approval') {
             return { ...r, can_read: true, can_write: false };
           } else {
-            // deny
             return { ...r, can_read: false, can_write: false };
           }
         }
@@ -133,7 +128,6 @@ export default function OnboardingPage() {
         } else if (permission === 'require_approval') {
           return { ...r, can_read: true, can_write: false };
         } else {
-          // deny
           return { ...r, can_read: false, can_write: false };
         }
       })
@@ -161,7 +155,6 @@ export default function OnboardingPage() {
       setStep(4);
     } catch (error) {
       console.error('Failed to save permissions:', error);
-      // continue anyway
       setStep(4);
     }
   };
@@ -217,9 +210,9 @@ export default function OnboardingPage() {
   );
 
   const permOptions: Array<{ value: 'allow' | 'deny' | 'require_approval'; label: string; activeClass: string }> = [
-    { value: 'allow', label: 'Allow', activeClass: 'bg-green-600 text-white' },
-    { value: 'require_approval', label: 'Approval', activeClass: 'bg-purple-600 text-white' },
-    { value: 'deny', label: 'Deny', activeClass: 'bg-red-600 text-white' },
+    { value: 'allow', label: 'Allow', activeClass: 'bg-success text-white' },
+    { value: 'require_approval', label: 'Approval', activeClass: 'bg-info text-white' },
+    { value: 'deny', label: 'Deny', activeClass: 'bg-destructive text-white' },
   ];
 
   const tabs = [
@@ -230,23 +223,23 @@ export default function OnboardingPage() {
   ];
 
   return (
-    <div className="flex min-h-screen flex-col items-center bg-[#FAFAFA] px-4 py-12">
+    <div className="flex min-h-screen flex-col items-center bg-background px-4 py-12">
       {/* Step indicator */}
       <div className="mb-10 flex items-center gap-2">
         {[1, 2, 3, 4, 5].map((s) => (
           <div key={s} className="flex items-center gap-2">
             <div
-              className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold transition-colors ${
+              className={`flex h-9 w-9 items-center justify-center rounded-full text-xs font-semibold transition-all ${
                 s < step
-                  ? 'bg-green-600 text-white'
+                  ? 'bg-success text-white'
                   : s === step
-                    ? 'bg-zinc-900 text-white'
-                    : 'bg-zinc-200 text-zinc-500'
+                    ? 'bg-primary text-white ring-4 ring-primary/20'
+                    : 'bg-muted text-muted-foreground'
               }`}
             >
               {s < step ? <Check className="h-4 w-4" /> : s}
             </div>
-            {s < 5 && <div className={`h-px w-8 ${s < step ? 'bg-green-600' : 'bg-zinc-200'}`} />}
+            {s < 5 && <div className={`h-0.5 w-8 rounded-full ${s < step ? 'bg-success' : 'bg-border'}`} />}
           </div>
         ))}
       </div>
@@ -254,418 +247,450 @@ export default function OnboardingPage() {
       <div className="w-full max-w-2xl">
         {/* STEP 1 */}
         {step === 1 && (
-          <div className="rounded-xl border border-zinc-200 bg-white p-8">
-            <div className="mb-1 flex items-center gap-2">
-              <GitBranch className="h-5 w-5 text-zinc-900" />
-              <h1 className="text-xl font-semibold tracking-tight text-zinc-900">Connect your GitHub account</h1>
-            </div>
-            <p className="mb-6 text-sm text-zinc-500">
-              Aegis needs access to your repositories to govern agent actions.
-            </p>
-
-            {step1Error && (
-              <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
-                {step1Error}
+          <div className="overflow-hidden rounded-2xl border border-border bg-card animate-fade-in">
+            <div className="border-b border-border bg-muted/30 px-8 py-6">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
+                  <GitBranch className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <h1 className="text-xl font-semibold tracking-tight text-foreground">Connect your GitHub account</h1>
+                  <p className="text-sm text-muted-foreground">Aegis needs access to your repositories to govern agent actions.</p>
+                </div>
               </div>
-            )}
+            </div>
 
-            <div className="space-y-4">
-              <div>
-                <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-zinc-400">
-                  GitHub Username
-                </label>
-                <input
-                  type="text"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder="octocat"
-                  className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm focus:border-transparent focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                />
-                <p className="mt-1 text-xs text-zinc-400">
-                  Your GitHub account username
+            <div className="p-8">
+              {step1Error && (
+                <div className="mb-6 rounded-xl border border-destructive/30 bg-destructive-muted px-4 py-3 text-sm text-destructive">
+                  {step1Error}
+                </div>
+              )}
+
+              <div className="space-y-5">
+                <div>
+                  <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    GitHub Username
+                  </label>
+                  <input
+                    type="text"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    placeholder="octocat"
+                    className="w-full rounded-lg border border-border bg-muted/50 px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:bg-card focus:ring-2 focus:ring-primary/20 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    GitHub User ID
+                  </label>
+                  <input
+                    type="text"
+                    value={githubId}
+                    onChange={(e) => setGithubId(e.target.value)}
+                    placeholder="12345678"
+                    className="w-full rounded-lg border border-border bg-muted/50 px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:bg-card focus:ring-2 focus:ring-primary/20 focus:outline-none"
+                  />
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Your numeric GitHub User ID. Find it at api.github.com/users/YOUR_USERNAME
+                  </p>
+                </div>
+                <div>
+                  <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Email Address
+                  </label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="you@example.com"
+                    className="w-full rounded-lg border border-border bg-muted/50 px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:bg-card focus:ring-2 focus:ring-primary/20 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Personal Access Token
+                  </label>
+                  <input
+                    type="password"
+                    value={token}
+                    onChange={(e) => setToken(e.target.value)}
+                    placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+                    className="w-full rounded-lg border border-border bg-muted/50 px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:bg-card focus:ring-2 focus:ring-primary/20 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-6 rounded-xl border border-border bg-muted/30 p-5">
+                <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Required token permissions
                 </p>
+                <div className="space-y-2">
+                  {[
+                    { scope: 'repo', desc: 'Full control of private repositories' },
+                    { scope: 'read:org', desc: 'Read org and team membership' },
+                    { scope: 'workflow', desc: 'Update GitHub Actions workflows' },
+                  ].map((p) => (
+                    <div key={p.scope} className="flex items-center gap-3">
+                      <CheckCircle2 className="h-4 w-4 shrink-0 text-success" />
+                      <span className="text-sm text-muted-foreground">
+                        <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground">{p.scope}</code>
+                        <span className="mx-2">—</span>
+                        {p.desc}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <a
+                  href="https://github.com/settings/tokens/new"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-primary transition-colors hover:text-primary-hover"
+                >
+                  Create a Personal Access Token
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </a>
               </div>
-              <div>
-                <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-zinc-400">
-                  GitHub User ID
-                </label>
-                <input
-                  type="text"
-                  value={githubId}
-                  onChange={(e) => setGithubId(e.target.value)}
-                  placeholder="12345678"
-                  className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm focus:border-transparent focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                />
-                <p className="mt-1 text-xs text-zinc-400">
-                  Your numeric GitHub User ID (different from username). Find it at github.com/api/v3/user or github.com/settings/profile
-                </p>
-              </div>
-              <div>
-                <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-zinc-400">
-                  Email Address
-                </label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@example.com"
-                  className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm focus:border-transparent focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                />
-              </div>
-              <div>
-                <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-zinc-400">
-                  Personal Access Token
-                </label>
-                <input
-                  type="password"
-                  value={token}
-                  onChange={(e) => setToken(e.target.value)}
-                  placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
-                  className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm focus:border-transparent focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                />
-              </div>
-            </div>
 
-            <div className="mt-6 rounded-lg bg-zinc-50 p-4">
-              <p className="mb-2 text-xs font-medium uppercase tracking-wider text-zinc-400">
-                Required token permissions
-              </p>
-              <div className="space-y-1.5">
-                {[
-                  { scope: 'repo', desc: 'Full control of private repositories' },
-                  { scope: 'read:org', desc: 'Read org and team membership' },
-                  { scope: 'workflow', desc: 'Update GitHub Actions workflows' },
-                ].map((p) => (
-                  <div key={p.scope} className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-green-600" />
-                    <span className="text-sm text-zinc-700">
-                      <code className="font-mono text-xs">{p.scope}</code> — {p.desc}
-                    </span>
-                  </div>
-                ))}
+              <div className="mt-8">
+                <button
+                  onClick={handleStep1}
+                  disabled={step1Loading}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary-hover disabled:opacity-50"
+                >
+                  {step1Loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  Continue
+                  <ChevronRight className="h-4 w-4" />
+                </button>
               </div>
-              <a
-                href="https://github.com/settings/tokens/new"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:underline"
-              >
-                How to create a Personal Access Token
-                <ExternalLink className="h-3.5 w-3.5" />
-              </a>
-            </div>
-
-            <div className="mt-6">
-              <button
-                onClick={handleStep1}
-                disabled={step1Loading}
-                className="flex w-full items-center justify-center gap-2 rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-600 disabled:opacity-50"
-              >
-                {step1Loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                Continue
-                <ChevronRight className="h-4 w-4" />
-              </button>
             </div>
           </div>
         )}
 
         {/* STEP 2 */}
         {step === 2 && (
-          <div className="rounded-xl border border-zinc-200 bg-white p-8">
-            <h1 className="text-xl font-semibold tracking-tight text-zinc-900">Sync your repositories</h1>
-            <p className="mb-6 text-sm text-zinc-500">
-              Aegis will discover all repositories accessible with your token.
-            </p>
+          <div className="overflow-hidden rounded-2xl border border-border bg-card animate-fade-in">
+            <div className="border-b border-border bg-muted/30 px-8 py-6">
+              <h1 className="text-xl font-semibold tracking-tight text-foreground">Sync your repositories</h1>
+              <p className="text-sm text-muted-foreground">Aegis will discover all repositories accessible with your token.</p>
+            </div>
 
-            {!synced ? (
-              <button
-                onClick={handleSync}
-                disabled={syncing}
-                className="flex w-full items-center justify-center gap-2 rounded-lg bg-zinc-900 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-blue-600 disabled:opacity-50"
-              >
-                {syncing ? (
-                  <>
-                    <RefreshCw className="h-4 w-4 animate-spin" />
-                    Syncing repositories...
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw className="h-4 w-4" />
-                    Sync repositories
-                  </>
-                )}
-              </button>
-            ) : (
-              <>
-                <p className="mb-4 text-sm font-medium text-zinc-700">
-                  {repos.length} repositor{repos.length === 1 ? 'y' : 'ies'} found
-                </p>
-                <div className="max-h-80 space-y-1.5 overflow-y-auto">
-                  {repos.map((repo) => (
-                    <div
-                      key={`${repo.full_name}`}
-                      className="flex items-center justify-between rounded-lg border border-zinc-100 px-4 py-2.5"
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-zinc-100 text-xs font-semibold text-zinc-600">
-                          {repo.full_name?.[0]?.toUpperCase() || '?'}
+            <div className="p-8">
+              {!synced ? (
+                <button
+                  onClick={handleSync}
+                  disabled={syncing}
+                  className="flex w-full items-center justify-center gap-3 rounded-xl bg-primary px-4 py-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary-hover disabled:opacity-50"
+                >
+                  {syncing ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                      Syncing repositories...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="h-4 w-4" />
+                      Sync repositories
+                    </>
+                  )}
+                </button>
+              ) : (
+                <>
+                  <div className="mb-4 flex items-center gap-2">
+                    <CheckCircle2 className="h-5 w-5 text-success" />
+                    <span className="text-sm font-medium text-foreground">
+                      {repos.length} repositor{repos.length === 1 ? 'y' : 'ies'} found
+                    </span>
+                  </div>
+                  <div className="max-h-80 space-y-2 overflow-y-auto">
+                    {repos.map((repo) => (
+                      <div
+                        key={`${repo.full_name}`}
+                        className="flex items-center justify-between rounded-xl border border-border bg-muted/30 px-4 py-3"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted text-xs font-semibold text-muted-foreground">
+                            {repo.full_name?.[0]?.toUpperCase() || '?'}
+                          </div>
+                          <div>
+                            <span className="text-sm font-medium text-foreground">{repo.name}</span>
+                            <span className="ml-2 text-xs text-muted-foreground">{repo.full_name}</span>
+                          </div>
                         </div>
-                        <div>
-                          <span className="text-sm font-medium text-zinc-900">{repo.name}</span>
-                          <span className="ml-2 text-xs text-zinc-400">{repo.full_name}</span>
-                        </div>
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-success/30 bg-success-muted px-2.5 py-1 text-xs font-medium text-success">
+                          <span className="h-1.5 w-1.5 rounded-full bg-success" />
+                          Allow
+                        </span>
                       </div>
-                      <span className="rounded-full bg-[#F0FDF4] px-2 py-0.5 text-xs font-medium text-[#15803D]">
-                        Allow
-                      </span>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
 
-                <div className="mt-6 flex gap-3">
-                  <button
-                    onClick={() => setStep(1)}
-                    className="flex items-center gap-1 rounded-lg border border-zinc-200 px-4 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-50"
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                    Back
-                  </button>
-                  <button
-                    onClick={() => setStep(3)}
-                    className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-600"
-                  >
-                    Continue
-                    <ChevronRight className="h-4 w-4" />
-                  </button>
-                </div>
-              </>
-            )}
+                  <div className="mt-8 flex gap-3">
+                    <button
+                      onClick={() => setStep(1)}
+                      className="flex items-center gap-2 rounded-xl border border-border px-4 py-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                      Back
+                    </button>
+                    <button
+                      onClick={() => setStep(3)}
+                      className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary-hover"
+                    >
+                      Continue
+                      <ChevronRight className="h-4 w-4" />
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         )}
 
         {/* STEP 3 */}
         {step === 3 && (
-          <div className="rounded-xl border border-zinc-200 bg-white p-8">
-            <h1 className="text-xl font-semibold tracking-tight text-zinc-900">Configure repo permissions</h1>
-            <p className="mb-4 text-sm text-zinc-500">
-              Set the default governance level for each repository.
-            </p>
-
-            <div className="mb-4 rounded-lg bg-zinc-50 p-4">
-              <div className="space-y-2 text-xs text-zinc-500">
-                <p><strong className="text-zinc-700">Allow</strong> — Agent actions proceed with full audit logging</p>
-                <p><strong className="text-zinc-700">Require Approval</strong> — All agent actions require human approval before executing</p>
-                <p><strong className="text-zinc-700">Deny</strong> — No agent actions allowed on this repository</p>
-              </div>
+          <div className="overflow-hidden rounded-2xl border border-border bg-card animate-fade-in">
+            <div className="border-b border-border bg-muted/30 px-8 py-6">
+              <h1 className="text-xl font-semibold tracking-tight text-foreground">Configure repo permissions</h1>
+              <p className="text-sm text-muted-foreground">Set the default governance level for each repository.</p>
             </div>
 
-            <div className="mb-4 flex gap-2">
-              <span className="text-xs text-zinc-400 leading-7">Apply to all:</span>
-              {permOptions.map((opt) => (
-                <button
-                  key={opt.value}
-                  onClick={() => handleBulkPermission(opt.value)}
-                  className="rounded-lg border border-zinc-200 px-3 py-1 text-xs font-medium text-zinc-600 hover:bg-zinc-50"
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-
-            <div className="max-h-72 space-y-1.5 overflow-y-auto">
-              {repos.map((repo, i) => (
-                <div
-                  key={`${repo.full_name}`}
-                  className="flex items-center justify-between rounded-lg border border-zinc-100 px-4 py-2.5"
-                >
-                  <span className="text-sm font-medium text-zinc-900">
-                    {repo.full_name}
-                  </span>
-                  <div className="flex rounded-lg border border-zinc-200">
-                    {permOptions.map((opt) => (
-                      <button
-                        key={opt.value}
-                        onClick={() => handleSetPermission(i, opt.value)}
-                        className={`px-3 py-1.5 text-xs font-medium transition-colors ${
-                          getPermissionLabel(repo) === opt.value ? opt.activeClass : 'text-zinc-500 hover:bg-zinc-50'
-                        } ${opt.value === 'allow' ? 'rounded-l-lg' : ''} ${opt.value === 'deny' ? 'rounded-r-lg' : ''}`}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
+            <div className="p-8">
+              <div className="mb-6 rounded-xl border border-border bg-muted/30 p-5">
+                <div className="space-y-2 text-sm">
+                  <p><span className="font-semibold text-success">Allow</span><span className="text-muted-foreground"> — Agent actions proceed with full audit logging</span></p>
+                  <p><span className="font-semibold text-info">Require Approval</span><span className="text-muted-foreground"> — All agent actions require human approval</span></p>
+                  <p><span className="font-semibold text-destructive">Deny</span><span className="text-muted-foreground"> — No agent actions allowed on this repository</span></p>
                 </div>
-              ))}
-            </div>
+              </div>
 
-            <div className="mt-6 flex gap-3">
-              <button
-                onClick={() => setStep(2)}
-                className="flex items-center gap-1 rounded-lg border border-zinc-200 px-4 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-50"
-              >
-                <ChevronLeft className="h-4 w-4" />
-                Back
-              </button>
-              <button
-                onClick={handleSavePermissions}
-                className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-600"
-              >
-                Continue
-                <ChevronRight className="h-4 w-4" />
-              </button>
+              <div className="mb-5 flex items-center gap-3">
+                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Apply to all:</span>
+                {permOptions.map((opt) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => handleBulkPermission(opt.value)}
+                    className="rounded-lg border border-border bg-muted/50 px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="max-h-72 space-y-2 overflow-y-auto">
+                {repos.map((repo, i) => (
+                  <div
+                    key={`${repo.full_name}`}
+                    className="flex items-center justify-between rounded-xl border border-border bg-muted/30 px-4 py-3"
+                  >
+                    <span className="text-sm font-medium text-foreground">
+                      {repo.full_name}
+                    </span>
+                    <div className="flex overflow-hidden rounded-lg border border-border">
+                      {permOptions.map((opt) => (
+                        <button
+                          key={opt.value}
+                          onClick={() => handleSetPermission(i, opt.value)}
+                          className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                            getPermissionLabel(repo) === opt.value 
+                              ? opt.activeClass 
+                              : 'bg-card text-muted-foreground hover:bg-muted'
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-8 flex gap-3">
+                <button
+                  onClick={() => setStep(2)}
+                  className="flex items-center gap-2 rounded-xl border border-border px-4 py-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  Back
+                </button>
+                <button
+                  onClick={handleSavePermissions}
+                  className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary-hover"
+                >
+                  Continue
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
             </div>
           </div>
         )}
 
         {/* STEP 4 */}
         {step === 4 && (
-          <div className="rounded-xl border border-zinc-200 bg-white p-8">
-            <h1 className="text-xl font-semibold tracking-tight text-zinc-900">Connect your AI agent</h1>
-            <p className="mb-6 text-sm text-zinc-500">
-              Add Aegis to your agent&apos;s MCP configuration.
-            </p>
-
-            <div className="mb-4 flex border-b border-zinc-200">
-              {tabs.map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`px-4 py-2.5 text-sm font-medium transition-colors ${
-                    activeTab === tab.id
-                      ? 'border-b-2 border-zinc-900 text-zinc-900'
-                      : 'text-zinc-400 hover:text-zinc-600'
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
+          <div className="overflow-hidden rounded-2xl border border-border bg-card animate-fade-in">
+            <div className="border-b border-border bg-muted/30 px-8 py-6">
+              <h1 className="text-xl font-semibold tracking-tight text-foreground">Connect your AI agent</h1>
+              <p className="text-sm text-muted-foreground">Add Aegis to your agent&apos;s MCP configuration.</p>
             </div>
 
-            <div className="rounded-lg border border-zinc-200 bg-zinc-950 p-4">
-              <div className="mb-2 flex justify-end">
-                <CopyButton text={mcpConfig} />
+            <div className="p-8">
+              {/* Tabs */}
+              <div className="mb-5 flex gap-1 rounded-xl bg-muted/50 p-1">
+                {tabs.map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`flex-1 rounded-lg px-4 py-2.5 text-sm font-medium transition-all ${
+                      activeTab === tab.id
+                        ? 'bg-card text-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
               </div>
-              <pre className="overflow-x-auto font-mono text-sm leading-relaxed text-zinc-300">{mcpConfig}</pre>
-            </div>
 
-            <div className="mt-4 rounded-lg bg-zinc-50 p-4">
-              {activeTab === 'claude' && (
-                <ol className="space-y-1.5 text-sm text-zinc-600">
-                  <li>1. Open Claude Code settings</li>
-                  <li>2. Navigate to MCP Servers</li>
-                  <li>3. Add the configuration above</li>
-                  <li>4. Restart Claude Code</li>
-                </ol>
-              )}
-              {activeTab === 'cursor' && (
-                <ol className="space-y-1.5 text-sm text-zinc-600">
-                  <li>1. Open Cursor Settings &rarr; Features &rarr; MCP</li>
-                  <li>2. Click &quot;Add MCP Server&quot;</li>
-                  <li>3. Paste the configuration above</li>
-                </ol>
-              )}
-              {activeTab === 'windsurf' && (
-                <ol className="space-y-1.5 text-sm text-zinc-600">
-                  <li>1. Open ~/.codeium/windsurf/mcp_config.json</li>
-                  <li>2. Add the aegis-github server configuration</li>
-                </ol>
-              )}
-              {activeTab === 'custom' && (
-                <div className="text-sm text-zinc-600">
-                  <p className="mb-2">For any MCP-compatible agent, point your github MCP server URL to:</p>
-                  <code className="block rounded bg-zinc-200 px-3 py-2 font-mono text-xs">
-                    https://app.runaegis.co/sse
-                  </code>
-                  <p className="mt-2">
-                    With header: <code className="font-mono text-xs">user_id: {String(user?.github_user_id || githubId)}</code>
-                  </p>
+              {/* Code Block */}
+              <div className="overflow-hidden rounded-xl border border-border bg-background">
+                <div className="flex items-center justify-between border-b border-border bg-muted/30 px-4 py-2">
+                  <span className="text-xs font-medium text-muted-foreground">MCP Configuration</span>
+                  <CopyButton text={mcpConfig} />
                 </div>
-              )}
-            </div>
+                <pre className="overflow-x-auto p-4 font-mono text-sm leading-relaxed text-foreground">{mcpConfig}</pre>
+              </div>
 
-            <div className="mt-6 rounded-lg border border-zinc-200 p-4">
-              <p className="text-sm text-zinc-600">
-                Once configured, trigger any agent action and it will appear here.
-              </p>
-              <div className="mt-3 flex items-center gap-2">
-                {verified ? (
-                  <>
-                    <CheckCircle2 className="h-5 w-5 text-green-600" />
-                    <span className="text-sm font-medium text-green-700">Aegis is receiving agent actions</span>
-                  </>
-                ) : (
-                  <>
-                    {checking ? (
-                      <Loader2 className="h-4 w-4 animate-spin text-zinc-400" />
-                    ) : (
-                      <div className="h-4 w-4 animate-pulse rounded-full bg-zinc-300" />
-                    )}
-                    <span className="text-sm text-zinc-500">Waiting for first agent action...</span>
-                  </>
+              {/* Instructions */}
+              <div className="mt-5 rounded-xl border border-border bg-muted/30 p-5">
+                {activeTab === 'claude' && (
+                  <ol className="space-y-2 text-sm text-muted-foreground">
+                    <li className="flex gap-3"><span className="font-semibold text-foreground">1.</span> Open Claude Code settings</li>
+                    <li className="flex gap-3"><span className="font-semibold text-foreground">2.</span> Navigate to MCP Servers</li>
+                    <li className="flex gap-3"><span className="font-semibold text-foreground">3.</span> Add the configuration above</li>
+                    <li className="flex gap-3"><span className="font-semibold text-foreground">4.</span> Restart Claude Code</li>
+                  </ol>
+                )}
+                {activeTab === 'cursor' && (
+                  <ol className="space-y-2 text-sm text-muted-foreground">
+                    <li className="flex gap-3"><span className="font-semibold text-foreground">1.</span> Open Cursor Settings → Features → MCP</li>
+                    <li className="flex gap-3"><span className="font-semibold text-foreground">2.</span> Click &quot;Add MCP Server&quot;</li>
+                    <li className="flex gap-3"><span className="font-semibold text-foreground">3.</span> Paste the configuration above</li>
+                  </ol>
+                )}
+                {activeTab === 'windsurf' && (
+                  <ol className="space-y-2 text-sm text-muted-foreground">
+                    <li className="flex gap-3"><span className="font-semibold text-foreground">1.</span> Open ~/.codeium/windsurf/mcp_config.json</li>
+                    <li className="flex gap-3"><span className="font-semibold text-foreground">2.</span> Add the aegis-github server configuration</li>
+                  </ol>
+                )}
+                {activeTab === 'custom' && (
+                  <div className="text-sm text-muted-foreground">
+                    <p className="mb-3">For any MCP-compatible agent, point your github MCP server URL to:</p>
+                    <code className="block rounded-lg bg-muted px-4 py-3 font-mono text-xs text-foreground">
+                      https://app.runaegis.co/sse
+                    </code>
+                    <p className="mt-3">
+                      With header: <code className="rounded bg-muted px-2 py-0.5 font-mono text-xs text-foreground">user_id: {String(user?.github_user_id || githubId)}</code>
+                    </p>
+                  </div>
                 )}
               </div>
-            </div>
 
-            <div className="mt-6 flex gap-3">
-              <button
-                onClick={() => setStep(3)}
-                className="flex items-center gap-1 rounded-lg border border-zinc-200 px-4 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-50"
-              >
-                <ChevronLeft className="h-4 w-4" />
-                Back
-              </button>
-              <button
-                onClick={() => setStep(5)}
-                className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white transition-colors ${
-                  verified ? 'bg-zinc-900 hover:bg-blue-600' : 'bg-zinc-900 hover:bg-blue-600'
-                }`}
-              >
-                Continue
-                <ChevronRight className="h-4 w-4" />
-              </button>
+              {/* Verification Status */}
+              <div className="mt-5 rounded-xl border border-border bg-muted/30 p-5">
+                <p className="text-sm text-muted-foreground">Once configured, trigger any agent action and it will appear here.</p>
+                <div className="mt-3 flex items-center gap-3">
+                  {verified ? (
+                    <>
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-success/20">
+                        <CheckCircle2 className="h-5 w-5 text-success" />
+                      </div>
+                      <span className="text-sm font-medium text-success">Aegis is receiving agent actions</span>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted">
+                        {checking ? (
+                          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                        ) : (
+                          <div className="h-2.5 w-2.5 animate-pulse rounded-full bg-muted-foreground" />
+                        )}
+                      </div>
+                      <span className="text-sm text-muted-foreground">Waiting for first agent action...</span>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-8 flex gap-3">
+                <button
+                  onClick={() => setStep(3)}
+                  className="flex items-center gap-2 rounded-xl border border-border px-4 py-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  Back
+                </button>
+                <button
+                  onClick={() => setStep(5)}
+                  className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary-hover"
+                >
+                  Continue
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
+              {!verified && (
+                <button
+                  onClick={() => setStep(5)}
+                  className="mt-3 w-full text-center text-xs text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  Skip for now
+                </button>
+              )}
             </div>
-            {!verified && (
-              <button
-                onClick={() => setStep(5)}
-                className="mt-2 w-full text-center text-xs text-zinc-400 hover:text-zinc-600"
-              >
-                Skip for now
-              </button>
-            )}
           </div>
         )}
 
         {/* STEP 5 */}
         {step === 5 && (
-          <div className="rounded-xl border border-zinc-200 bg-white p-8 text-center">
-            <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-zinc-900">
-              <Shield className="h-8 w-8 text-white" />
-            </div>
-            <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">Aegis is active</h1>
-            <p className="mt-2 text-sm text-zinc-500">Your agents are now governed.</p>
-
-            <div className="mt-8 grid grid-cols-3 gap-4">
-              <div className="rounded-xl border border-zinc-200 p-5">
-                <p className="text-3xl font-semibold tracking-tight text-zinc-900">{actionCount}</p>
-                <p className="mt-1 text-xs text-zinc-400">actions intercepted</p>
-              </div>
-              <div className="rounded-xl border border-zinc-200 p-5">
-                <p className="text-3xl font-semibold tracking-tight text-zinc-900">{repos.length}</p>
-                <p className="mt-1 text-xs text-zinc-400">repos protected</p>
-              </div>
-              <div className="rounded-xl border border-zinc-200 p-5">
-                <p className="text-3xl font-semibold tracking-tight text-zinc-900">0</p>
-                <p className="mt-1 text-xs text-zinc-400">incidents prevented</p>
+          <div className="overflow-hidden rounded-2xl border border-border bg-card text-center animate-fade-in">
+            <div className="relative overflow-hidden bg-gradient-to-b from-primary/10 to-transparent px-8 py-12">
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(59,130,246,0.1),transparent_50%)]" />
+              <div className="relative">
+                <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-2xl bg-primary shadow-lg shadow-primary/20">
+                  <Shield className="h-10 w-10 text-white" />
+                </div>
+                <h1 className="text-2xl font-semibold tracking-tight text-foreground">Aegis is active</h1>
+                <p className="mt-2 flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                  <Sparkles className="h-4 w-4 text-primary" />
+                  Your agents are now governed
+                </p>
               </div>
             </div>
 
-            <button
-              onClick={() => router.push('/dashboard')}
-              className="mt-8 inline-flex items-center gap-2 rounded-lg bg-zinc-900 px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-blue-600"
-            >
-              Go to Dashboard
-              <ChevronRight className="h-4 w-4" />
-            </button>
+            <div className="p-8">
+              <div className="grid grid-cols-3 gap-4">
+                <div className="rounded-xl border border-border bg-muted/30 p-5">
+                  <p className="text-3xl font-semibold tracking-tight text-foreground">{actionCount}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">actions intercepted</p>
+                </div>
+                <div className="rounded-xl border border-border bg-muted/30 p-5">
+                  <p className="text-3xl font-semibold tracking-tight text-foreground">{repos.length}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">repos protected</p>
+                </div>
+                <div className="rounded-xl border border-border bg-muted/30 p-5">
+                  <p className="text-3xl font-semibold tracking-tight text-foreground">0</p>
+                  <p className="mt-1 text-xs text-muted-foreground">incidents prevented</p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => router.push('/dashboard')}
+                className="mt-8 inline-flex items-center gap-2 rounded-xl bg-primary px-8 py-3.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary-hover"
+              >
+                Go to Dashboard
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
           </div>
         )}
       </div>

@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { Activity, Search, ChevronDown, ChevronRight } from 'lucide-react';
+import { useState, useCallback } from 'react';
+import { Activity, Search, ChevronDown, ChevronRight, Filter } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useUser, useAutoRefresh } from '@/lib/hooks';
 import { SessionAction, Metrics } from '@/lib/types';
@@ -70,7 +70,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <div>
+    <div className="min-h-screen">
       <Topbar
         title="Runs"
         subtitle="Real-time agent action feed"
@@ -85,24 +85,25 @@ export default function DashboardPage() {
           </div>
         )}
 
+        {/* Metrics Grid */}
         <div className="mb-8 grid grid-cols-5 gap-4">
           <MetricCard label="Total Runs" value={metrics.total} />
-          <MetricCard label="Allow" value={metrics.allows} variant="allow" />
-          <MetricCard label="Deny" value={metrics.denies} variant="deny" />
-          <MetricCard label="Rewrite" value={metrics.rewrites} variant="rewrite" />
-          <MetricCard label="Approval" value={metrics.approvals} variant="approval" />
+          <MetricCard label="Allowed" value={metrics.allows} variant="allow" />
+          <MetricCard label="Denied" value={metrics.denies} variant="deny" />
+          <MetricCard label="Rewritten" value={metrics.rewrites} variant="rewrite" />
+          <MetricCard label="Approvals" value={metrics.approvals} variant="approval" />
         </div>
 
         {runs.length === 0 ? (
-          <div className="rounded-xl border border-zinc-200 bg-white">
+          <div className="rounded-xl border border-border bg-card">
             <EmptyState
-              icon={<Activity className="h-12 w-12" />}
+              icon={<Activity className="h-8 w-8" />}
               title="No agent actions yet"
               description="Once you connect your agent, actions will appear here in real time."
               action={
                 <Link
                   href="/onboarding"
-                  className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-600"
+                  className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary-hover"
                 >
                   Set up agent
                 </Link>
@@ -110,57 +111,67 @@ export default function DashboardPage() {
             />
           </div>
         ) : (
-          <div className="rounded-xl border border-zinc-200 bg-white">
-            <div className="flex items-center gap-3 border-b border-zinc-100 px-5 py-3">
+          <div className="overflow-hidden rounded-xl border border-border bg-card">
+            {/* Search and Filter Bar */}
+            <div className="flex items-center gap-3 border-b border-border px-5 py-4">
               <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+                <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <input
                   type="text"
                   placeholder="Search agent, tool, repo, or summary..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  className="w-full rounded-lg border border-zinc-200 py-2 pl-10 pr-3 text-sm focus:border-transparent focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  className="w-full rounded-lg border border-border bg-muted/50 py-2.5 pl-10 pr-4 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:bg-card focus:ring-2 focus:ring-primary/20 focus:outline-none"
                 />
               </div>
-              <select
-                value={decisionFilter}
-                onChange={(e) => setDecisionFilter(e.target.value)}
-                className="rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-700 focus:border-transparent focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              >
-                <option value="all">All decisions</option>
-                <option value="ALLOW">Allow</option>
-                <option value="DENY">Deny</option>
-                <option value="REWRITE">Rewrite</option>
-                <option value="approval">Approval</option>
-              </select>
+              <div className="flex items-center gap-2">
+                <Filter className="h-4 w-4 text-muted-foreground" />
+                <select
+                  value={decisionFilter}
+                  onChange={(e) => setDecisionFilter(e.target.value)}
+                  className="rounded-lg border border-border bg-muted/50 px-3 py-2.5 text-sm text-foreground focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none"
+                >
+                  <option value="all">All decisions</option>
+                  <option value="ALLOW">Allow</option>
+                  <option value="DENY">Deny</option>
+                  <option value="REWRITE">Rewrite</option>
+                  <option value="approval">Approval</option>
+                </select>
+              </div>
             </div>
 
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-zinc-100 text-left">
-                  <th className="px-5 py-3 text-xs font-medium uppercase tracking-wider text-zinc-400">Agent</th>
-                  <th className="px-5 py-3 text-xs font-medium uppercase tracking-wider text-zinc-400">Tool</th>
-                  <th className="px-5 py-3 text-xs font-medium uppercase tracking-wider text-zinc-400">Summary</th>
-                  <th className="px-5 py-3 text-xs font-medium uppercase tracking-wider text-zinc-400">Repository</th>
-                  <th className="px-5 py-3 text-xs font-medium uppercase tracking-wider text-zinc-400">Branch</th>
-                  <th className="px-5 py-3 text-xs font-medium uppercase tracking-wider text-zinc-400">Decision</th>
-                  <th className="px-5 py-3 text-xs font-medium uppercase tracking-wider text-zinc-400">Result</th>
-                  <th className="px-5 py-3 text-xs font-medium uppercase tracking-wider text-zinc-400">Time</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredRuns.map((run) => (
-                  <RunRow
-                    key={run.id}
-                    run={run}
-                    isExpanded={expandedRow === run.id}
-                    onToggle={() => setExpandedRow(expandedRow === run.id ? null : run.id)}
-                  />
-                ))}
-              </tbody>
-            </table>
+            {/* Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-border bg-muted/30">
+                    <th className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Agent</th>
+                    <th className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Tool</th>
+                    <th className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Summary</th>
+                    <th className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Repository</th>
+                    <th className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Branch</th>
+                    <th className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Decision</th>
+                    <th className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Result</th>
+                    <th className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Time</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {filteredRuns.map((run) => (
+                    <RunRow
+                      key={run.id}
+                      run={run}
+                      isExpanded={expandedRow === run.id}
+                      onToggle={() => setExpandedRow(expandedRow === run.id ? null : run.id)}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            
             {filteredRuns.length === 0 && search && (
-              <div className="py-12 text-center text-sm text-zinc-500">No runs match your search.</div>
+              <div className="py-16 text-center">
+                <p className="text-sm text-muted-foreground">No runs match your search.</p>
+              </div>
             )}
           </div>
         )}
@@ -178,93 +189,100 @@ function RunRow({
   isExpanded: boolean;
   onToggle: () => void;
 }) {
-  const resultBadge = run.result?.toUpperCase().includes('ERROR')
-    ? 'bg-[#F4F4F5] text-[#71717A] border-[#E4E4E7]'
-    : 'bg-[#F0FDF4] text-[#15803D] border-[#86EFAC]';
+  const isError = run.result?.toUpperCase().includes('ERROR');
 
   return (
     <>
       <tr
         onClick={onToggle}
-        className="cursor-pointer border-b border-zinc-50 transition-colors hover:bg-zinc-50"
+        className="group cursor-pointer transition-colors hover:bg-muted/50"
       >
-        <td className="px-5 py-3">
-          <div className="flex items-center gap-2">
+        <td className="px-5 py-4">
+          <div className="flex items-center gap-3">
             <AgentAvatar name={run.agent_name || ''} size="sm" />
-            <span className="max-w-[120px] truncate text-sm font-medium text-zinc-900">
+            <span className="max-w-[120px] truncate text-sm font-medium text-foreground">
               {run.agent_name}
             </span>
           </div>
         </td>
-        <td className="px-5 py-3">
-          <code className="font-mono text-xs text-zinc-600">{run.tool_name}</code>
+        <td className="px-5 py-4">
+          <code className="rounded bg-muted px-2 py-1 font-mono text-xs text-muted-foreground">
+            {run.tool_name}
+          </code>
         </td>
-        <td className="px-5 py-3">
-          <span className="text-sm text-zinc-600" title={run.action_summary}>
+        <td className="px-5 py-4">
+          <span className="text-sm text-muted-foreground" title={run.action_summary}>
             {truncate(run.action_summary, 50)}
           </span>
         </td>
-        <td className="px-5 py-3 text-sm text-zinc-600">{run.target_repo}</td>
-        <td className="px-5 py-3">
+        <td className="px-5 py-4">
+          <span className="text-sm text-muted-foreground">{run.target_repo}</span>
+        </td>
+        <td className="px-5 py-4">
           {run.target_branch && (
-            <code className="rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-xs text-zinc-600">
+            <code className="rounded bg-muted px-2 py-1 font-mono text-xs text-muted-foreground">
               {run.target_branch}
             </code>
           )}
         </td>
-        <td className="px-5 py-3">
-          <DecisionBadge decision={run.decision} />
+        <td className="px-5 py-4">
+          <DecisionBadge decision={run.decision} size="sm" />
         </td>
-        <td className="px-5 py-3">
-          <span className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-medium ${resultBadge}`}>
-            {run.result?.toUpperCase().includes('ERROR') ? 'Error' : 'Success'}
+        <td className="px-5 py-4">
+          <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${
+            isError 
+              ? 'border-border bg-muted text-muted-foreground' 
+              : 'border-success/30 bg-success-muted text-success'
+          }`}>
+            <span className={`h-1.5 w-1.5 rounded-full ${isError ? 'bg-muted-foreground' : 'bg-success'}`} />
+            {isError ? 'Error' : 'Success'}
           </span>
         </td>
-        <td className="px-5 py-3">
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs text-zinc-400">{formatRelativeTime(run.timestamp)}</span>
-            {isExpanded ? (
-              <ChevronDown className="h-3.5 w-3.5 text-zinc-400" />
-            ) : (
-              <ChevronRight className="h-3.5 w-3.5 text-zinc-400" />
-            )}
+        <td className="px-5 py-4">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">{formatRelativeTime(run.timestamp)}</span>
+            <div className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground transition-colors group-hover:bg-muted group-hover:text-foreground">
+              {isExpanded ? (
+                <ChevronDown className="h-3.5 w-3.5" />
+              ) : (
+                <ChevronRight className="h-3.5 w-3.5" />
+              )}
+            </div>
           </div>
         </td>
       </tr>
       {isExpanded && (
         <tr>
-          <td colSpan={8} className="border-b border-zinc-100 bg-zinc-50/50 px-8 py-4">
-            <div className="grid grid-cols-2 gap-6">
+          <td colSpan={8} className="border-b border-border bg-muted/30 px-8 py-6">
+            <div className="grid grid-cols-2 gap-8 animate-fade-in">
               <div>
-                <p className="mb-1 text-xs font-medium uppercase tracking-wider text-zinc-400">Full Summary</p>
-                <p className="text-sm text-zinc-700">{run.action_summary}</p>
+                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Full Summary</p>
+                <p className="text-sm leading-relaxed text-foreground">{run.action_summary}</p>
               </div>
-              <div className="space-y-2">
-                <div className="flex gap-6">
-                  <div>
-                    <p className="text-xs font-medium uppercase tracking-wider text-zinc-400">Sequence</p>
-                    <p className="font-mono text-sm text-zinc-700">#{run.sequence_order}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium uppercase tracking-wider text-zinc-400">Session</p>
-                    <Link
-                      href={`/dashboard/sessions?id=${run.session_id}`}
-                      className="font-mono text-sm text-blue-600 hover:underline"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {run.session_id?.substring(0, 8)}...
-                    </Link>
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium uppercase tracking-wider text-zinc-400">Timestamp</p>
-                    <p className="text-sm text-zinc-700">{formatFullTimestamp(run.timestamp)}</p>
-                  </div>
+              <div className="grid grid-cols-3 gap-6">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Sequence</p>
+                  <p className="mt-1 font-mono text-sm text-foreground">#{run.sequence_order}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Session</p>
+                  <Link
+                    href={`/dashboard/sessions?id=${run.session_id}`}
+                    className="mt-1 inline-block font-mono text-sm text-primary hover:underline"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {run.session_id?.substring(0, 8)}...
+                  </Link>
+                </div>
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Timestamp</p>
+                  <p className="mt-1 text-sm text-foreground">{formatFullTimestamp(run.timestamp)}</p>
                 </div>
               </div>
             </div>
             {run.arguments && (
-              <div className="mt-4">
-                <p className="mb-2 text-xs font-medium uppercase tracking-wider text-zinc-400">Arguments</p>
+              <div className="mt-6">
+                <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Arguments</p>
                 <JsonViewer data={run.arguments} collapsed={false} />
               </div>
             )}
