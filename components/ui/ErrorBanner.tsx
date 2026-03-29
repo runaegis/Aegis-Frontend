@@ -10,28 +10,21 @@ interface ErrorBannerProps {
 
 export default function ErrorBanner({ message, onDismiss, onRetry }: ErrorBannerProps) {
   return (
-    <div className="flex items-center gap-4 rounded-xl border border-destructive/30 bg-destructive-muted px-5 py-4 animate-fade-in">
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-destructive/20">
-        <AlertTriangle className="h-4 w-4 text-destructive" />
-      </div>
+    <div className="flex items-center gap-3 rounded-md border border-destructive/20 bg-destructive/10 px-4 py-3">
+      <AlertTriangle className="h-4 w-4 shrink-0 text-destructive" />
       <p className="flex-1 text-sm text-foreground">{message}</p>
-      <div className="flex items-center gap-2">
-        {onRetry && (
-          <button
-            onClick={onRetry}
-            className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-1.5 text-xs font-medium text-destructive transition-colors hover:bg-destructive/20"
-          >
-            <RefreshCw className="h-3.5 w-3.5" />
-            Retry
-          </button>
-        )}
-        <button 
-          onClick={onDismiss} 
-          className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+      {onRetry && (
+        <button
+          onClick={onRetry}
+          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
         >
-          <X className="h-4 w-4" />
+          <RefreshCw className="h-3.5 w-3.5" />
+          Retry
         </button>
-      </div>
+      )}
+      <button onClick={onDismiss} className="text-muted-foreground hover:text-foreground">
+        <X className="h-4 w-4" />
+      </button>
     </div>
   );
 }

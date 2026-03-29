@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ChevronDown, ChevronRight, Copy, Check, Code2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, Copy, Check } from 'lucide-react';
 
 interface JsonViewerProps {
   data: unknown;
@@ -21,48 +21,25 @@ export default function JsonViewer({ data, collapsed = true }: JsonViewerProps) 
   };
 
   return (
-    <div className="overflow-hidden rounded-lg border border-border bg-muted/30">
-      <div className="flex items-center justify-between border-b border-border bg-muted/50 px-4 py-2.5">
+    <div className="rounded-md border border-border bg-muted">
+      <div className="flex items-center justify-between px-3 py-2">
         <button
           onClick={() => setIsCollapsed(!isCollapsed)}
-          className="flex items-center gap-2 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
         >
-          <Code2 className="h-3.5 w-3.5" />
-          {isCollapsed ? (
-            <>
-              <span>Show details</span>
-              <ChevronRight className="h-3.5 w-3.5" />
-            </>
-          ) : (
-            <>
-              <span>Hide details</span>
-              <ChevronDown className="h-3.5 w-3.5" />
-            </>
-          )}
+          {isCollapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+          {isCollapsed ? 'Show' : 'Hide'}
         </button>
         <button
           onClick={handleCopy}
-          className={`flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-all ${
-            copied 
-              ? 'bg-success/20 text-success' 
-              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-          }`}
+          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
         >
-          {copied ? (
-            <>
-              <Check className="h-3.5 w-3.5" />
-              <span>Copied!</span>
-            </>
-          ) : (
-            <>
-              <Copy className="h-3.5 w-3.5" />
-              <span>Copy</span>
-            </>
-          )}
+          {copied ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
+          {copied ? 'Copied' : 'Copy'}
         </button>
       </div>
       {!isCollapsed && (
-        <pre className="max-h-80 overflow-auto p-4 font-mono text-xs leading-relaxed text-foreground">
+        <pre className="max-h-64 overflow-auto border-t border-border p-3 font-mono text-xs text-foreground">
           {jsonStr}
         </pre>
       )}

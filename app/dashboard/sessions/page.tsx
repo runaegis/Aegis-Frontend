@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { Layers, ChevronDown, ChevronRight, Clock, GitBranch } from 'lucide-react';
+import { Layers, ChevronDown, ChevronRight, Clock } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useAutoRefresh } from '@/lib/hooks';
 import { Session, SessionAction } from '@/lib/types';
@@ -37,7 +37,7 @@ export default function SessionsPage() {
 
   if (loading) {
     return (
-      <div className="flex h-[calc(100vh-80px)] items-center justify-center">
+      <div className="flex h-[60vh] items-center justify-center">
         <LoadingSpinner size="lg" />
       </div>
     );
@@ -46,31 +46,23 @@ export default function SessionsPage() {
   return (
     <div className="min-h-screen">
       <Topbar title="Sessions" subtitle="Agent working sessions" lastUpdated={lastUpdated} onRefresh={fetchData} />
-      <div className="p-8">
+      <div className="p-6">
         {error && (
-          <div className="mb-6">
+          <div className="mb-4">
             <ErrorBanner message={error} onDismiss={() => setError(null)} onRetry={fetchData} />
           </div>
         )}
 
-        {/* Stats Bar */}
-        <div className="mb-6 flex items-center gap-4">
-          <div className="flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2">
-            <span className="text-2xl font-semibold text-foreground">{sessions.length}</span>
-            <span className="text-sm text-muted-foreground">Total Sessions</span>
-          </div>
-        </div>
-
         {sessions.length === 0 ? (
-          <div className="rounded-xl border border-border bg-card">
+          <div className="rounded-md border border-border bg-card">
             <EmptyState
-              icon={<Layers className="h-8 w-8" />}
+              icon={<Layers className="h-6 w-6" />}
               title="No sessions yet"
               description="Sessions will appear here once your agent starts working."
             />
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-2">
             {sessions.map((session) => (
               <SessionCard
                 key={session.session_id}
@@ -118,146 +110,73 @@ function SessionCard({
   const repos = Array.isArray(session.repos) ? session.repos.filter(Boolean) : [];
 
   return (
-    <div className="overflow-hidden rounded-xl border border-border bg-card transition-all hover:border-border-hover">
-      <button onClick={handleToggle} className="w-full px-6 py-5 text-left">
+    <div className="overflow-hidden rounded-md border border-border bg-card">
+      <button onClick={handleToggle} className="w-full px-4 py-3 text-left">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <AgentAvatar name={session.agent_name || ''} size="lg" />
+          <div className="flex items-center gap-3">
+            <AgentAvatar name={session.agent_name || ''} size="sm" />
             <div>
-              <div className="flex items-center gap-3">
-                <span className="text-base font-semibold text-foreground">{session.agent_name}</span>
-                <code className="rounded bg-muted px-2 py-0.5 font-mono text-xs text-muted-foreground">
-                  {session.session_id?.substring(0, 8)}...
-                </code>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-foreground">{session.agent_name}</span>
+                <code className="text-xs text-muted-foreground">{session.session_id?.substring(0, 8)}...</code>
               </div>
-              <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
+              <div className="mt-0.5 flex items-center gap-3 text-xs text-muted-foreground">
                 <span className="flex items-center gap-1">
-                  <Clock className="h-3.5 w-3.5" />
+                  <Clock className="h-3 w-3" />
                   {formatRelativeTime(session.started_at)}
                 </span>
-                <span>{session.action_count} action{Number(session.action_count) !== 1 ? 's' : ''}</span>
+                <span>{session.action_count} actions</span>
+                {repos.length > 0 && <span>{repos.join(', ')}</span>}
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted text-muted-foreground transition-colors group-hover:bg-muted">
-              {isExpanded ? (
-                <ChevronDown className="h-4 w-4" />
-              ) : (
-                <ChevronRight className="h-4 w-4" />
-              )}
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 text-xs">
+              {Number(session.allows) > 0 && <span className="text-success">{session.allows} allow</span>}
+              {Number(session.denies) > 0 && <span className="text-destructive">{session.denies} deny</span>}
+              {Number(session.rewrites) > 0 && <span className="text-amber-500">{session.rewrites} rewrite</span>}
             </div>
+            {isExpanded ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
           </div>
         </div>
-
-        {/* Decision Stats */}
-        <div className="mt-4 flex items-center gap-2">
-          {Number(session.allows) > 0 && (
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-success/30 bg-success-muted px-2.5 py-1 text-xs font-medium text-success">
-              <span className="h-1.5 w-1.5 rounded-full bg-success" />
-              {session.allows} allow
-            </span>
-          )}
-          {Number(session.denies) > 0 && (
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-destructive/30 bg-destructive-muted px-2.5 py-1 text-xs font-medium text-destructive">
-              <span className="h-1.5 w-1.5 rounded-full bg-destructive" />
-              {session.denies} deny
-            </span>
-          )}
-          {Number(session.rewrites) > 0 && (
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-warning/30 bg-warning-muted px-2.5 py-1 text-xs font-medium text-warning">
-              <span className="h-1.5 w-1.5 rounded-full bg-warning" />
-              {session.rewrites} rewrite
-            </span>
-          )}
-          {Number(session.approvals) > 0 && (
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-info/30 bg-info-muted px-2.5 py-1 text-xs font-medium text-info">
-              <span className="h-1.5 w-1.5 rounded-full bg-info" />
-              {session.approvals} approval
-            </span>
-          )}
-        </div>
-
-        {/* Repos */}
-        {repos.length > 0 && (
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            <GitBranch className="h-3.5 w-3.5 text-muted-foreground" />
-            {repos.map((repo) => (
-              <span
-                key={repo}
-                className="rounded-md bg-muted px-2 py-1 font-mono text-xs text-muted-foreground"
-              >
-                {repo}
-              </span>
-            ))}
-          </div>
-        )}
       </button>
 
       {isExpanded && (
-        <div className="border-t border-border bg-muted/30 px-6 py-6 animate-fade-in">
+        <div className="border-t border-border bg-muted/30 px-4 py-4">
           {loadingActions ? (
-            <div className="flex justify-center py-8">
+            <div className="flex justify-center py-6">
               <LoadingSpinner />
             </div>
           ) : actions && actions.length > 0 ? (
             <>
-              {/* Timeline */}
-              <div className="relative ml-4 border-l-2 border-border pl-6">
-                {actions.map((action, i) => {
-                  const dotColor =
-                    action.decision === 'ALLOW'
-                      ? 'bg-success'
-                      : action.decision === 'DENY'
-                        ? 'bg-destructive'
-                        : action.decision === 'REWRITE'
-                          ? 'bg-warning'
-                          : action.decision?.toUpperCase().includes('APPROVAL')
-                            ? 'bg-info'
-                            : 'bg-muted-foreground';
-
-                  return (
-                    <div key={action.id} className={`relative pb-6 ${i === actions.length - 1 ? 'pb-0' : ''}`}>
-                      <div
-                        className={`absolute -left-[31px] top-1 h-3 w-3 rounded-full ring-4 ring-card ${dotColor}`}
-                      />
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <p className="text-sm text-foreground">{action.action_summary}</p>
-                          <div className="mt-1.5 flex items-center gap-3">
-                            <code className="rounded bg-muted px-2 py-0.5 font-mono text-xs text-muted-foreground">
-                              {action.tool_name}
-                            </code>
-                            <span className="text-xs text-muted-foreground">{formatRelativeTime(action.timestamp)}</span>
-                          </div>
-                        </div>
-                        <DecisionBadge decision={action.decision} size="sm" />
+              <div className="space-y-3">
+                {actions.map((action) => (
+                  <div key={action.id} className="flex items-start justify-between rounded-md border border-border bg-card p-3">
+                    <div>
+                      <p className="text-sm text-foreground">{action.action_summary}</p>
+                      <div className="mt-1 flex items-center gap-2">
+                        <code className="text-xs text-muted-foreground">{action.tool_name}</code>
+                        <span className="text-xs text-muted-foreground">{formatRelativeTime(action.timestamp)}</span>
                       </div>
                       {action.arguments && Object.keys(action.arguments).length > 0 && (
-                        <div className="mt-3">
+                        <div className="mt-2">
                           <JsonViewer data={action.arguments} />
                         </div>
                       )}
                     </div>
-                  );
-                })}
+                    <DecisionBadge decision={action.decision} size="sm" />
+                  </div>
+                ))}
               </div>
-
-              {/* Footer */}
-              <div className="mt-6 flex items-center justify-between border-t border-border pt-5">
-                <span className="text-xs text-muted-foreground">
-                  Duration: {formatDuration(session.started_at, session.last_action_at)}
-                </span>
-                <Link
-                  href={`/dashboard?session=${session.session_id}`}
-                  className="text-xs font-medium text-primary transition-colors hover:text-primary-hover hover:underline"
-                >
-                  View all runs in this session
+              <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
+                <span>Duration: {formatDuration(session.started_at, session.last_action_at)}</span>
+                <Link href={`/dashboard?session=${session.session_id}`} className="text-primary hover:underline">
+                  View all runs
                 </Link>
               </div>
             </>
           ) : (
-            <p className="py-4 text-center text-sm text-muted-foreground">No actions found for this session.</p>
+            <p className="py-4 text-center text-sm text-muted-foreground">No actions found.</p>
           )}
         </div>
       )}

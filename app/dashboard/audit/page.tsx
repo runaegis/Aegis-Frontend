@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
-import { FileText, Download, ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
+import { FileText, Download, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useUser } from '@/lib/hooks';
 import { SessionAction } from '@/lib/types';
@@ -48,10 +48,7 @@ export default function AuditPage() {
 
   const exportJson = async () => {
     try {
-      const allEvents = await api.getAuditTrailByDateRange(
-        `${startDate}T00:00:00Z`,
-        `${endDate}T23:59:59Z`
-      );
+      const allEvents = await api.getAuditTrailByDateRange(`${startDate}T00:00:00Z`, `${endDate}T23:59:59Z`);
       const exportData = {
         exported_at: new Date().toISOString(),
         exported_by: user?.username || 'unknown',
@@ -72,119 +69,92 @@ export default function AuditPage() {
 
   return (
     <div className="min-h-screen">
-      <Topbar title="Audit Trail" subtitle="Full immutable event log" />
-      <div className="p-8">
+      <Topbar title="Audit Trail" subtitle="Immutable event log" />
+      <div className="p-6">
         {error && (
-          <div className="mb-6">
+          <div className="mb-4">
             <ErrorBanner message={error} onDismiss={() => setError(null)} onRetry={fetchData} />
           </div>
         )}
 
-        {/* Filter & Export Bar */}
-        <div className="mb-6 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2">
-              <Calendar className="h-4 w-4 text-muted-foreground" />
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="border-0 bg-transparent text-sm text-foreground focus:outline-none focus:ring-0"
-              />
-            </div>
-            <span className="text-sm text-muted-foreground">to</span>
-            <div className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2">
-              <Calendar className="h-4 w-4 text-muted-foreground" />
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="border-0 bg-transparent text-sm text-foreground focus:outline-none focus:ring-0"
-              />
-            </div>
+        <div className="mb-4 flex items-center justify-between">
+          <div className="flex items-center gap-2 text-sm">
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="rounded-md border border-border bg-muted px-2 py-1 text-foreground"
+            />
+            <span className="text-muted-foreground">to</span>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="rounded-md border border-border bg-muted px-2 py-1 text-foreground"
+            />
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={exportJson}
-              className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary-hover"
-            >
-              <Download className="h-4 w-4" />
-              Export JSON
-            </button>
-            <div className="group relative">
-              <button
-                className="flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2.5 text-sm font-medium text-muted-foreground cursor-not-allowed"
-                disabled
-              >
-                <Download className="h-4 w-4" />
-                Export PDF
-              </button>
-              <div className="absolute bottom-full left-1/2 mb-2 hidden -translate-x-1/2 whitespace-nowrap rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground shadow-lg group-hover:block">
-                Coming soon
-              </div>
-            </div>
-          </div>
+          <button
+            onClick={exportJson}
+            className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+          >
+            <Download className="h-4 w-4" />
+            Export JSON
+          </button>
         </div>
 
         {loading ? (
-          <div className="flex justify-center py-20">
+          <div className="flex justify-center py-16">
             <LoadingSpinner size="lg" />
           </div>
         ) : events.length === 0 ? (
-          <div className="rounded-xl border border-border bg-card">
+          <div className="rounded-md border border-border bg-card">
             <EmptyState
-              icon={<FileText className="h-8 w-8" />}
+              icon={<FileText className="h-6 w-6" />}
               title="No audit events"
-              description="Agent actions will be logged here for compliance and review."
+              description="Agent actions will be logged here."
             />
           </div>
         ) : (
           <>
-            <div className="overflow-hidden rounded-xl border border-border bg-card">
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-border bg-muted/30">
-                      <th className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Timestamp</th>
-                      <th className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Agent</th>
-                      <th className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Tool</th>
-                      <th className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Summary</th>
-                      <th className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Repository</th>
-                      <th className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Decision</th>
-                      <th className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Result</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    {events.map((event) => (
-                      <AuditRow
-                        key={event.id}
-                        event={event}
-                        isExpanded={expandedRow === event.id}
-                        onToggle={() => setExpandedRow(expandedRow === event.id ? null : event.id)}
-                      />
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+            <div className="overflow-hidden rounded-md border border-border bg-card">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-muted/50 text-left text-xs text-muted-foreground">
+                    <th className="px-4 py-2 font-medium">Timestamp</th>
+                    <th className="px-4 py-2 font-medium">Agent</th>
+                    <th className="px-4 py-2 font-medium">Tool</th>
+                    <th className="px-4 py-2 font-medium">Summary</th>
+                    <th className="px-4 py-2 font-medium">Repository</th>
+                    <th className="px-4 py-2 font-medium">Decision</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {events.map((event) => (
+                    <AuditRow
+                      key={event.id}
+                      event={event}
+                      isExpanded={expandedRow === event.id}
+                      onToggle={() => setExpandedRow(expandedRow === event.id ? null : event.id)}
+                    />
+                  ))}
+                </tbody>
+              </table>
             </div>
 
-            {/* Pagination */}
-            <div className="mt-6 flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">
-                Page {page + 1} ({events.length} records)
-              </span>
-              <div className="flex items-center gap-2">
+            <div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
+              <span>Page {page + 1}</span>
+              <div className="flex items-center gap-1">
                 <button
                   onClick={() => setPage(Math.max(0, page - 1))}
                   disabled={page === 0}
-                  className="flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                  className="rounded-md border border-border p-1.5 hover:bg-muted disabled:opacity-40"
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </button>
                 <button
                   onClick={() => setPage(page + 1)}
                   disabled={events.length < pageSize}
-                  className="flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                  className="rounded-md border border-border p-1.5 hover:bg-muted disabled:opacity-40"
                 >
                   <ChevronRight className="h-4 w-4" />
                 </button>
@@ -197,65 +167,36 @@ export default function AuditPage() {
   );
 }
 
-function AuditRow({
-  event,
-  isExpanded,
-  onToggle,
-}: {
-  event: SessionAction;
-  isExpanded: boolean;
-  onToggle: () => void;
-}) {
-  const isError = event.result?.toUpperCase().includes('ERROR');
-
+function AuditRow({ event, isExpanded, onToggle }: { event: SessionAction; isExpanded: boolean; onToggle: () => void }) {
   return (
     <>
-      <tr
-        onClick={onToggle}
-        className="group cursor-pointer transition-colors hover:bg-muted/50"
-      >
-        <td className="whitespace-nowrap px-5 py-4 text-xs text-muted-foreground">
-          {formatFullTimestamp(event.timestamp)}
-        </td>
-        <td className="px-5 py-4">
+      <tr onClick={onToggle} className="cursor-pointer border-b border-border hover:bg-muted/30">
+        <td className="whitespace-nowrap px-4 py-3 text-xs text-muted-foreground">{formatFullTimestamp(event.timestamp)}</td>
+        <td className="px-4 py-3">
           <div className="flex items-center gap-2">
             <AgentAvatar name={event.agent_name || ''} size="sm" />
-            <span className="max-w-[100px] truncate text-sm font-medium text-foreground">{event.agent_name}</span>
+            <span className="font-medium text-foreground">{event.agent_name}</span>
           </div>
         </td>
-        <td className="px-5 py-4">
-          <code className="rounded bg-muted px-2 py-1 font-mono text-xs text-muted-foreground">
-            {event.tool_name}
-          </code>
+        <td className="px-4 py-3">
+          <code className="text-xs text-muted-foreground">{event.tool_name}</code>
         </td>
-        <td className="px-5 py-4 text-sm text-muted-foreground" title={event.action_summary}>
-          {truncate(event.action_summary, 40)}
-        </td>
-        <td className="px-5 py-4 text-sm text-muted-foreground">{event.target_repo}</td>
-        <td className="px-5 py-4">
-          <DecisionBadge decision={event.decision} size="sm" />
-        </td>
-        <td className="px-5 py-4">
-          <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${
-            isError 
-              ? 'border-border bg-muted text-muted-foreground' 
-              : 'border-success/30 bg-success-muted text-success'
-          }`}>
-            <span className={`h-1.5 w-1.5 rounded-full ${isError ? 'bg-muted-foreground' : 'bg-success'}`} />
-            {isError ? 'Error' : 'Success'}
-          </span>
+        <td className="px-4 py-3 text-muted-foreground">{truncate(event.action_summary, 30)}</td>
+        <td className="px-4 py-3 text-muted-foreground">{event.target_repo}</td>
+        <td className="px-4 py-3">
+          <div className="flex items-center gap-2">
+            <DecisionBadge decision={event.decision} size="sm" />
+            <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+          </div>
         </td>
       </tr>
       {isExpanded && (
         <tr>
-          <td colSpan={7} className="border-b border-border bg-muted/30 px-8 py-6 animate-fade-in">
-            <div className="mb-4">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Full Summary</p>
-              <p className="mt-2 text-sm leading-relaxed text-foreground">{event.action_summary}</p>
-            </div>
+          <td colSpan={6} className="border-b border-border bg-muted/30 px-4 py-4">
+            <p className="mb-2 text-xs text-muted-foreground">Full Summary</p>
+            <p className="text-sm text-foreground">{event.action_summary}</p>
             {event.arguments && (
-              <div>
-                <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Arguments</p>
+              <div className="mt-3">
                 <JsonViewer data={event.arguments} collapsed={false} />
               </div>
             )}
