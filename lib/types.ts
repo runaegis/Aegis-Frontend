@@ -14,6 +14,20 @@ export interface SessionAction {
   user_id: string;
 }
 
+export type MCPApprovalStatus = 'pending' | 'approved' | 'rejected' | string;
+
+export interface MCPApproval {
+  id: string;
+  user_id: string;
+  tool_name: string;
+  arguments: Record<string, any>;
+  status: MCPApprovalStatus;
+  created_at: string;
+  approved_at: string | null;
+  result: any;
+  context: Record<string, any>;
+}
+
 export interface Session {
   session_id: string;
   agent_name: string;

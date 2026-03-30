@@ -1,4 +1,4 @@
-import { SessionAction, Session, User, RepoPermission, Metrics } from './types';
+import { SessionAction, Session, User, RepoPermission, Metrics, MCPApproval } from './types';
 
 function getAPIBase(): string {
   let url = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -39,7 +39,7 @@ function parseRow(row: any, columns?: string[]): any {
   if (Array.isArray(row) && columns) {
     obj = Object.fromEntries(columns.map((col: string, i: number) => [col, row[i]]));
   }
-  const datetimeFields = ['timestamp', 'started_at', 'last_action_at', 'created_at'];
+  const datetimeFields = ['timestamp', 'started_at', 'last_action_at', 'created_at', 'approved_at'];
   for (const field of datetimeFields) {
     if (obj[field]) obj[field] = parseDatetime(String(obj[field]));
   }
@@ -172,6 +172,48 @@ export const api = {
     if (!userId) return [];
     const rows = await getUserActions(userId);
     return rows.filter((r) => r.decision?.toUpperCase().includes('APPROVAL'));
+  },
+
+  getMcpApprovals: async (userId?: string): Promise<MCPApproval[]> => {
+    if (!userId) return [];
+
+    const params = new URLSearchParams({ user_id: userId });
+    const res = await fetch(`${API_BASE}/get_mcp_approvals?${params.toString()}`);
+    if (!res.ok) throw new Error(`Failed to fetch MCP approvals: ${res.statusText}`);
+
+    const payload = await res.json();
+    const body = Array.isArray(payload) ? payload[0] : payload;
+
+    if (!body?.success) {
+      throw new Error(body?.error || 'Failed to fetch MCP approvals');
+    }
+
+    const rows = Array.isArray(body.rows) ? body.rows : [];
+    return rows
+      .map((row: any) => parseRow(row, body.columns))
+      .sort(
+        (a: MCPApproval, b: MCPApproval) =>
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+  },
+
+  executeMcpApproval: async (recordId: string, reject: boolean) => {
+    const params = new URLSearchParams({
+      record_uuid_mcp_approval: recordId,
+      reject: String(reject),
+    });
+
+    const res = await fetch(`${API_BASE}/execute_tool_call?${params.toString()}`);
+    if (!res.ok) throw new Error(`Failed to update approval: ${res.statusText}`);
+
+    const payload = await res.json();
+    const body = Array.isArray(payload) ? payload[0] : payload;
+
+    if (body?.failure) {
+      throw new Error(body.failure);
+    }
+
+    return body;
   },
 
   getAuditTrail: async (userId?: string, limit = 50, offset = 0): Promise<SessionAction[]> => {

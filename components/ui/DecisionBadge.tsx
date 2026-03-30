@@ -6,6 +6,9 @@ const styles: Record<string, { bg: string; text: string; label: string }> = {
   REWRITE: { bg: 'bg-amber-500/10', text: 'text-amber-500', label: 'Rewrite' },
   REQUIRE_APPROVAL: { bg: 'bg-foreground/8', text: 'text-foreground/70', label: 'Approval' },
   ALLOW_ERROR: { bg: 'bg-muted', text: 'text-muted-foreground', label: 'Error' },
+  PENDING: { bg: 'bg-amber-500/10', text: 'text-amber-600', label: 'Pending' },
+  APPROVED: { bg: 'bg-success/10', text: 'text-success', label: 'Approved' },
+  REJECTED: { bg: 'bg-destructive/10', text: 'text-destructive', label: 'Rejected' },
 };
 
 function getStyle(decision: string) {
