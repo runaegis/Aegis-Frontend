@@ -14,6 +14,7 @@ export default function SettingsPage() {
   const { setStep } = useOnboardingStep();
   const [activeTab, setActiveTab] = useState('profile');
   const [repos, setRepos] = useState<Repo[]>([]);
+  const [originalRepos, setOriginalRepos] = useState<Repo[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -28,7 +29,9 @@ export default function SettingsPage() {
     if (!user?.id) return;
     try {
       const response = await api.getRepos(user.id);
-      setRepos(response?.repos || []);
+      const reposList = response?.repos || [];
+      setRepos(reposList);
+      setOriginalRepos(JSON.parse(JSON.stringify(reposList)));
     } catch { /* ignore */ }
     setLoading(false);
   }, [user?.id]);
@@ -95,14 +98,30 @@ export default function SettingsPage() {
     if (!user?.id) return;
     setSaving(true);
     setError(null);
+    const userId = user.id;
     try {
-      const permissions = repos.map(({ github_repo_id, can_read, can_write }) => ({
-        github_repo_id, can_read: can_read || false, can_write: can_write || false,
-      }));
-      await api.setPermissions(user.id, permissions);
-      setSuccess('Permissions saved');
-    } catch {
-      setError('Failed to save permissions');
+      // Find changed permissions
+      const changedPerms = repos.filter((repo, i) => {
+        const original = originalRepos[i];
+        return original && (original.can_read !== repo.can_read || original.can_write !== repo.can_write);
+      });
+
+      // Call individual endpoint for each changed permission
+      const results = await Promise.all(
+        changedPerms.map((repo) =>
+          api.setPermission(userId, repo.github_repo_id, repo.can_read || false, repo.can_write || false)
+        )
+      );
+
+      // Check if all succeeded
+      if (results.every((r) => r.success)) {
+        setOriginalRepos(JSON.parse(JSON.stringify(repos)));
+        setSuccess('Permissions saved');
+      } else {
+        setError('Some permissions failed to save');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save permissions');
     }
     setSaving(false);
   };

@@ -163,6 +163,18 @@ export const api = {
   getRepos: (user_id: string) =>
     fetch(`${API_BASE}/repos/${user_id}`).then((r) => r.json()),
 
+  setPermission: (user_id: string, github_repo_id: number, can_read: boolean, can_write: boolean) =>
+    fetch(`${API_BASE}/permissions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_id,
+        github_repo_id,
+        can_read,
+        can_write,
+      }),
+    }).then((r) => r.json()),
+
   setPermissions: (user_id: string, permissions: RepoPermission[]) =>
     fetch(`${API_BASE}/permissions/bulk`, {
       method: 'POST',
