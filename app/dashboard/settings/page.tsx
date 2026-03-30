@@ -156,9 +156,9 @@ export default function SettingsPage() {
           </div>
         )}
 
-        <div className="flex gap-6">
-          <div className="w-48 shrink-0">
-            <div className="space-y-1">
+        <div className="flex flex-col gap-6 sm:flex-row">
+          <div className="w-full shrink-0 sm:w-48">
+            <div className="flex gap-1 sm:flex-col sm:space-y-1">
               {tabs.map((tab) => {
                 const Icon = tab.icon;
                 return (
@@ -304,7 +304,7 @@ export default function SettingsPage() {
                     <h2 className="text-sm font-medium text-foreground">Active Policies</h2>
                   </div>
                   <div className="p-4">
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                       {['Protected Branch Denial', 'Freeze Window Enforcement', 'Mandatory PR Flow', 'Secret Detection'].map((policy) => (
                         <div key={policy} className="flex items-center gap-2 rounded-md border border-border bg-muted/30 px-3 py-2 text-sm text-foreground">
                           <Check className="h-4 w-4 text-success" />
