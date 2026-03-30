@@ -14,6 +14,7 @@ export default function SettingsPage() {
   const { setStep } = useOnboardingStep();
   const [activeTab, setActiveTab] = useState('profile');
   const [repos, setRepos] = useState<Repo[]>([]);
+  const [originalRepos, setOriginalRepos] = useState<Repo[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -28,7 +29,9 @@ export default function SettingsPage() {
     if (!user?.id) return;
     try {
       const response = await api.getRepos(user.id);
-      setRepos(response?.repos || []);
+      const reposList = response?.repos || [];
+      setRepos(reposList);
+      setOriginalRepos(JSON.parse(JSON.stringify(reposList)));
     } catch { /* ignore */ }
     setLoading(false);
   }, [user?.id]);
@@ -71,13 +74,20 @@ export default function SettingsPage() {
     setSyncing(false);
   };
 
-  const handleSetPermission = (index: number, permission: 'allow' | 'deny' | 'require_approval') => {
+  const handleSetPermission = (index: number, permission: 'read' | 'write') => {
     setRepos((prev) =>
       prev.map((r, i) => {
         if (i === index) {
-          if (permission === 'allow') return { ...r, can_read: true, can_write: true };
-          if (permission === 'require_approval') return { ...r, can_read: true, can_write: false };
-          return { ...r, can_read: false, can_write: false };
+          if (permission === 'read') {
+            const newCanRead = !r.can_read;
+            // If disabling read, also disable write
+            if (!newCanRead) {
+              return { ...r, can_read: newCanRead, can_write: false };
+            }
+            return { ...r, can_read: newCanRead };
+          } else {
+            return { ...r, can_write: !r.can_write };
+          }
         }
         return r;
       })
@@ -88,28 +98,44 @@ export default function SettingsPage() {
     if (!user?.id) return;
     setSaving(true);
     setError(null);
+    const userId = user.id;
     try {
-      const permissions = repos.map(({ github_repo_id, can_read, can_write }) => ({
-        github_repo_id, can_read: can_read || false, can_write: can_write || false,
-      }));
-      await api.setPermissions(user.id, permissions);
-      setSuccess('Permissions saved');
-    } catch {
-      setError('Failed to save permissions');
+      // Find changed permissions
+      const changedPerms = repos.filter((repo, i) => {
+        const original = originalRepos[i];
+        return original && (original.can_read !== repo.can_read || original.can_write !== repo.can_write);
+      });
+
+      // Call individual endpoint for each changed permission
+      const results = await Promise.all(
+        changedPerms.map((repo) =>
+          api.setPermission(userId, repo.github_repo_id, repo.can_read || false, repo.can_write || false)
+        )
+      );
+
+      // Check if all succeeded
+      if (results.every((r) => r.success)) {
+        setOriginalRepos(JSON.parse(JSON.stringify(repos)));
+        setSuccess('Permissions saved');
+      } else {
+        setError('Some permissions failed to save');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save permissions');
     }
     setSaving(false);
   };
 
-  const getPermissionLabel = (repo: Repo): 'allow' | 'deny' | 'require_approval' => {
-    if (repo.can_write) return 'allow';
-    if (repo.can_read) return 'require_approval';
-    return 'deny';
+  const getPermissionLabel = (repo: Repo): { canRead: boolean; canWrite: boolean } => {
+    return {
+      canRead: repo.can_read || false,
+      canWrite: repo.can_write || false,
+    };
   };
 
-  const permOptions: Array<{ value: 'allow' | 'deny' | 'require_approval'; label: string; activeClass: string }> = [
-    { value: 'allow', label: 'Allow', activeClass: 'bg-success text-white' },
-    { value: 'require_approval', label: 'Approval', activeClass: 'bg-foreground/10 text-foreground' },
-    { value: 'deny', label: 'Deny', activeClass: 'bg-destructive text-white' },
+  const permOptions: Array<{ value: 'read' | 'write'; label: string }> = [
+    { value: 'read', label: 'Read' },
+    { value: 'write', label: 'Write' },
   ];
 
   const tabs = [
@@ -227,16 +253,30 @@ export default function SettingsPage() {
                         {repos.map((repo, i) => (
                           <div key={repo.full_name} className="flex items-center justify-between rounded-md border border-border bg-muted/30 px-3 py-2">
                             <span className="text-sm text-foreground">{repo.full_name}</span>
-                            <div className="flex overflow-hidden rounded-md border border-border">
-                              {permOptions.map((opt) => (
-                                <button
-                                  key={opt.value}
-                                  onClick={() => handleSetPermission(i, opt.value)}
-                                  className={`px-2 py-1 text-xs font-medium ${getPermissionLabel(repo) === opt.value ? opt.activeClass : 'bg-card text-muted-foreground hover:bg-muted'}`}
-                                >
-                                  {opt.label}
-                                </button>
-                              ))}
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => handleSetPermission(i, 'read')}
+                                className={`px-2 py-1 text-xs font-medium rounded ${
+                                  repos[i].can_read
+                                    ? 'bg-blue-500 text-white hover:bg-blue-600'
+                                    : 'bg-card text-muted-foreground hover:bg-muted border border-border'
+                                }`}
+                              >
+                                Read
+                              </button>
+                              <button
+                                onClick={() => handleSetPermission(i, 'write')}
+                                disabled={!repos[i].can_read}
+                                className={`px-2 py-1 text-xs font-medium rounded ${
+                                  repos[i].can_write
+                                    ? 'bg-yellow-500 text-white hover:bg-yellow-600'
+                                    : repos[i].can_read
+                                    ? 'bg-card text-muted-foreground hover:bg-muted border border-border'
+                                    : 'bg-muted/50 text-muted-foreground cursor-not-allowed border border-muted'
+                                }`}
+                              >
+                                Write
+                              </button>
                             </div>
                           </div>
                         ))}

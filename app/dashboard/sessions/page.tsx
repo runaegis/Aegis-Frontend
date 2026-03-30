@@ -3,7 +3,7 @@
 import { useState, useCallback } from 'react';
 import { Layers, ChevronDown, ChevronRight, Clock } from 'lucide-react';
 import { api } from '@/lib/api';
-import { useAutoRefresh } from '@/lib/hooks';
+import { useAutoRefresh, useUser } from '@/lib/hooks';
 import { Session, SessionAction } from '@/lib/types';
 import { formatRelativeTime, formatDuration } from '@/lib/utils';
 import Topbar from '@/components/layout/Topbar';
@@ -20,10 +20,12 @@ export default function SessionsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedSession, setExpandedSession] = useState<string | null>(null);
+  const { user } = useUser();
 
   const fetchData = useCallback(async () => {
     try {
-      const data = await api.getSessions();
+      // Fetch all sessions; api.getSessions filters by user_id in JS
+      const data = await api.getSessions(user?.id);
       setSessions(data);
       setError(null);
     } catch (err) {
@@ -31,7 +33,7 @@ export default function SessionsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user?.id]);
 
   const { lastUpdated } = useAutoRefresh(fetchData, 30000);
 
@@ -45,7 +47,12 @@ export default function SessionsPage() {
 
   return (
     <div className="min-h-screen">
-      <Topbar title="Sessions" subtitle="Agent working sessions" lastUpdated={lastUpdated} onRefresh={fetchData} />
+      <Topbar
+        title="Sessions"
+        subtitle="Agent working sessions"
+        lastUpdated={lastUpdated}
+        onRefresh={fetchData}
+      />
       <div className="p-6">
         {error && (
           <div className="mb-4">
@@ -69,7 +76,9 @@ export default function SessionsPage() {
                 session={session}
                 isExpanded={expandedSession === session.session_id}
                 onToggle={() =>
-                  setExpandedSession(expandedSession === session.session_id ? null : session.session_id)
+                  setExpandedSession(
+                    expandedSession === session.session_id ? null : session.session_id
+                  )
                 }
               />
             ))}
@@ -118,7 +127,9 @@ function SessionCard({
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium text-foreground">{session.agent_name}</span>
-                <code className="text-xs text-muted-foreground">{session.session_id?.substring(0, 8)}...</code>
+                <code className="text-xs text-muted-foreground">
+                  {session.session_id?.substring(0, 8)}...
+                </code>
               </div>
               <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                 <span className="flex items-center gap-1">
@@ -132,11 +143,21 @@ function SessionCard({
           </div>
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1 text-xs">
-              {Number(session.allows) > 0 && <span className="text-success">{session.allows} allow</span>}
-              {Number(session.denies) > 0 && <span className="text-destructive">{session.denies} deny</span>}
-              {Number(session.rewrites) > 0 && <span className="text-amber-500">{session.rewrites} rewrite</span>}
+              {Number(session.allows) > 0 && (
+                <span className="text-success">{session.allows} allow</span>
+              )}
+              {Number(session.denies) > 0 && (
+                <span className="text-destructive">{session.denies} deny</span>
+              )}
+              {Number(session.rewrites) > 0 && (
+                <span className="text-amber-500">{session.rewrites} rewrite</span>
+              )}
             </div>
-            {isExpanded ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+            {isExpanded ? (
+              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+            ) : (
+              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            )}
           </div>
         </div>
       </button>
@@ -151,12 +172,17 @@ function SessionCard({
             <>
               <div className="space-y-3">
                 {actions.map((action) => (
-                  <div key={action.id} className="flex items-start justify-between rounded-md border border-border bg-card p-3">
+                  <div
+                    key={action.id}
+                    className="flex items-start justify-between rounded-md border border-border bg-card p-3"
+                  >
                     <div>
                       <p className="text-sm text-foreground">{action.action_summary}</p>
                       <div className="mt-1 flex items-center gap-2">
                         <code className="text-xs text-muted-foreground">{action.tool_name}</code>
-                        <span className="text-xs text-muted-foreground">{formatRelativeTime(action.timestamp)}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {formatRelativeTime(action.timestamp)}
+                        </span>
                       </div>
                       {action.arguments && Object.keys(action.arguments).length > 0 && (
                         <div className="mt-2">
@@ -169,8 +195,13 @@ function SessionCard({
                 ))}
               </div>
               <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
-                <span>Duration: {formatDuration(session.started_at, session.last_action_at)}</span>
-                <Link href={`/dashboard?session=${session.session_id}`} className="text-foreground/60 hover:text-foreground transition-colors">
+                <span>
+                  Duration: {formatDuration(session.started_at, session.last_action_at)}
+                </span>
+                <Link
+                  href={`/dashboard?session=${session.session_id}`}
+                  className="text-foreground/60 hover:text-foreground transition-colors"
+                >
                   View all runs
                 </Link>
               </div>
