@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Layers, ChevronDown, ChevronRight, Clock } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useAutoRefresh, useUser } from '@/lib/hooks';
@@ -31,6 +31,7 @@ export default function SessionsPage() {
       return;
     }
 
+    setLoading(true);
     try {
       const data = await api.getSessions(user?.id);
       setSessions(data);
@@ -41,6 +42,15 @@ export default function SessionsPage() {
       setLoading(false);
     }
   }, [user?.id, userLoading]);
+
+  useEffect(() => {
+    if (user?.id) {
+      fetchData();
+    } else if (!userLoading) {
+      setSessions([]);
+      setLoading(false);
+    }
+  }, [user?.id, userLoading, fetchData]);
 
   const { lastUpdated } = useAutoRefresh(fetchData, 30000);
 

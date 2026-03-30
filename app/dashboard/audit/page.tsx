@@ -15,7 +15,7 @@ import ErrorBanner from '@/components/ui/ErrorBanner';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 
 export default function AuditPage() {
-  const { user } = useUser();
+  const { user, isLoading: userLoading } = useUser();
   const [events, setEvents] = useState<SessionAction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -30,9 +30,17 @@ export default function AuditPage() {
   const [endDate, setEndDate] = useState(today.toISOString().split('T')[0]);
 
   const fetchData = useCallback(async () => {
+    if (!user?.id) {
+      if (!userLoading) {
+        setEvents([]);
+        setLoading(false);
+      }
+      return;
+    }
+
     setLoading(true);
     try {
-      const data = await api.getAuditTrail(pageSize, page * pageSize);
+      const data = await api.getAuditTrail(user.id, pageSize, page * pageSize);
       setEvents(data);
       setError(null);
     } catch (err) {
@@ -40,15 +48,24 @@ export default function AuditPage() {
     } finally {
       setLoading(false);
     }
-  }, [page]);
+  }, [page, pageSize, user?.id, userLoading]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
   const exportJson = async () => {
+    if (!user?.id) {
+      setError('No authenticated user found for export');
+      return;
+    }
+
     try {
-      const allEvents = await api.getAuditTrailByDateRange(`${startDate}T00:00:00Z`, `${endDate}T23:59:59Z`);
+      const allEvents = await api.getAuditTrailByDateRange(
+        user.id,
+        `${startDate}T00:00:00Z`,
+        `${endDate}T23:59:59Z`
+      );
       const exportData = {
         exported_at: new Date().toISOString(),
         exported_by: user?.username || 'unknown',
@@ -95,6 +112,7 @@ export default function AuditPage() {
           </div>
           <button
             onClick={exportJson}
+            disabled={!user?.id || userLoading}
             className="flex items-center gap-1.5 rounded-md bg-foreground px-3 py-1.5 text-sm font-medium text-background hover:bg-foreground/90"
           >
             <Download className="h-4 w-4" />
