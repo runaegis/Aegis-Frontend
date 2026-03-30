@@ -20,11 +20,18 @@ export default function SessionsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedSession, setExpandedSession] = useState<string | null>(null);
-  const { user } = useUser();
+  const { user, isLoading: userLoading } = useUser();
 
   const fetchData = useCallback(async () => {
+    if (!user?.id) {
+      if (!userLoading) {
+        setSessions([]);
+        setLoading(false);
+      }
+      return;
+    }
+
     try {
-      // Fetch all sessions; api.getSessions filters by user_id in JS
       const data = await api.getSessions(user?.id);
       setSessions(data);
       setError(null);
@@ -33,11 +40,11 @@ export default function SessionsPage() {
     } finally {
       setLoading(false);
     }
-  }, [user?.id]);
+  }, [user?.id, userLoading]);
 
   const { lastUpdated } = useAutoRefresh(fetchData, 30000);
 
-  if (loading) {
+  if (userLoading || loading) {
     return (
       <div className="flex h-[60vh] items-center justify-center">
         <LoadingSpinner size="lg" />
@@ -74,6 +81,7 @@ export default function SessionsPage() {
               <SessionCard
                 key={session.session_id}
                 session={session}
+                userId={user?.id}
                 isExpanded={expandedSession === session.session_id}
                 onToggle={() =>
                   setExpandedSession(
@@ -91,10 +99,12 @@ export default function SessionsPage() {
 
 function SessionCard({
   session,
+  userId,
   isExpanded,
   onToggle,
 }: {
   session: Session;
+  userId?: string;
   isExpanded: boolean;
   onToggle: () => void;
 }) {
@@ -106,7 +116,7 @@ function SessionCard({
     if (!isExpanded && !actions) {
       setLoadingActions(true);
       try {
-        const data = await api.getSessionActions(session.session_id);
+        const data = await api.getSessionActions(session.session_id, userId);
         setActions(data);
       } catch {
         setActions([]);

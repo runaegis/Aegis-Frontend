@@ -173,7 +173,7 @@ export default function OnboardingPage() {
       try {
         const uname = user?.username || username;
         if (!uname) return;
-        const result = await api.getRecentActionCount(uname);
+        const result = await api.getRecentActionCount(user?.id , uname);
         if (result[0] && Number(result[0].count) > 0) setVerified(true);
       } catch { /* ignore */ } finally {
         setChecking(false);

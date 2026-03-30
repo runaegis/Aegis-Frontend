@@ -2,30 +2,23 @@ import { SessionAction, Session, User, RepoPermission, Metrics } from './types';
 
 function getAPIBase(): string {
   let url = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-  
-  // Ensure URL has protocol
   if (!url.startsWith('http://') && !url.startsWith('https://')) {
     url = `https://${url}`;
   }
-  
   return url;
 }
 
 const API_BASE = getAPIBase();
 
-// Debug log in development
 if (typeof window !== 'undefined') {
   console.log('[Aegis API] Using endpoint:', API_BASE);
 }
 
 function parseDatetime(value: any): string | any {
   if (typeof value !== 'string') return value;
-
-  // Parse Python datetime repr: datetime.datetime(2026, 3, 29, 19, 49, 1, 381221, tzinfo=datetime.timezone.utc)
   const datetimeMatch = value.match(
     /datetime\.datetime\((\d+),\s*(\d+),\s*(\d+),\s*(\d+),\s*(\d+),\s*(\d+),\s*(\d+)/
   );
-
   if (datetimeMatch) {
     const [, year, month, day, hour, minute, second, microsecond] = datetimeMatch;
     return new Date(
@@ -38,110 +31,178 @@ function parseDatetime(value: any): string | any {
       parseInt(microsecond) / 1000
     ).toISOString();
   }
-
   return value;
 }
 
 function parseRow(row: any, columns?: string[]): any {
   let obj: any = row;
-
   if (Array.isArray(row) && columns) {
     obj = Object.fromEntries(columns.map((col: string, i: number) => [col, row[i]]));
   }
-
-  // Parse all datetime-like fields
   const datetimeFields = ['timestamp', 'started_at', 'last_action_at', 'created_at'];
   for (const field of datetimeFields) {
     if (obj[field]) obj[field] = parseDatetime(String(obj[field]));
   }
-
   return obj;
 }
 
-async function query<T>(sql: string, params: any[] = []): Promise<T[]> {
-  const res = await fetch(`${API_BASE}/query`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query: sql, params }),
-  });
-  const data = await res.json();
-  if (!data.success) throw new Error(data.error || 'Query failed');
-  return data.rows.map((row: any) => parseRow(row, data.columns)) as T[];
+// ── Cache keyed by userId so switching accounts works correctly ───────────────
+const _cache = new Map<string, { rows: SessionAction[]; time: number }>();
+const CACHE_TTL = 30_000;
+
+async function getUserActions(userId: string): Promise<SessionAction[]> {
+  const now = Date.now();
+  const cached = _cache.get(userId);
+  if (cached && now - cached.time < CACHE_TTL) return cached.rows;
+
+  const res = await fetch(`${API_BASE}/sessions/${encodeURIComponent(userId)}`);
+  if (!res.ok) throw new Error(`Failed to fetch sessions: ${res.statusText}`);
+
+  const payload = await res.json();
+
+  // Backend returns { user_id, count, sessions: SessionAction[] }
+  const raw: any[] = Array.isArray(payload.sessions) ? payload.sessions : [];
+  const rows = raw.map((r) => parseRow(r)) as SessionAction[];
+
+  _cache.set(userId, { rows, time: now });
+  return rows;
+}
+
+export function invalidateCache(userId?: string) {
+  if (userId) _cache.delete(userId);
+  else _cache.clear();
+}
+
+// ── Session aggregation helper ────────────────────────────────────────────────
+function aggregateSessions(actions: SessionAction[]): Session[] {
+  const map = new Map<string, Session>();
+
+  for (const row of actions) {
+    const sid = row.session_id;
+    if (!sid) continue;
+
+    if (!map.has(sid)) {
+      map.set(sid, {
+        session_id: sid,
+        agent_name: row.agent_name,
+        user_id: row.user_id,
+        action_count: 0,
+        started_at: row.timestamp,
+        last_action_at: row.timestamp,
+        repos: [],
+        allows: 0,
+        denies: 0,
+        rewrites: 0,
+        approvals: 0,
+      });
+    }
+
+    const s = map.get(sid)!;
+    s.action_count = (Number(s.action_count) || 0) + 1;
+    if (row.timestamp && row.timestamp < s.started_at!) s.started_at = row.timestamp;
+    if (row.timestamp && row.timestamp > s.last_action_at!) s.last_action_at = row.timestamp;
+    if (row.target_repo && !(s.repos as string[]).includes(row.target_repo)) {
+      (s.repos as string[]).push(row.target_repo);
+    }
+    const d = row.decision?.toUpperCase() || '';
+    if (d === 'ALLOW') s.allows = (Number(s.allows) || 0) + 1;
+    else if (d === 'DENY') s.denies = (Number(s.denies) || 0) + 1;
+    else if (d === 'REWRITE') s.rewrites = (Number(s.rewrites) || 0) + 1;
+    if (d.includes('APPROVAL')) s.approvals = (Number(s.approvals) || 0) + 1;
+  }
+
+  return Array.from(map.values()).sort(
+    (a, b) => new Date(b.last_action_at!).getTime() - new Date(a.last_action_at!).getTime()
+  );
 }
 
 export const api = {
   healthCheck: () =>
     fetch(`${API_BASE}/health`).then((r) => r.json()),
 
-  // Fetch ALL runs — filter by user_id in JS (user_id may be null in DB)
   getRuns: async (userId?: string): Promise<SessionAction[]> => {
-    const rows = await query<SessionAction>(
-      `SELECT * FROM session_actions ORDER BY timestamp DESC LIMIT 500`
+    if (!userId) return [];
+    const rows = await getUserActions(userId);
+    return [...rows].sort(
+      (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
     );
-    if (!userId) return rows;
-    // Filter client-side: include rows where user_id matches OR is null (legacy rows)
-    return rows.filter((r) => r.user_id === userId || r.user_id == null);
   },
 
   getSessions: async (userId?: string): Promise<Session[]> => {
-    const rows = await query<Session>(`
-      SELECT session_id, agent_name, user_id,
-        COUNT(*) as action_count,
-        MIN(timestamp) as started_at,
-        MAX(timestamp) as last_action_at,
-        array_agg(DISTINCT target_repo) as repos,
-        SUM(CASE WHEN decision='ALLOW' THEN 1 ELSE 0 END) as allows,
-        SUM(CASE WHEN decision='DENY' THEN 1 ELSE 0 END) as denies,
-        SUM(CASE WHEN decision='REWRITE' THEN 1 ELSE 0 END) as rewrites,
-        SUM(CASE WHEN decision ILIKE '%APPROVAL%' THEN 1 ELSE 0 END) as approvals
-      FROM session_actions
-      GROUP BY session_id, agent_name, user_id
-      ORDER BY last_action_at DESC
-    `);
-    if (!userId) return rows;
-    return rows.filter((r) => r.user_id === userId || r.user_id == null);
-  },
-  getSessionActions: (sessionId: string) =>
-    query<SessionAction>(
-      `SELECT * FROM session_actions WHERE session_id = %s ORDER BY sequence_order ASC`,
-      [sessionId]
-    ),
- 
-  getMetrics: async (userId?: string): Promise<Metrics> => {
-    const runs = await api.getRuns(userId);
-    const total = runs.length;
-    const allows = runs.filter((r) => r.decision?.toUpperCase() === 'ALLOW').length;
-    const denies = runs.filter((r) => r.decision?.toUpperCase() === 'DENY').length;
-    const rewrites = runs.filter((r) => r.decision?.toUpperCase() === 'REWRITE').length;
-    const approvals = runs.filter((r) => r.decision?.toUpperCase().includes('APPROVAL')).length;
-    return { total, allows, denies, rewrites, approvals };
+    if (!userId) return [];
+    const rows = await getUserActions(userId);
+    return aggregateSessions(rows);
   },
 
-  getApprovals: async (): Promise<SessionAction[]> => {
-    const rows = await query<SessionAction>(
-      `SELECT * FROM session_actions ORDER BY timestamp DESC LIMIT 200`
-    );
+  getSessionActions: async (sessionId: string, userId?: string): Promise<SessionAction[]> => {
+    // If we have userId, pull from cache to avoid an extra fetch
+    if (userId) {
+      const rows = await getUserActions(userId);
+      return rows
+        .filter((r) => r.session_id === sessionId)
+        .sort((a, b) => (a.sequence_order ?? 0) - (b.sequence_order ?? 0));
+    }
+    // Fallback: fetch all and filter (no userId known)
+    const res = await fetch(`${API_BASE}/query`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query: `SELECT * FROM session_actions WHERE session_id = %s ORDER BY sequence_order ASC`,
+        params: [sessionId],
+      }),
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || 'Query failed');
+    return data.rows.map((row: any) => parseRow(row, data.columns)) as SessionAction[];
+  },
+
+  getMetrics: async (userId?: string): Promise<Metrics> => {
+    if (!userId) return { total: 0, allows: 0, denies: 0, rewrites: 0, approvals: 0 };
+    const runs = await getUserActions(userId);
+    return {
+      total: runs.length,
+      allows: runs.filter((r) => r.decision?.toUpperCase() === 'ALLOW').length,
+      denies: runs.filter((r) => r.decision?.toUpperCase() === 'DENY').length,
+      rewrites: runs.filter((r) => r.decision?.toUpperCase() === 'REWRITE').length,
+      approvals: runs.filter((r) => r.decision?.toUpperCase().includes('APPROVAL')).length,
+    };
+  },
+
+  getApprovals: async (userId?: string): Promise<SessionAction[]> => {
+    if (!userId) return [];
+    const rows = await getUserActions(userId);
     return rows.filter((r) => r.decision?.toUpperCase().includes('APPROVAL'));
   },
 
-  getAuditTrail: (limit: number = 50, offset: number = 0) =>
-    query<SessionAction>(
-      `SELECT * FROM session_actions ORDER BY timestamp DESC LIMIT %s OFFSET %s`,
-      [limit, offset]
-    ),
+  getAuditTrail: async (userId?: string, limit = 50, offset = 0): Promise<SessionAction[]> => {
+    if (!userId) return [];
+    const rows = await getUserActions(userId);
+    return rows
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      .slice(offset, offset + limit);
+  },
 
-  getAuditTrailByDateRange: (startDate: string, endDate: string) =>
-    query<SessionAction>(
-      `SELECT * FROM session_actions WHERE timestamp >= %s AND timestamp <= %s ORDER BY timestamp DESC`,
-      [startDate, endDate]
-    ),
+  getAuditTrailByDateRange: async (
+    userId: string,
+    startDate: string,
+    endDate: string
+  ): Promise<SessionAction[]> => {
+    const rows = await getUserActions(userId);
+    const start = new Date(startDate).getTime();
+    const end = new Date(endDate).getTime();
+    return rows.filter((r) => {
+      const t = new Date(r.timestamp).getTime();
+      return t >= start && t <= end;
+    });
+  },
 
-  getRecentActionCount: async (username: string): Promise<{ count: number }[]> => {
-    const rows = await query<SessionAction>(
-      `SELECT * FROM session_actions WHERE timestamp > NOW() - INTERVAL '5 minutes'`
-    );
-    const count = rows.filter((r) =>
-      r.agent_name?.toLowerCase().includes(username.toLowerCase())
+  getRecentActionCount: async (userId: string, username: string): Promise<{ count: number }[]> => {
+    const rows = await getUserActions(userId);
+    const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
+    const count = rows.filter(
+      (r) =>
+        r.agent_name?.toLowerCase().includes(username.toLowerCase()) &&
+        new Date(r.timestamp).getTime() > fiveMinutesAgo
     ).length;
     return [{ count }];
   },
@@ -158,14 +219,20 @@ export const api = {
       }),
     }).then((r) => r.json());
 
+    console.log('[API] POST /user response:', createResponse);
     if (!createResponse.success) {
       throw new Error(createResponse.message || 'Failed to create user');
     }
 
-    const userResponse = await fetch(
+    const userFetch = await fetch(
       `${API_BASE}/user?email=${encodeURIComponent(user.email)}`
-    ).then((r) => r.json());
+    );
+    if (!userFetch.ok) throw new Error(`Failed to fetch user: ${userFetch.statusText}`);
 
+    const userResponse = await userFetch.json();
+    if (userResponse.detail || userResponse.error) {
+      throw new Error(userResponse.detail || userResponse.error || 'Failed to retrieve user');
+    }
     return userResponse;
   },
 
@@ -179,16 +246,16 @@ export const api = {
   getRepos: (user_id: string) =>
     fetch(`${API_BASE}/repos/${user_id}`).then((r) => r.json()),
 
-  setPermission: (user_id: string, github_repo_id: number, can_read: boolean, can_write: boolean) =>
+  setPermission: (
+    user_id: string,
+    github_repo_id: number,
+    can_read: boolean,
+    can_write: boolean
+  ) =>
     fetch(`${API_BASE}/permissions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        user_id,
-        github_repo_id,
-        can_read,
-        can_write,
-      }),
+      body: JSON.stringify({ user_id, github_repo_id, can_read, can_write }),
     }).then((r) => r.json()),
 
   setPermissions: (user_id: string, permissions: RepoPermission[]) =>

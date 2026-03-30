@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Activity, Search, ChevronDown, ChevronRight } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useUser, useAutoRefresh } from '@/lib/hooks';
@@ -17,7 +17,7 @@ import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import Link from 'next/link';
 
 export default function DashboardPage() {
-  const { user } = useUser();
+  const { user, isLoading: userLoading } = useUser();
   const [runs, setRuns] = useState<SessionAction[]>([]);
   const [metrics, setMetrics] = useState<Metrics>({ total: 0, allows: 0, denies: 0, rewrites: 0, approvals: 0 });
   const [loading, setLoading] = useState(true);
@@ -27,20 +27,34 @@ export default function DashboardPage() {
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
+    // Don't fetch until user is resolved
+    if (!user?.id) return;
+
+    setLoading(true);
     try {
       const [runsData, metricsData] = await Promise.all([
-        api.getRuns(user?.id),
-        api.getMetrics(user?.id),
+        api.getRuns(user.id),
+        api.getMetrics(user.id),
       ]);
       setRuns(runsData);
       setMetrics(metricsData);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not connect to api.runaegis.co');
+      setError(err instanceof Error ? err.message : 'Could not connect to backend');
     } finally {
       setLoading(false);
     }
   }, [user?.id]);
+
+  // Trigger fetch when user becomes available
+  useEffect(() => {
+    if (user?.id) {
+      fetchData();
+    } else if (!userLoading) {
+      // User finished loading but is null/unauthenticated
+      setLoading(false);
+    }
+  }, [user?.id, userLoading]);
 
   const { lastUpdated } = useAutoRefresh(fetchData, 30000);
 
@@ -61,7 +75,8 @@ export default function DashboardPage() {
     return matchesSearch && matchesDecision;
   });
 
-  if (loading) {
+  // Show spinner while user auth is resolving OR data is loading
+  if (userLoading || loading) {
     return (
       <div className="flex h-[60vh] items-center justify-center">
         <LoadingSpinner size="lg" />
@@ -139,31 +154,31 @@ export default function DashboardPage() {
 
             {/* Table */}
             <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border bg-muted/50 text-left text-xs text-muted-foreground">
-                  <th className="px-4 py-2 font-medium">Agent</th>
-                  <th className="px-4 py-2 font-medium">Tool</th>
-                  <th className="px-4 py-2 font-medium">Summary</th>
-                  <th className="px-4 py-2 font-medium">Repository</th>
-                  <th className="px-4 py-2 font-medium">Branch</th>
-                  <th className="px-4 py-2 font-medium">Decision</th>
-                  <th className="px-4 py-2 font-medium">Time</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredRuns.map((run) => (
-                  <RunRow
-                    key={run.id}
-                    run={run}
-                    isExpanded={expandedRow === run.id}
-                    onToggle={() => setExpandedRow(expandedRow === run.id ? null : run.id)}
-                  />
-                ))}
-              </tbody>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-muted/50 text-left text-xs text-muted-foreground">
+                    <th className="px-4 py-2 font-medium">Agent</th>
+                    <th className="px-4 py-2 font-medium">Tool</th>
+                    <th className="px-4 py-2 font-medium">Summary</th>
+                    <th className="px-4 py-2 font-medium">Repository</th>
+                    <th className="px-4 py-2 font-medium">Branch</th>
+                    <th className="px-4 py-2 font-medium">Decision</th>
+                    <th className="px-4 py-2 font-medium">Time</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredRuns.map((run) => (
+                    <RunRow
+                      key={run.id}
+                      run={run}
+                      isExpanded={expandedRow === run.id}
+                      onToggle={() => setExpandedRow(expandedRow === run.id ? null : run.id)}
+                    />
+                  ))}
+                </tbody>
               </table>
             </div>
-            
+
             {filteredRuns.length === 0 && search && (
               <div className="py-12 text-center text-sm text-muted-foreground">
                 No runs match your search.
