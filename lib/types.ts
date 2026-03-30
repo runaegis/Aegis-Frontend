@@ -11,6 +11,7 @@ export interface SessionAction {
   target_branch: string;
   sequence_order: number;
   timestamp: string;
+  user_id: string;
 }
 
 export interface Session {
@@ -24,6 +25,7 @@ export interface Session {
   denies: number;
   rewrites: number;
   approvals: number;
+  user_id: string;
 }
 
 export interface User {

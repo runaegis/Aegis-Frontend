@@ -29,8 +29,8 @@ export default function DashboardPage() {
   const fetchData = useCallback(async () => {
     try {
       const [runsData, metricsData] = await Promise.all([
-        api.getRuns(user?.username),
-        api.getMetrics(),
+        api.getRuns(user?.id),
+        api.getMetrics(user?.id),
       ]);
       setRuns(runsData);
       setMetrics(metricsData);
@@ -40,7 +40,7 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, [user?.username]);
+  }, [user?.id]);
 
   const { lastUpdated } = useAutoRefresh(fetchData, 30000);
 
