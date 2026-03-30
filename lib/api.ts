@@ -1,6 +1,6 @@
 import { SessionAction, Session, User, RepoPermission, Metrics } from './types';
 
-const API_BASE = 'http://localhost:8000';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 function parseDatetime(value: any): string | any {
   if (typeof value !== 'string') return value;
