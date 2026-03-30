@@ -1,6 +1,17 @@
 import { SessionAction, Session, User, RepoPermission, Metrics } from './types';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+function getAPIBase(): string {
+  let url = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+  
+  // Ensure URL has protocol
+  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    url = `https://${url}`;
+  }
+  
+  return url;
+}
+
+const API_BASE = getAPIBase();
 
 // Debug log in development
 if (typeof window !== 'undefined') {
