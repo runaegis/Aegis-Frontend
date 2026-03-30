@@ -2,6 +2,11 @@ import { SessionAction, Session, User, RepoPermission, Metrics } from './types';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
+// Debug log in development
+if (typeof window !== 'undefined') {
+  console.log('[Aegis API] Using endpoint:', API_BASE);
+}
+
 function parseDatetime(value: any): string | any {
   if (typeof value !== 'string') return value;
 
