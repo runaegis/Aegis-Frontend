@@ -10,6 +10,7 @@ import {
   BookOpen,
   FileText,
   Settings,
+  Plug,
 } from 'lucide-react';
 import { useUser } from '@/lib/hooks';
 import { getInitials } from '@/lib/utils';
@@ -62,6 +63,18 @@ export default function Sidebar() {
 
       {/* Bottom */}
       <div className="border-t border-border p-2">
+        <Link
+          href="/dashboard/integrations"
+          className={`flex items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-colors ${
+            pathname === '/dashboard/integrations'
+              ? 'bg-muted text-foreground'
+              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+          }`}
+        >
+          <Plug className="h-4 w-4" />
+          Integrations
+        </Link>
+
         <Link
           href="/dashboard/settings"
           className={`flex items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-colors ${
