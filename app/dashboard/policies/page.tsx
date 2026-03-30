@@ -37,7 +37,7 @@ export default function PoliciesPage() {
           {activeCount} of {policies.length} policies active
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {policies.map((policy, i) => {
             const Icon = policy.icon;
             return (

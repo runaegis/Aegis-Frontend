@@ -120,7 +120,7 @@ function SessionCard({
                 <span className="text-sm font-medium text-foreground">{session.agent_name}</span>
                 <code className="text-xs text-muted-foreground">{session.session_id?.substring(0, 8)}...</code>
               </div>
-              <div className="mt-0.5 flex items-center gap-3 text-xs text-muted-foreground">
+              <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                 <span className="flex items-center gap-1">
                   <Clock className="h-3 w-3" />
                   {formatRelativeTime(session.started_at)}

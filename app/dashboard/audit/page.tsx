@@ -77,7 +77,7 @@ export default function AuditPage() {
           </div>
         )}
 
-        <div className="mb-4 flex items-center justify-between">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-sm">
             <input
               type="date"
@@ -116,7 +116,7 @@ export default function AuditPage() {
           </div>
         ) : (
           <>
-            <div className="overflow-hidden rounded-md border border-border bg-card">
+            <div className="overflow-x-auto rounded-md border border-border bg-card">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border bg-muted/50 text-left text-xs text-muted-foreground">

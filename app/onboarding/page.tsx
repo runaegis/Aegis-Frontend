@@ -18,7 +18,7 @@ const STEPS = [
 
 function StepIndicator({ current }: { current: number }) {
   return (
-    <div className="mb-10 flex items-center">
+    <div className="mb-10 flex items-center justify-center px-2">
       {STEPS.map((s, idx) => {
         const done    = s.number < current;
         const active  = s.number === current;
@@ -57,7 +57,7 @@ function StepIndicator({ current }: { current: number }) {
 
             {/* Connector */}
             {idx < STEPS.length - 1 && (
-              <div className="relative mx-2 mb-5 h-px w-12 bg-border">
+              <div className="relative mx-1 mb-5 h-px w-6 bg-border sm:mx-2 sm:w-12">
                 <div
                   className="absolute inset-y-0 left-0 bg-foreground/40 transition-all duration-500"
                   style={{ width: s.number < current ? '100%' : '0%' }}
@@ -220,7 +220,7 @@ export default function OnboardingPage() {
   const ghostBtn   = 'flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-all';
 
   return (
-    <div className="flex min-h-screen flex-col items-center bg-background px-4 py-14">
+    <div className="flex min-h-screen flex-col items-center bg-background px-4 py-10 sm:py-14">
       <StepIndicator current={step} />
 
       <div className="w-full max-w-lg">
@@ -295,7 +295,7 @@ export default function OnboardingPage() {
                   <div className="max-h-64 space-y-1 overflow-y-auto">
                     {repos.map((repo) => (
                       <div key={repo.full_name} className="flex items-center justify-between rounded-md border border-border bg-muted/30 px-3 py-2 text-sm text-foreground">
-                        {repo.full_name}
+                        <span className="min-w-0 flex-1 truncate">{repo.full_name}</span>
                         <span className="text-xs text-success">Allow</span>
                       </div>
                     ))}
@@ -347,7 +347,7 @@ export default function OnboardingPage() {
               <div className="max-h-56 space-y-1 overflow-y-auto">
                 {repos.map((repo, i) => (
                   <div key={repo.full_name} className="flex items-center justify-between rounded-md border border-border bg-muted/30 px-3 py-2">
-                    <span className="text-sm text-foreground">{repo.full_name}</span>
+                  <span className="min-w-0 flex-1 truncate text-sm text-foreground">{repo.full_name}</span>
                     <div className="flex overflow-hidden rounded-md border border-border">
                       {permOptions.map((opt) => (
                         <button

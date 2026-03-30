@@ -86,7 +86,7 @@ export default function DashboardPage() {
         )}
 
         {/* Metrics */}
-        <div className="mb-6 grid grid-cols-5 gap-3">
+        <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           <MetricCard label="Total Runs" value={metrics.total} />
           <MetricCard label="Allowed" value={metrics.allows} variant="allow" />
           <MetricCard label="Denied" value={metrics.denies} variant="deny" />
@@ -113,7 +113,7 @@ export default function DashboardPage() {
         ) : (
           <div className="overflow-hidden rounded-md border border-border bg-card">
             {/* Filters */}
-            <div className="flex items-center gap-3 border-b border-border px-4 py-3">
+            <div className="flex flex-wrap items-center gap-3 border-b border-border px-4 py-3">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <input
@@ -138,6 +138,7 @@ export default function DashboardPage() {
             </div>
 
             {/* Table */}
+            <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/50 text-left text-xs text-muted-foreground">
@@ -160,7 +161,8 @@ export default function DashboardPage() {
                   />
                 ))}
               </tbody>
-            </table>
+              </table>
+            </div>
             
             {filteredRuns.length === 0 && search && (
               <div className="py-12 text-center text-sm text-muted-foreground">
@@ -228,7 +230,7 @@ function RunRow({
       {isExpanded && (
         <tr>
           <td colSpan={7} className="border-b border-border bg-muted/30 px-4 py-4">
-            <div className="grid grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
               <div>
                 <p className="mb-1 text-xs text-muted-foreground">Full Summary</p>
                 <p className="text-sm text-foreground">{run.action_summary}</p>
