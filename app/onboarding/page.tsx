@@ -9,21 +9,21 @@ import { Repo } from '@/lib/types';
 import CopyButton from '@/components/ui/CopyButton';
 
 const STEPS = [
-  { number: 1, label: 'Connect',   icon: GitBranch },
-  { number: 2, label: 'Sync',      icon: RefreshCw },
+  { number: 1, label: 'Connect', icon: GitBranch },
+  { number: 2, label: 'Sync', icon: RefreshCw },
   { number: 3, label: 'Permissions', icon: Key },
-  { number: 4, label: 'Agent',     icon: Plug },
-  { number: 5, label: 'Done',      icon: Rocket },
+  { number: 4, label: 'Agent', icon: Plug },
+  { number: 5, label: 'Done', icon: Rocket },
 ];
 
 function StepIndicator({ current }: { current: number }) {
   return (
     <div className="mb-10 flex items-center justify-center px-2">
       {STEPS.map((s, idx) => {
-        const done    = s.number < current;
-        const active  = s.number === current;
+        const done = s.number < current;
+        const active = s.number === current;
         const pending = s.number > current;
-        const Icon    = s.icon;
+        const Icon = s.icon;
 
         return (
           <div key={s.number} className="flex items-center">
@@ -32,9 +32,9 @@ function StepIndicator({ current }: { current: number }) {
               <div
                 className={[
                   'relative flex h-9 w-9 items-center justify-center rounded-full border text-xs font-medium transition-all duration-300',
-                  done    ? 'border-foreground/30 bg-foreground text-background'  : '',
-                  active  ? 'border-foreground/60 bg-foreground/10 text-foreground ring-4 ring-foreground/10' : '',
-                  pending ? 'border-border bg-transparent text-muted-foreground'  : '',
+                  done ? 'border-foreground/30 bg-foreground text-background' : '',
+                  active ? 'border-foreground/60 bg-foreground/10 text-foreground ring-4 ring-foreground/10' : '',
+                  pending ? 'border-border bg-transparent text-muted-foreground' : '',
                 ].join(' ')}
               >
                 {done ? (
@@ -46,8 +46,8 @@ function StepIndicator({ current }: { current: number }) {
               <span
                 className={[
                   'text-[10px] font-medium tracking-wide uppercase',
-                  done    ? 'text-muted-foreground' : '',
-                  active  ? 'text-foreground'        : '',
+                  done ? 'text-muted-foreground' : '',
+                  active ? 'text-foreground' : '',
                   pending ? 'text-muted-foreground/50' : '',
                 ].join(' ')}
               >
@@ -77,19 +77,19 @@ export default function OnboardingPage() {
   const { step, setStep } = useOnboardingStep();
 
   const [username, setUsername] = useState(user?.username || '');
-  const [githubId, setGithubId]  = useState(String(user?.github_user_id || ''));
-  const [email, setEmail]        = useState(user?.email || '');
-  const [token, setToken]        = useState(user?.access_token || '');
+  const [githubId, setGithubId] = useState(String(user?.github_user_id || ''));
+  const [email, setEmail] = useState(user?.email || '');
+  const [token, setToken] = useState(user?.access_token || '');
   const [step1Loading, setStep1Loading] = useState(false);
-  const [step1Error, setStep1Error]     = useState('');
+  const [step1Error, setStep1Error] = useState('');
 
-  const [repos, setRepos]   = useState<Repo[]>([]);
+  const [repos, setRepos] = useState<Repo[]>([]);
   const [syncing, setSyncing] = useState(false);
-  const [synced, setSynced]   = useState(false);
+  const [synced, setSynced] = useState(false);
 
   const [activeTab, setActiveTab] = useState('claude');
-  const [verified, setVerified]   = useState(false);
-  const [checking, setChecking]   = useState(false);
+  const [verified, setVerified] = useState(false);
+  const [checking, setChecking] = useState(false);
 
   const [actionCount, setActionCount] = useState(0);
 
@@ -130,8 +130,8 @@ export default function OnboardingPage() {
     setRepos((prev) =>
       prev.map((r, i) => {
         if (i !== index) return r;
-        if (permission === 'allow')            return { ...r, can_read: true,  can_write: true  };
-        if (permission === 'require_approval') return { ...r, can_read: true,  can_write: false };
+        if (permission === 'allow') return { ...r, can_read: true, can_write: true };
+        if (permission === 'require_approval') return { ...r, can_read: true, can_write: false };
         return { ...r, can_read: false, can_write: false };
       })
     );
@@ -140,8 +140,8 @@ export default function OnboardingPage() {
   const handleBulkPermission = (permission: 'allow' | 'deny' | 'require_approval') => {
     setRepos((prev) =>
       prev.map((r) => {
-        if (permission === 'allow')            return { ...r, can_read: true,  can_write: true  };
-        if (permission === 'require_approval') return { ...r, can_read: true,  can_write: false };
+        if (permission === 'allow') return { ...r, can_read: true, can_write: true };
+        if (permission === 'require_approval') return { ...r, can_read: true, can_write: false };
         return { ...r, can_read: false, can_write: false };
       })
     );
@@ -149,7 +149,7 @@ export default function OnboardingPage() {
 
   const getPermissionLabel = (repo: Repo): 'allow' | 'deny' | 'require_approval' => {
     if (repo.can_write) return 'allow';
-    if (repo.can_read)  return 'require_approval';
+    if (repo.can_read) return 'require_approval';
     return 'deny';
   };
 
@@ -171,9 +171,13 @@ export default function OnboardingPage() {
     const interval = setInterval(async () => {
       setChecking(true);
       try {
+
         const uname = user?.username || username;
-        if (!uname) return;
-        const result = await api.getRecentActionCount(user?.id , uname);
+        const uid = user?.id; // Capture the ID
+
+        // Ensure BOTH uname and uid exist before calling the API
+        if (!uname || !uid) return;
+        const result = await api.getRecentActionCount(uid, uname);
         if (result[0] && Number(result[0].count) > 0) setVerified(true);
       } catch { /* ignore */ } finally {
         setChecking(false);
@@ -203,21 +207,21 @@ export default function OnboardingPage() {
   }, null, 2);
 
   const permOptions: Array<{ value: 'allow' | 'deny' | 'require_approval'; label: string; activeClass: string }> = [
-    { value: 'allow',            label: 'Allow',    activeClass: 'bg-success/20 text-success' },
+    { value: 'allow', label: 'Allow', activeClass: 'bg-success/20 text-success' },
     { value: 'require_approval', label: 'Approval', activeClass: 'bg-foreground/10 text-foreground' },
-    { value: 'deny',             label: 'Deny',     activeClass: 'bg-destructive/20 text-destructive' },
+    { value: 'deny', label: 'Deny', activeClass: 'bg-destructive/20 text-destructive' },
   ];
 
   const tabs = [
-    { id: 'claude',   label: 'Claude Code' },
-    { id: 'cursor',   label: 'Cursor' },
+    { id: 'claude', label: 'Claude Code' },
+    { id: 'cursor', label: 'Cursor' },
     { id: 'windsurf', label: 'Windsurf' },
-    { id: 'custom',   label: 'Other' },
+    { id: 'custom', label: 'Other' },
   ];
 
   const inputClass = 'w-full rounded-md border border-border bg-muted px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-foreground/40 focus:outline-none';
   const primaryBtn = 'flex items-center justify-center gap-2 rounded-md bg-foreground px-4 py-2 text-sm font-medium text-background hover:bg-foreground/90 disabled:opacity-40 transition-all';
-  const ghostBtn   = 'flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-all';
+  const ghostBtn = 'flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-all';
 
   return (
     <div className="flex min-h-screen flex-col items-center bg-background px-4 py-10 sm:py-14">
@@ -347,7 +351,7 @@ export default function OnboardingPage() {
               <div className="max-h-56 space-y-1 overflow-y-auto">
                 {repos.map((repo, i) => (
                   <div key={repo.full_name} className="flex items-center justify-between rounded-md border border-border bg-muted/30 px-3 py-2">
-                  <span className="min-w-0 flex-1 truncate text-sm text-foreground">{repo.full_name}</span>
+                    <span className="min-w-0 flex-1 truncate text-sm text-foreground">{repo.full_name}</span>
                     <div className="flex overflow-hidden rounded-md border border-border">
                       {permOptions.map((opt) => (
                         <button
@@ -401,10 +405,10 @@ export default function OnboardingPage() {
                 <pre className="overflow-x-auto p-4 font-mono text-xs text-foreground/80 leading-relaxed">{mcpConfig}</pre>
               </div>
               <div className="mt-3 rounded-md border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
-                {activeTab === 'claude'    && <ol className="space-y-1"><li>1. Open Claude Code settings</li><li>2. Navigate to MCP Servers</li><li>3. Add the config above</li><li>4. Restart Claude Code</li></ol>}
-                {activeTab === 'cursor'   && <ol className="space-y-1"><li>1. Open Settings &rarr; Features &rarr; MCP</li><li>2. Click Add MCP Server</li><li>3. Paste the config</li></ol>}
+                {activeTab === 'claude' && <ol className="space-y-1"><li>1. Open Claude Code settings</li><li>2. Navigate to MCP Servers</li><li>3. Add the config above</li><li>4. Restart Claude Code</li></ol>}
+                {activeTab === 'cursor' && <ol className="space-y-1"><li>1. Open Settings &rarr; Features &rarr; MCP</li><li>2. Click Add MCP Server</li><li>3. Paste the config</li></ol>}
                 {activeTab === 'windsurf' && <ol className="space-y-1"><li>1. Open ~/.codeium/windsurf/mcp_config.json</li><li>2. Add the aegis-github server</li></ol>}
-                {activeTab === 'custom'   && <p>Point your MCP server URL to https://app.runaegis.co/sse with header <code className="text-foreground/80">user_id: {String(user?.github_user_id || githubId)}</code></p>}
+                {activeTab === 'custom' && <p>Point your MCP server URL to https://app.runaegis.co/sse with header <code className="text-foreground/80">user_id: {String(user?.github_user_id || githubId)}</code></p>}
               </div>
 
               {/* Connection status */}
