@@ -313,4 +313,36 @@ export const api = {
         })),
       }),
     }).then((r) => r.json()),
+  // POST /policy -> returns existing row or creates a new one with defaults
+  getUserPolicy: async (userId: string): Promise<string | null> => {
+    const res = await fetch(`${API_BASE}/policy`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userId }),
+    });
+
+    if (!res.ok) throw new Error(`Failed to fetch policy: ${res.statusText}`);
+
+    const data = await res.json();
+    const body = Array.isArray(data) ? data[0] : data;
+    if (!body?.success || body.rowcount === 0) return null;
+
+    const row = Array.isArray(body.rows) ? body.rows[0] : undefined;
+    if (!row) return null;
+
+    const parsed = parseRow(row, body.columns) as Record<string, unknown>;
+    return typeof parsed.policy_string === 'string' ? parsed.policy_string : null;
+  },
+
+  upsertUserPolicy: async (userId: string, policyString: string): Promise<void> => {
+    const params = new URLSearchParams({ policy_string: policyString });
+    const res = await fetch(`${API_BASE}/policy/${encodeURIComponent(userId)}?${params.toString()}`, {
+      method: 'PUT',
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Failed to save policy: ${res.status} ${text || res.statusText}`);
+    }
+  },
 };
