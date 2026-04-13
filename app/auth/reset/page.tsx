@@ -29,7 +29,7 @@ export default function ResetPasswordPage() {
       }
 
       try {
-        const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/validate-reset-token?token=${encodeURIComponent(token)}`, {
+        const res = await fetch(`http://localhost:8000/auth/validate-reset-token?token=${encodeURIComponent(token)}`, {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
@@ -93,7 +93,7 @@ export default function ResetPasswordPage() {
     setLoading(true);
 
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/reset-password`, {
+      const res = await fetch(`http://localhost:8000/auth/reset-password`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

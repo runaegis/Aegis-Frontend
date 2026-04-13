@@ -120,11 +120,11 @@ export default function AuthPage() {
   try {
     if (provider === 'google') {
       // Redirect to backend Google login
-      window.location.href = `${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/login/google`;
+      window.location.href = `http://localhost:8000/auth/login/google`;
     }
 
     if (provider === 'github') {
-      window.location.href = `${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/login/github`;
+      window.location.href = `http://localhost:8000/auth/login/github`;
     }
   } catch {
     setOauthError({
@@ -140,7 +140,7 @@ const handleResendEmail = async () => {
   setResendCooldown(30);
 
   try {
-    const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/resend-verification`, {
+    const res = await fetch(`http://localhost:8000/auth/resend-verification`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -166,7 +166,7 @@ const handleResendEmail = async () => {
   setErrors({});
 
   try {
-    const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/register`, {
+    const res = await fetch(`http://localhost:8000/auth/register`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -211,7 +211,7 @@ const handleResendEmail = async () => {
   setErrors({});
 
   try {
-    const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/login`, {
+    const res = await fetch(`http://localhost:8000/auth/login`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -250,45 +250,41 @@ const handleResendEmail = async () => {
   }
 };
 
-  const handleForgotPassword = async () => {
-    const newErrors: FormErrors = {};
-    
-    if (!email.trim()) {
-      newErrors.email = 'This field is required';
-    } else if (!validateEmail(email)) {
-      newErrors.email = 'Please enter a valid email address';
-    }
-    
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors);
-      return;
-    }
+const handleForgotPassword = async () => {
+  const newErrors: FormErrors = {};
+  
+  if (!email.trim()) {
+    newErrors.email = 'This field is required';
+  } else if (!validateEmail(email)) {
+    newErrors.email = 'Please enter a valid email address';
+  }
+  
+  if (Object.keys(newErrors).length > 0) {
+    setErrors(newErrors);
+    return;
+  }
 
-    setLoading(true);
-    setErrors({});
+  setLoading(true);
+  setErrors({});
 
-    try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/forgot-password`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email }),
-      });
+  try {
+    await fetch(`http://localhost:8000/auth/forgot-password`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ email }),
+    });
 
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.detail || 'Failed to request password reset');
-      }
-      
-      setForgotEmail(email);
-      setForgotSuccess(true);
-    } catch (err: any) {
-      setErrors({ form: err.message || 'Something went wrong. Please try again.' });
-    } finally {
-      setLoading(false);
-    }
-  };
+    setForgotEmail(email);
+    setForgotSuccess(true);
+
+  } catch {
+    setErrors({ form: 'Something went wrong. Please try again.' });
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
