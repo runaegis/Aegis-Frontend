@@ -120,11 +120,11 @@ export default function AuthPage() {
   try {
     if (provider === 'google') {
       // Redirect to backend Google login
-      window.location.href = `${process.env.BACKEND_URL}/auth/login/google`;
+      window.location.href = `${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/login/google`;
     }
 
     if (provider === 'github') {
-      window.location.href = `${process.env.BACKEND_URL}/auth/login/github`;
+      window.location.href = `${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/login/github`;
     }
   } catch {
     setOauthError({
@@ -140,7 +140,7 @@ const handleResendEmail = async () => {
   setResendCooldown(30);
 
   try {
-    await fetch("${process.env.BACKEND_URL}/auth/resend-verification", {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/resend-verification`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -148,7 +148,11 @@ const handleResendEmail = async () => {
       body: JSON.stringify({ email: signupEmail }),
     });
 
-    setResendMessage("Email resent");
+    if (res.ok) {
+      setResendMessage("Email resent");
+    } else {
+      setResendMessage("Failed to resend");
+    }
 
   } catch {
     setResendMessage("Failed to resend");
@@ -162,7 +166,7 @@ const handleResendEmail = async () => {
   setErrors({});
 
   try {
-    const res = await fetch("${process.env.BACKEND_URL}/auth/register", {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/register`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -207,7 +211,7 @@ const handleResendEmail = async () => {
   setErrors({});
 
   try {
-    const res = await fetch("${process.env.BACKEND_URL}/auth/login", {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/login`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -264,13 +268,23 @@ const handleResendEmail = async () => {
     setErrors({});
 
     try {
-      // TODO: Implement forgot password API call
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/forgot-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.detail || 'Failed to request password reset');
+      }
       
       setForgotEmail(email);
       setForgotSuccess(true);
-    } catch {
-      setErrors({ form: 'Something went wrong. Please try again.' });
+    } catch (err: any) {
+      setErrors({ form: err.message || 'Something went wrong. Please try again.' });
     } finally {
       setLoading(false);
     }

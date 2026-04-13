@@ -29,15 +29,19 @@ export default function ResetPasswordPage() {
       }
 
       try {
-        // Simulate API call to validate token
-        await new Promise(resolve => setTimeout(resolve, 800));
+        const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/validate-reset-token?token=${encodeURIComponent(token)}`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
         
-        // Mock validation - in real app, validate token with backend
-        if (token.length > 10) {
+        if (res.ok) {
           setTokenValid(true);
           setError(null);
         } else {
-          setError('Reset link has expired or is invalid');
+          const data = await res.json();
+          setError(data.detail || 'Reset link has expired or is invalid');
         }
       } catch (err) {
         setError('Failed to validate reset link');
@@ -89,10 +93,22 @@ export default function ResetPasswordPage() {
     setLoading(true);
 
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/reset-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          token,
+          password,
+        }),
+      });
 
-      // Mock success
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.detail || 'Failed to reset password');
+      }
+
       setSuccess(true);
       setPassword('');
       setConfirmPassword('');
@@ -101,8 +117,8 @@ export default function ResetPasswordPage() {
       setTimeout(() => {
         window.location.href = '/auth';
       }, 2000);
-    } catch (err) {
-      setError('Failed to reset password. Please try again.');
+    } catch (err: any) {
+      setError(err.message || 'Failed to reset password. Please try again.');
     } finally {
       setLoading(false);
     }
