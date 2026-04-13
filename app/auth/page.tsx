@@ -113,112 +113,138 @@ export default function AuthPage() {
     return Object.keys(newErrors).length === 0;
   }, [mode, name, email, password, confirmPassword]);
 
-  const handleOAuth = async (provider: 'google' | 'github') => {
-    setOauthLoading(provider);
-    setOauthError({});
+  const handleOAuth = (provider: 'google' | 'github') => {
+  setOauthLoading(provider);
+  setOauthError({});
 
-    try {
-      // TODO: Implement OAuth flow
-      // Simulate API call
-      await new Promise((_, reject) => setTimeout(() => reject(new Error('OAuth not implemented')), 1500));
-    } catch {
-      setOauthError({ [provider]: `Could not connect to ${provider === 'google' ? 'Google' : 'GitHub'}. Please try again.` });
-    } finally {
-      setOauthLoading(null);
+  try {
+    if (provider === 'google') {
+      // Redirect to backend Google login
+      window.location.href = `${process.env.BACKEND_URL}/auth/login/google`;
     }
-  };
 
-  const handleResendEmail = async () => {
-    if (resendCooldown > 0) return;
-    
-    setResendCooldown(30);
-    setResendMessage('Email resent');
-    
-    // TODO: Implement resend email API call
-  };
+    if (provider === 'github') {
+      window.location.href = `${process.env.BACKEND_URL}/auth/login/github`;
+    }
+  } catch {
+    setOauthError({
+      [provider]: `Could not connect to ${provider === 'google' ? 'Google' : 'GitHub'}`
+    });
+    setOauthLoading(null);
+  }
+};
+
+const handleResendEmail = async () => {
+  if (resendCooldown > 0) return;
+
+  setResendCooldown(30);
+
+  try {
+    await fetch("${process.env.BACKEND_URL}/auth/resend-verification", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ email: signupEmail }),
+    });
+
+    setResendMessage("Email resent");
+
+  } catch {
+    setResendMessage("Failed to resend");
+  }
+};
 
   const handleSignup = async () => {
-    if (!validateForm()) return;
+  if (!validateForm()) return;
 
-    setLoading(true);
-    setErrors({});
+  setLoading(true);
+  setErrors({});
 
-    try {
-      // TODO: Implement signup API call
-      // Simulate API call
-      await new Promise((resolve, reject) => {
-        setTimeout(() => {
-          // Simulate different error scenarios for testing
-          // In production, this would be real API responses
-          if (email === 'existing@example.com') {
-            reject({ type: 'email_exists' });
-          } else {
-            resolve(true);
-          }
-        }, 1500);
-      });
+  try {
+    const res = await fetch("${process.env.BACKEND_URL}/auth/register", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name,
+        email,
+        password,
+      }),
+    });
 
-      setSignupEmail(email);
-      setSignupSuccess(true);
-    } catch (err: unknown) {
-      if (err && typeof err === 'object' && 'type' in err && err.type === 'email_exists') {
-        setErrors({ form: 'email_exists' });
-      } else {
-        setErrors({ form: 'Something went wrong. Please try again.' });
+    if (!res.ok) {
+      const data = await res.json();
+
+      if (data.detail || data.message) {
+        throw new Error(data.detail || data.message);
       }
-    } finally {
-      setLoading(false);
+
+      throw new Error("Signup failed");
     }
-  };
+
+    const data = await res.json();
+
+    setSignupEmail(email);
+    setSignupSuccess(true);
+
+  } catch (err: any) {
+    if (err.message.includes("already exists")) {
+      setErrors({ form: "email_exists" });
+    } else {
+      setErrors({ form: err.message || "Something went wrong" });
+    }
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleLogin = async () => {
-    if (!validateForm()) return;
+  if (!validateForm()) return;
 
-    setLoading(true);
-    setErrors({});
+  setLoading(true);
+  setErrors({});
 
-    try {
-      // TODO: Implement login API call
-      // Simulate API call with different scenarios
-      await new Promise((resolve, reject) => {
-        setTimeout(() => {
-          // Simulate different error scenarios for testing
-          if (email === 'wrong@example.com') {
-            reject({ type: 'wrong_credentials' });
-          } else if (email === 'unverified@example.com') {
-            reject({ type: 'unverified' });
-          } else if (email === 'notfound@example.com') {
-            reject({ type: 'not_found' });
-          } else {
-            resolve(true);
-          }
-        }, 1500);
-      });
+  try {
+    const res = await fetch("${process.env.BACKEND_URL}/auth/login", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        email,
+        password,
+      }),
+    });
 
-      // Success - show logging in overlay
-      setLoggingIn(true);
-      setTimeout(() => {
-        router.push('/dashboard');
-      }, 1000);
-    } catch (err: unknown) {
-      if (err && typeof err === 'object' && 'type' in err) {
-        const errorType = (err as { type: string }).type;
-        if (errorType === 'wrong_credentials') {
-          setErrors({ form: 'Incorrect email or password.' });
-        } else if (errorType === 'unverified') {
-          setErrors({ form: 'unverified' });
-        } else if (errorType === 'not_found') {
-          setErrors({ form: 'not_found' });
-        } else {
-          setErrors({ form: 'Something went wrong. Please try again.' });
-        }
-      } else {
-        setErrors({ form: 'Something went wrong. Please try again.' });
-      }
-    } finally {
-      setLoading(false);
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.detail || "Login failed");
     }
-  };
+
+    localStorage.setItem("access_token", data.access_token);
+    localStorage.setItem("refresh_token", data.refresh_token);
+
+    setLoggingIn(true);
+
+    setTimeout(() => {
+      router.push("/dashboard");
+    }, 1000);
+
+  } catch (err: any) {
+    const message = err.message;
+
+    if (message.includes("Invalid credentials")) {
+      setErrors({ form: "Incorrect email or password." });
+    } else {
+      setErrors({ form: "Something went wrong. Please try again." });
+    }
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleForgotPassword = async () => {
     const newErrors: FormErrors = {};

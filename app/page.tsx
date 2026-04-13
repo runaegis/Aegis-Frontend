@@ -11,7 +11,7 @@ export default function Home() {
 
   useEffect(() => {
     if (!isLoading) {
-      router.replace(isOnboarded ? '/dashboard' : '/onboarding');
+      router.replace(isOnboarded ? '/dashboard' : '/auth');
     }
   }, [isLoading, isOnboarded, router]);
 
