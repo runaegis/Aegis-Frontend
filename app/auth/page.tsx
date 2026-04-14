@@ -1,3 +1,4 @@
+//auth
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
@@ -20,6 +21,8 @@ interface OAuthError {
 }
 
 export default function AuthPage() {
+  const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL!;
+  // console.log('Using backend URL:', BACKEND_URL);
   const router = useRouter();
   const [mode, setMode] = useState<AuthMode>('signup');
   const [loading, setLoading] = useState(false);
@@ -120,11 +123,12 @@ export default function AuthPage() {
   try {
     if (provider === 'google') {
       // Redirect to backend Google login
-      window.location.href = `http://localhost:8000/auth/login/google`;
+      console.log(`Redirecting to ${BACKEND_URL}/auth/login/google`);
+      window.location.href = `${BACKEND_URL}/auth/login/google`;
     }
 
     if (provider === 'github') {
-      window.location.href = `http://localhost:8000/auth/login/github`;
+      window.location.href = `${BACKEND_URL}/auth/login/github`;
     }
   } catch {
     setOauthError({
@@ -140,7 +144,7 @@ const handleResendEmail = async () => {
   setResendCooldown(30);
 
   try {
-    const res = await fetch(`http://localhost:8000/auth/resend-verification`, {
+    const res = await fetch(`${BACKEND_URL}/auth/resend-verification`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -166,7 +170,7 @@ const handleResendEmail = async () => {
   setErrors({});
 
   try {
-    const res = await fetch(`http://localhost:8000/auth/register`, {
+    const res = await fetch(`${BACKEND_URL}/auth/register`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -211,7 +215,7 @@ const handleResendEmail = async () => {
   setErrors({});
 
   try {
-    const res = await fetch(`http://localhost:8000/auth/login`, {
+    const res = await fetch(`${BACKEND_URL}/auth/login`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -268,7 +272,7 @@ const handleForgotPassword = async () => {
   setErrors({});
 
   try {
-    await fetch(`http://localhost:8000/auth/forgot-password`, {
+    await fetch(`${BACKEND_URL}/auth/forgot-password`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
