@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 
 function ResetPasswordPage() {
-  const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
+  const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
   const searchParams = useSearchParams();
   const token = searchParams.get("token");
 
