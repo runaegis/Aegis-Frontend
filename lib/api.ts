@@ -1,5 +1,9 @@
 import { SessionAction, Session, User, RepoPermission, Metrics, MCPApproval } from './types';
 
+type SaveUserPayload = Pick<User, 'github_user_id' | 'username' | 'access_token'> & {
+  email?: string;
+};
+
 function getAPIBase(): string {
   let url = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
   if (!url.startsWith('http://') && !url.startsWith('https://')) {
@@ -161,10 +165,10 @@ export const api = {
     const runs = await getUserActions(userId);
     return {
       total: runs.length,
-      allows: runs.filter((r) => r.decision?.toUpperCase() === 'ALLOW').length,
-      denies: runs.filter((r) => r.decision?.toUpperCase() === 'DENY').length,
-      rewrites: runs.filter((r) => r.decision?.toUpperCase() === 'REWRITE').length,
-      approvals: runs.filter((r) => r.decision?.toUpperCase().includes('APPROVAL')).length,
+      allows: runs.filter((r) => r.result?.toUpperCase() === 'ALLOW').length,
+      denies: runs.filter((r) => r.result?.toUpperCase() === 'DENY').length,
+      rewrites: runs.filter((r) => r.result?.toUpperCase() === 'REWRITE').length,
+      approvals: runs.filter((r) => r.result?.toUpperCase().includes('APPROVAL')).length,
     };
   },
 
@@ -249,14 +253,13 @@ export const api = {
     return [{ count }];
   },
 
-  saveUser: async (user: User) => {
+  saveUser: async (user: SaveUserPayload) => {
     const createResponse = await fetch(`${API_BASE}/user`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         github_user_id: user.github_user_id,
         username: user.username,
-        email: user.email,
         access_token: user.access_token,
       }),
     }).then((r) => r.json());
@@ -266,16 +269,34 @@ export const api = {
       throw new Error(createResponse.message || 'Failed to create user');
     }
 
-    const userFetch = await fetch(
-      `${API_BASE}/user?email=${encodeURIComponent(user.email)}`
-    );
-    if (!userFetch.ok) throw new Error(`Failed to fetch user: ${userFetch.statusText}`);
-
-    const userResponse = await userFetch.json();
-    if (userResponse.detail || userResponse.error) {
-      throw new Error(userResponse.detail || userResponse.error || 'Failed to retrieve user');
+    if (createResponse.id) {
+      return createResponse;
     }
-    return userResponse;
+
+    const lookupCandidates: string[] = [
+      `${API_BASE}/user?github_user_id=${encodeURIComponent(String(user.github_user_id))}`,
+      `${API_BASE}/user?username=${encodeURIComponent(user.username)}`,
+    ];
+
+    if (user.email) {
+      lookupCandidates.push(`${API_BASE}/user?email=${encodeURIComponent(user.email)}`);
+    }
+
+    for (const lookupUrl of lookupCandidates) {
+      try {
+        const userFetch = await fetch(lookupUrl);
+        if (!userFetch.ok) continue;
+
+        const userResponse = await userFetch.json();
+        if (userResponse.detail || userResponse.error) continue;
+
+        return userResponse;
+      } catch {
+        // Try next lookup strategy
+      }
+    }
+
+    throw new Error('Failed to retrieve user after save');
   },
 
   syncRepos: (github_user_id: number, github_pat: string) =>

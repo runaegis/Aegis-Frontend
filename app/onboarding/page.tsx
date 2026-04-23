@@ -78,7 +78,6 @@ export default function OnboardingPage() {
 
   const [username, setUsername] = useState(user?.username || '');
   const [githubId, setGithubId] = useState(String(user?.github_user_id || ''));
-  const [email, setEmail] = useState(user?.email || '');
   const [token, setToken] = useState(user?.access_token || '');
   const [step1Loading, setStep1Loading] = useState(false);
   const [step1Error, setStep1Error] = useState('');
@@ -94,13 +93,13 @@ export default function OnboardingPage() {
   const [actionCount, setActionCount] = useState(0);
 
   const handleStep1 = async () => {
-    if (!username || !githubId || !email || !token) { setStep1Error('All fields are required.'); return; }
+    if (!username || !githubId || !token) { setStep1Error('All fields are required.'); return; }
     setStep1Loading(true);
     setStep1Error('');
     try {
       const githubUserIdNum = parseInt(githubId, 10);
       if (isNaN(githubUserIdNum)) { setStep1Error('GitHub User ID must be a number.'); setStep1Loading(false); return; }
-      const response = await api.saveUser({ github_user_id: githubUserIdNum, username, email, access_token: token });
+      const response = await api.saveUser({ github_user_id: githubUserIdNum, username, access_token: token });
       setUser(response);
       setStep(2);
     } catch {
@@ -250,10 +249,6 @@ export default function OnboardingPage() {
                 <label className="mb-1.5 block text-xs font-medium text-muted-foreground">GitHub User ID</label>
                 <input type="text" value={githubId} onChange={(e) => setGithubId(e.target.value)} placeholder="12345678" className={inputClass} />
                 <p className="mt-1 text-xs text-muted-foreground">Find yours at api.github.com/users/YOUR_USERNAME</p>
-              </div>
-              <div>
-                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Email</label>
-                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" className={inputClass} />
               </div>
               <div>
                 <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Personal Access Token</label>
