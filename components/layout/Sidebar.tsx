@@ -7,6 +7,7 @@ import {
   Shield,
   Activity,
   Layers,
+  Users,
   Bell,
   BookOpen,
   FileText,
@@ -21,6 +22,7 @@ import { getInitials } from '@/lib/utils';
 const nav = [
   { name: 'Runs', href: '/dashboard', icon: Activity },
   { name: 'Sessions', href: '/dashboard/sessions', icon: Layers },
+  { name: 'Rooms', href: '/dashboard/rooms', icon: Users },
   { name: 'Approvals', href: '/dashboard/approvals', icon: Bell },
   { name: 'Policies', href: '/dashboard/policies', icon: BookOpen },
   { name: 'Audit Trail', href: '/dashboard/audit', icon: FileText },

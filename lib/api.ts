@@ -1,4 +1,15 @@
-import { SessionAction, Session, User, RepoPermission, Metrics, MCPApproval } from './types';
+import {
+  SessionAction,
+  Session,
+  User,
+  RepoPermission,
+  Metrics,
+  MCPApproval,
+  RoomSummary,
+  RoomDetails,
+  RoomMember,
+  RoomInvite,
+} from './types';
 
 type SaveUserPayload = Pick<User, 'github_user_id' | 'username' | 'access_token'> & {
   email?: string;
@@ -48,6 +59,26 @@ function parseRow(row: any, columns?: string[]): any {
     if (obj[field]) obj[field] = parseDatetime(String(obj[field]));
   }
   return obj;
+}
+
+function getJsonHeaders(token?: string): HeadersInit {
+  const headers: HeadersInit = { 'Content-Type': 'application/json' };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  return headers;
+}
+
+async function readErrorMessage(res: Response): Promise<string> {
+  try {
+    const body = await res.json();
+    if (typeof body?.detail === 'string') return body.detail;
+    if (typeof body?.message === 'string') return body.message;
+    if (typeof body?.error === 'string') return body.error;
+  } catch {
+    // Fallback to generic status text
+  }
+  return res.statusText || 'Request failed';
 }
 
 // ── Cache keyed by userId so switching accounts works correctly ───────────────
@@ -365,5 +396,101 @@ export const api = {
       const text = await res.text();
       throw new Error(`Failed to save policy: ${res.status} ${text || res.statusText}`);
     }
+  },
+
+  createRoom: async (repoId: string, token?: string): Promise<RoomDetails> => {
+    const res = await fetch(`${API_BASE}/room/`, {
+      method: 'POST',
+      headers: getJsonHeaders(token),
+      body: JSON.stringify({ repo_id: repoId }),
+    });
+
+    if (!res.ok) {
+      throw new Error(`Failed to create room: ${await readErrorMessage(res)}`);
+    }
+
+    return res.json();
+  },
+
+  getMyRooms: async (token?: string): Promise<RoomSummary[]> => {
+    const res = await fetch(`${API_BASE}/room/`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
+
+    if (!res.ok) {
+      throw new Error(`Failed to load rooms: ${await readErrorMessage(res)}`);
+    }
+
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+  },
+
+  getRoomDetails: async (roomId: string, token?: string): Promise<RoomDetails> => {
+    const res = await fetch(`${API_BASE}/room/${encodeURIComponent(roomId)}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
+
+    if (!res.ok) {
+      throw new Error(`Failed to load room: ${await readErrorMessage(res)}`);
+    }
+
+    return res.json();
+  },
+
+  getRoomMembers: async (roomId: string, token?: string): Promise<RoomMember[]> => {
+    const res = await fetch(`${API_BASE}/room/${encodeURIComponent(roomId)}/members`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
+
+    if (!res.ok) {
+      throw new Error(`Failed to load room members: ${await readErrorMessage(res)}`);
+    }
+
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+  },
+
+  getRoomInvites: async (roomId: string, token?: string): Promise<RoomInvite[]> => {
+    const res = await fetch(`${API_BASE}/room/${encodeURIComponent(roomId)}/invites`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
+
+    if (!res.ok) {
+      throw new Error(`Failed to load room invites: ${await readErrorMessage(res)}`);
+    }
+
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+  },
+
+  createRoomInvite: async (
+    roomId: string,
+    payload: { max_uses?: number; expires_at?: string },
+    token?: string
+  ): Promise<RoomInvite> => {
+    const res = await fetch(`${API_BASE}/room/${encodeURIComponent(roomId)}/invite`, {
+      method: 'POST',
+      headers: getJsonHeaders(token),
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      throw new Error(`Failed to create invite: ${await readErrorMessage(res)}`);
+    }
+
+    return res.json();
+  },
+
+  joinRoom: async (inviteCode: string, token?: string): Promise<any> => {
+    const res = await fetch(`${API_BASE}/room/join/${encodeURIComponent(inviteCode)}`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
+
+    if (!res.ok) {
+      throw new Error(`Failed to join room: ${await readErrorMessage(res)}`);
+    }
+
+    return res.json();
   },
 };
