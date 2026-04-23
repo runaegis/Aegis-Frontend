@@ -4,6 +4,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
+import { useUser } from '@/lib/hooks';
+import { User } from '@/lib/types';
 
 type AuthMode = 'signin' | 'signup' | 'forgot';
 
@@ -24,6 +26,7 @@ export default function AuthPage() {
   const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL!;
   // console.log('Using backend URL:', BACKEND_URL);
   const router = useRouter();
+  const { setUser } = useUser();
   const [mode, setMode] = useState<AuthMode>('signup');
   const [loading, setLoading] = useState(false);
   const [oauthLoading, setOauthLoading] = useState<'google' | 'github' | null>(null);
@@ -235,10 +238,19 @@ const handleResendEmail = async () => {
     localStorage.setItem("access_token", data.access_token);
     localStorage.setItem("refresh_token", data.refresh_token);
 
+    // Store user data with email
+    const userData: User = {
+      email: email,
+      github_user_id: data.github_user_id || 0,
+      username: data.username || '',
+      access_token: data.access_token || '',
+    };
+    setUser(userData);
+
     setLoggingIn(true);
 
     setTimeout(() => {
-      router.push("/dashboard");
+      router.push("/onboarding");
     }, 1000);
 
   } catch (err: any) {
