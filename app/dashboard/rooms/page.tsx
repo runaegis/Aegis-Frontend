@@ -19,6 +19,7 @@ const getInviteCode = (invite: RoomInvite): string =>
 
 export default function RoomsPage() {
   const { user, isLoading: userLoading } = useUser();
+  const [authToken, setAuthToken] = useState<string | undefined>(undefined);
   const [rooms, setRooms] = useState<RoomSummary[]>([]);
   const [selectedRoomId, setSelectedRoomId] = useState<string>('');
   const [selectedRoom, setSelectedRoom] = useState<RoomDetails | null>(null);
@@ -37,7 +38,19 @@ export default function RoomsPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const authToken = user?.access_token || undefined;
+  useEffect(() => {
+    const syncAuthToken = () => {
+      const token = localStorage.getItem('access_token') || undefined;
+      setAuthToken(token);
+    };
+
+    syncAuthToken();
+    window.addEventListener('storage', syncAuthToken);
+
+    return () => {
+      window.removeEventListener('storage', syncAuthToken);
+    };
+  }, [user?.id]);
 
   const fetchRooms = useCallback(async () => {
     if (!authToken) {
