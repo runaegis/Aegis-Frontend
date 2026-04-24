@@ -128,6 +128,11 @@ export default function RoomsPage() {
     return selectedRoom.repo_id || getRoomId(selectedRoom);
   }, [selectedRoom, selectedRoomId]);
 
+  const roomIntegrationUrl = useMemo(() => {
+    if (!user?.id || !selectedRoomId || !authToken) return '';
+    return `https://app.runaegis.co/sse?user_id=${user.id}/room_id=${selectedRoomId}/access_token=${authToken}`;
+  }, [user?.id, selectedRoomId, authToken]);
+
   const handleCreateRoom = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newRepoId.trim() || !authToken) return;
@@ -202,6 +207,17 @@ export default function RoomsPage() {
       setSuccess('Invite code copied');
     } catch {
       setError('Could not copy invite code');
+    }
+  };
+
+  const copyIntegrationUrl = async () => {
+    if (!roomIntegrationUrl) return;
+
+    try {
+      await navigator.clipboard.writeText(roomIntegrationUrl);
+      setSuccess('Integration URL copied');
+    } catch {
+      setError('Could not copy integration URL');
     }
   };
 
@@ -317,6 +333,25 @@ export default function RoomsPage() {
                   <div>
                     <h2 className="text-sm font-medium text-foreground">{selectedRoomLabel}</h2>
                     <p className="text-xs text-muted-foreground">Room ID: {selectedRoomId}</p>
+                  </div>
+                </div>
+
+                <div className="mb-4 rounded-md border border-border bg-muted/30 p-3">
+                  <p className="mb-1 text-xs text-muted-foreground">Room Integration URL</p>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <input
+                      value={roomIntegrationUrl}
+                      readOnly
+                      className="w-full rounded-md border border-border bg-card px-3 py-2 font-mono text-xs text-foreground"
+                    />
+                    <button
+                      type="button"
+                      onClick={copyIntegrationUrl}
+                      disabled={!roomIntegrationUrl}
+                      className="rounded-md border border-border px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
+                    >
+                      Copy URL
+                    </button>
                   </div>
                 </div>
 
