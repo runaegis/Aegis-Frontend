@@ -243,14 +243,13 @@ const handleResendEmail = async () => {
       email: email,
       github_user_id: data.github_user_id || 0,
       username: data.username || '',
-      access_token: data.access_token || '',
     };
     setUser(userData);
 
     setLoggingIn(true);
 
     setTimeout(() => {
-      router.push("/onboarding");
+      router.push("/auth-callback");
     }, 1000);
 
   } catch (err: any) {

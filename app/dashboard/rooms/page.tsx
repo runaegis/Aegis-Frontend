@@ -1,5 +1,4 @@
 'use client';
-
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { DoorOpen, Link2, Plus, Users } from 'lucide-react';
 import Topbar from '@/components/layout/Topbar';
@@ -24,7 +23,6 @@ export default function RoomsPage() {
   const [selectedRoom, setSelectedRoom] = useState<RoomDetails | null>(null);
   const [members, setMembers] = useState<RoomMember[]>([]);
   const [invites, setInvites] = useState<RoomInvite[]>([]);
-
   const [newRepoId, setNewRepoId] = useState('');
   const [joinCode, setJoinCode] = useState('');
   const [inviteMaxUses, setInviteMaxUses] = useState('');
@@ -37,11 +35,19 @@ export default function RoomsPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const authToken = user?.access_token || undefined;
+  const getAuthToken = useCallback(() => {
+    const token = localStorage.getItem("access_token");
+    console.log("[RoomsPage] getAuthToken:", token ? "Token exists" : "No token found");
+    return token;
+  }, []);
 
   const fetchRooms = useCallback(async () => {
+    const authToken = getAuthToken();
+    console.log("[RoomsPage] fetchRooms called, authToken exists:", !!authToken);
+    
     if (!authToken) {
       if (!userLoading) {
+        console.log("[RoomsPage] Clearing rooms - no auth token and not loading user");
         setRooms([]);
         setSelectedRoomId('');
         setSelectedRoom(null);
@@ -54,10 +60,13 @@ export default function RoomsPage() {
 
     setLoading(true);
     try {
+      console.log("[RoomsPage] Fetching rooms from API...");
       const roomsData = await api.getMyRooms(authToken);
+      console.log("[RoomsPage] Rooms fetched successfully:", roomsData);
       setRooms(roomsData);
 
       if (roomsData.length === 0) {
+        console.log("[RoomsPage] No rooms returned, clearing selection");
         setSelectedRoomId('');
         setSelectedRoom(null);
         setMembers([]);
@@ -65,20 +74,28 @@ export default function RoomsPage() {
       } else {
         const hasSelected = roomsData.some((room) => getRoomId(room) === selectedRoomId);
         if (!selectedRoomId || !hasSelected) {
-          setSelectedRoomId(getRoomId(roomsData[0]));
+          const firstRoomId = getRoomId(roomsData[0]);
+          console.log("[RoomsPage] Setting first room as selected:", firstRoomId);
+          setSelectedRoomId(firstRoomId);
         }
       }
 
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch rooms');
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      console.error("[RoomsPage] fetchRooms failed:", errorMsg);
+      setError(`Failed to fetch rooms: ${errorMsg}`);
     } finally {
       setLoading(false);
     }
-  }, [authToken, userLoading, selectedRoomId]);
+  }, [getAuthToken, userLoading, selectedRoomId]);
 
   const loadRoomData = useCallback(async () => {
+    const authToken = getAuthToken();
+    console.log("[RoomsPage] loadRoomData called, selectedRoomId:", selectedRoomId, "authToken exists:", !!authToken);
+    
     if (!authToken || !selectedRoomId) {
+      console.log("[RoomsPage] loadRoomData skipped: missing auth token or room selection");
       setSelectedRoom(null);
       setMembers([]);
       setInvites([]);
@@ -86,27 +103,35 @@ export default function RoomsPage() {
     }
 
     try {
+      console.log("[RoomsPage] Loading room details for:", selectedRoomId);
       const [roomData, memberData, inviteData] = await Promise.all([
         api.getRoomDetails(selectedRoomId, authToken),
         api.getRoomMembers(selectedRoomId, authToken),
         api.getRoomInvites(selectedRoomId, authToken),
       ]);
+      console.log("[RoomsPage] Room data loaded successfully:", { roomData, memberData, inviteData });
       setSelectedRoom(roomData);
       setMembers(memberData);
       setInvites(inviteData);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load room details');
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      console.error("[RoomsPage] loadRoomData failed:", errorMsg);
+      setError(`Failed to load room details: ${errorMsg}`);
     }
-  }, [selectedRoomId, authToken]);
+  }, [selectedRoomId, getAuthToken]);
 
+  // Effect: Fetch rooms when component mounts or auth token changes
   useEffect(() => {
+    console.log('[RoomsPage] Effect: Fetching initial rooms');
     fetchRooms();
   }, [fetchRooms]);
 
+  // Effect: Load room data when selectedRoomId changes
   useEffect(() => {
+    console.log('[RoomsPage] Effect: Loading room data for selectedRoomId:', selectedRoomId);
     loadRoomData();
-  }, [loadRoomData]);
+  }, [loadRoomData, selectedRoomId]);
 
   const { lastUpdated } = useAutoRefresh(fetchRooms, 30000);
 
@@ -117,21 +142,30 @@ export default function RoomsPage() {
 
   const handleCreateRoom = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newRepoId.trim() || !authToken) return;
+    const authToken = getAuthToken();
+    if (!newRepoId.trim() || !authToken) {
+      console.warn("[RoomsPage] handleCreateRoom: missing repo ID or auth token");
+      return;
+    }
 
     setSubmittingCreate(true);
     setSuccess(null);
     try {
+      console.log("[RoomsPage] Creating room with repo ID:", newRepoId);
       const created = await api.createRoom(newRepoId.trim(), authToken);
+      console.log("[RoomsPage] Room created successfully:", created);
       setNewRepoId('');
       setSuccess('Room created successfully');
       await fetchRooms();
       const roomId = getRoomId(created);
       if (roomId) {
+        console.log("[RoomsPage] Setting selected room to newly created:", roomId);
         setSelectedRoomId(roomId);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create room');
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      console.error("[RoomsPage] handleCreateRoom failed:", errorMsg);
+      setError(`Failed to create room: ${errorMsg}`);
     } finally {
       setSubmittingCreate(false);
     }
@@ -139,17 +173,25 @@ export default function RoomsPage() {
 
   const handleJoinRoom = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!joinCode.trim() || !authToken) return;
+    const authToken = getAuthToken();
+    if (!joinCode.trim() || !authToken) {
+      console.warn("[RoomsPage] handleJoinRoom: missing join code or auth token");
+      return;
+    }
 
     setSubmittingJoin(true);
     setSuccess(null);
     try {
+      console.log("[RoomsPage] Joining room with code:", joinCode);
       await api.joinRoom(joinCode.trim(), authToken);
+      console.log("[RoomsPage] Joined room successfully");
       setJoinCode('');
       setSuccess('Joined room successfully');
       await fetchRooms();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to join room');
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      console.error("[RoomsPage] handleJoinRoom failed:", errorMsg);
+      setError(`Failed to join room: ${errorMsg}`);
     } finally {
       setSubmittingJoin(false);
     }
@@ -157,7 +199,11 @@ export default function RoomsPage() {
 
   const handleCreateInvite = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedRoomId || !authToken) return;
+    const authToken = getAuthToken();
+    if (!selectedRoomId || !authToken) {
+      console.warn("[RoomsPage] handleCreateInvite: missing room ID or auth token");
+      return;
+    }
 
     setSubmittingInvite(true);
     setSuccess(null);
@@ -171,13 +217,17 @@ export default function RoomsPage() {
         payload.expires_at = new Date(inviteExpiresAt).toISOString();
       }
 
+      console.log("[RoomsPage] Creating invite with payload:", payload);
       await api.createRoomInvite(selectedRoomId, payload, authToken);
+      console.log("[RoomsPage] Invite created successfully");
       setInviteMaxUses('');
       setInviteExpiresAt('');
       setSuccess('Invite created successfully');
       await loadRoomData();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create invite');
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      console.error("[RoomsPage] handleCreateInvite failed:", errorMsg);
+      setError(`Failed to create invite: ${errorMsg}`);
     } finally {
       setSubmittingInvite(false);
     }
@@ -185,9 +235,11 @@ export default function RoomsPage() {
 
   const copyInviteCode = async (code: string) => {
     try {
+      console.log("[RoomsPage] Copying invite code to clipboard");
       await navigator.clipboard.writeText(code);
       setSuccess('Invite code copied');
-    } catch {
+    } catch (err) {
+      console.error("[RoomsPage] Failed to copy invite code:", err);
       setError('Could not copy invite code');
     }
   };
@@ -226,11 +278,11 @@ export default function RoomsPage() {
               <Plus className="h-4 w-4" />
               Create Room
             </div>
-            <label className="mb-1 block text-xs text-muted-foreground">Repository ID</label>
+            <label className="mb-1 block text-xs text-muted-foreground">Repository UUID</label>
             <input
               value={newRepoId}
               onChange={(e) => setNewRepoId(e.target.value)}
-              placeholder="repo_123 or org/repo"
+              placeholder="Paste repository UUID"
               className="w-full rounded-md border border-border bg-muted px-3 py-2 text-sm text-foreground focus:border-foreground/40 focus:outline-none"
             />
             <button
