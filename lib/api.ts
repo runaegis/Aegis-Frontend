@@ -313,14 +313,18 @@ updateRoomTools: (roomId: string, role: string, data: Record<string, boolean>, t
   },
 
   saveUser: async (user: SaveUserPayload) => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
+    
     const createResponse = await fetch(`${API_BASE}/user`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token && { 'Authorization': `Bearer ${token}` }),
+      },
       body: JSON.stringify({
         github_user_id: user.github_user_id,
         username: user.username,
         github_pat: user.github_pat,
-        email: user.email,
       }),
     }).then((r) => r.json());
 
@@ -360,10 +364,12 @@ updateRoomTools: (roomId: string, role: string, data: Record<string, boolean>, t
   },
 
   syncRepos: (github_user_id: number, github_pat: string) =>
+    // github_user_id = sync_req.github_user_id
+        // github_pat 
     fetch(`${API_BASE}/sync`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ github_user_id, github_pat }),
+      body: JSON.stringify({ "github_user_id":github_user_id, "github_pat":github_pat }),
     }).then((r) => r.json()),
 
   getRepos: (user_id: string) =>
