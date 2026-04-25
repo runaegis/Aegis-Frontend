@@ -250,7 +250,7 @@ const handleResendEmail = async () => {
     setLoggingIn(true);
 
     setTimeout(() => {
-      router.push("/onboarding");
+      router.push("/auth-callback");
     }, 1000);
 
   } catch (err: any) {
