@@ -44,6 +44,7 @@ export default function PoliciesPage() {
   );
 
   const [loading, setLoading] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
   const togglePolicy = (key: string) => {
     setActiveStates((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -77,22 +78,26 @@ export default function PoliciesPage() {
       isMounted = false;
     };
   }, [user?.id, userLoading, defaultPolicyState]);
-
 const handleSave = async () => {
-  if (!user?.id) return;
+  if (!user?.id) {
+    console.warn("No user ID available");
+    return;
+  }
   try {
     setLoading(true);
     const policyString = encodePolicyString(activeStates);
+    console.log("Saving policy:", { userId: user.id, policyString });
+    
     await api.upsertUserPolicy(user.id, policyString);
-    // optional: show success toast here
+    console.log("Policy saved successfully");
+    setSaveSuccess(true);
+    setTimeout(() => setSaveSuccess(false), 3000);
   } catch (err) {
     console.error('Save failed', err);
-    // optional: show error toast here
   } finally {
     setLoading(false);
   }
 };
-
   return (
     <div className="min-h-screen">
       <Topbar title="Policies" subtitle="Rules that evaluate every agent action" />
@@ -104,13 +109,18 @@ const handleSave = async () => {
           </div>
 
           {/* ✅ SAVE BUTTON */}
-          <button
-            onClick={handleSave}
-            disabled={loading || userLoading || !user?.id}
-            className="rounded-md bg-foreground px-4 py-2 text-sm text-background hover:bg-foreground/90 disabled:opacity-50"
-          >
-            {loading ? "Saving..." : "Save Changes"}
-          </button>
+          <div className="flex items-center gap-3">
+            {saveSuccess && (
+              <span className="text-sm text-green-500 font-medium">Saved successfully!</span>
+            )}
+            <button
+              onClick={handleSave}
+              disabled={loading || userLoading || !user?.id}
+              className="rounded-md bg-foreground px-4 py-2 text-sm text-background hover:bg-foreground/90 disabled:opacity-50"
+            >
+              {loading ? "Saving..." : "Save Changes"}
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
