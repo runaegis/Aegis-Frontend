@@ -54,7 +54,7 @@ export default function DashboardPage() {
       // User finished loading but is null/unauthenticated
       setLoading(false);
     }
-  }, [user?.id, userLoading]);
+  }, [user?.id, userLoading, fetchData]);
 
   const { lastUpdated } = useAutoRefresh(fetchData, 30000);
 

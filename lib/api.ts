@@ -158,6 +158,7 @@ export const api = {
 
   healthCheck: () =>
     fetch(`${API_BASE}/health`).then((r) => r.json()),
+  
 
   getRuns: async (userId?: string): Promise<SessionAction[]> => {
     if (!userId) return [];
@@ -228,6 +229,13 @@ updateRoomTools: (roomId: string, role: string, data: Record<string, boolean>, t
 
     getOnboardingStep: (token: string) =>
       fetch(`${API_BASE}/auth/onboarding-step`, {
+        headers: {
+          "Authorization": `Bearer ${token}`,
+        },
+      }).then(res => res.json()),
+
+    getUserDetails: (token: string) =>
+      fetch(`${API_BASE}/auth/user`, {
         headers: {
           "Authorization": `Bearer ${token}`,
         },
