@@ -15,6 +15,7 @@ import {
   Menu,
   X,
   Plug,
+  LogOut,
 } from 'lucide-react';
 import { useUser } from '@/lib/hooks';
 import { getInitials } from '@/lib/utils';
@@ -36,6 +37,12 @@ export default function Sidebar() {
   const isActive = (href: string) => {
     if (href === '/dashboard') return pathname === '/dashboard';
     return pathname.startsWith(href);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
+    window.location.href = '/auth';
   };
 
   const NavContent = () => (
@@ -102,6 +109,14 @@ export default function Sidebar() {
           <Settings className="h-4 w-4" />
           Settings
         </Link>
+
+        <button
+          onClick={handleLogout}
+          className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-sm text-red-500 transition-colors hover:bg-red-500/10"
+        >
+          <LogOut className="h-4 w-4" />
+          Logout
+        </button>
 
         <div className="mt-2 flex items-center gap-2.5 px-3 py-2">
           <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-foreground">
