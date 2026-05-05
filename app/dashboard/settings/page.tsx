@@ -251,8 +251,8 @@ export default function SettingsPage() {
                     <>
                       <div className="max-h-80 space-y-2 overflow-y-auto">
                         {repos.map((repo, i) => (
-                          <div key={repo.full_name} className="flex items-center justify-between rounded-md border border-border bg-muted/30 px-3 py-2">
-                            <span className="text-sm text-foreground">{repo.full_name}</span>
+                          <div key={repo.name} className="flex items-center justify-between rounded-md border border-border bg-muted/30 px-3 py-2">
+                            <span className="text-sm text-foreground">{repo.name}</span>
                             <div className="flex items-center gap-2">
                               <button
                                 onClick={() => handleSetPermission(i, 'read')}
