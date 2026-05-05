@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect , useCallback} from 'react';
 import { useRouter } from 'next/navigation';
 import { Shield, RefreshCw, Check, ChevronRight, ChevronLeft, ExternalLink, Loader2, GitBranch, Key, Settings2, Plug, Rocket } from 'lucide-react';
 import { api } from '@/lib/api';
@@ -17,6 +17,8 @@ const STEPS = [
   { number: 4, label: 'Agent', icon: Plug },
   { number: 5, label: 'Done', icon: Rocket },
 ];
+
+
 
 function StepIndicator({ current }: { current: number }) {
   
@@ -85,6 +87,7 @@ const { email } = useEmail();
   const [token, setToken] = useState(user?.access_token || '');
   const [step1Loading, setStep1Loading] = useState(false);
   const [step1Error, setStep1Error] = useState('');
+  const [authToken, setAuthToken] = useState<string | undefined>(undefined);
 
   const [repos, setRepos] = useState<Repo[]>([]);
   const [syncing, setSyncing] = useState(false);
@@ -95,8 +98,47 @@ const { email } = useEmail();
   const [checking, setChecking] = useState(false);
 
   const [actionCount, setActionCount] = useState(0);
+  useEffect(() => {
+    if (step >= 6) {
+      router.push('/dashboard');
+    }
+  }, [step, router]);
+
+  const getAuthToken = useCallback(() => {
+    const authToken = localStorage.getItem('access_token');
+    if (authToken) {
+      setAuthToken(authToken);
+    }
+    return authToken;
+  }, []);
+
+  useEffect(() => {
+    const fetchInitialStep = async () => {
+      const authToken = getAuthToken();
+      if (!authToken) return; // Wait for token to be available
+
+      try {
+        const response = await api.getOnboardingStep(authToken);
+        const currentStep = response.onboarding_step; 
+        if (currentStep > 6) {
+          router.push('/dashboard');
+          return;
+        }
+        
+        if (currentStep) {
+          setStep(currentStep);
+        }
+      } catch (error) {
+        console.error('Failed to fetch initial onboarding step:', error);
+      }
+    };
+
+    fetchInitialStep();
+  }, [getAuthToken, setStep]);
+
 
   const handleStep1 = async () => {
+    const authToken = getAuthToken();
     if (!username || !githubId || !token) { setStep1Error('All fields are required.'); return; }
     setStep1Loading(true);
     setStep1Error('');
@@ -105,6 +147,7 @@ const { email } = useEmail();
       if (isNaN(githubUserIdNum)) { setStep1Error('GitHub User ID must be a number.'); setStep1Loading(false); return; }
       const response = await api.saveUser({ github_user_id: githubUserIdNum, username, github_pat: token , email }); //<-email
       setUser(response);
+      await api.updateOnboardingStep(2, authToken || '');
       setStep(2);
     } catch {
       setStep1Error('Failed to save. Please try again.');
@@ -163,8 +206,12 @@ const { email } = useEmail();
         github_repo_id, can_read: can_read || false, can_write: can_write || false,
       }));
       await api.setPermissions(user.id, permissions);
+      const authToken = getAuthToken();
+      if (authToken) await api.updateOnboardingStep(4, authToken);
       setStep(4);
     } catch {
+      const authToken = getAuthToken();
+      if (authToken) await api.updateOnboardingStep(4, authToken);
       setStep(4);
     }
   };
@@ -304,10 +351,18 @@ const { email } = useEmail();
                     ))}
                   </div>
                   <div className="mt-5 flex gap-2">
-                    <button onClick={() => setStep(1)} className={ghostBtn}>
+                    <button onClick={async() => {
+                      const authToken = getAuthToken();
+                      if (authToken) await api.updateOnboardingStep(1, authToken);
+                      setStep(1);
+                    }} className={ghostBtn}>
                       <ChevronLeft className="h-4 w-4" /> Back
                     </button>
-                    <button onClick={() => setStep(3)} className={`${primaryBtn} flex-1`}>
+                    <button onClick={async() => {
+                      const authToken = getAuthToken();
+                      if (authToken) await api.updateOnboardingStep(2, authToken);
+                      setStep(3);
+                    }} className={`${primaryBtn} flex-1`}>
                       Continue <ChevronRight className="h-4 w-4" />
                     </button>
                   </div>
@@ -366,10 +421,18 @@ const { email } = useEmail();
                 ))}
               </div>
               <div className="mt-5 flex gap-2">
-                <button onClick={() => setStep(2)} className={ghostBtn}>
+                <button onClick={async () => {
+                  const authToken = getAuthToken();
+                  if (authToken) await api.updateOnboardingStep(2, authToken);
+                  setStep(2);
+                }} className={ghostBtn}>
                   <ChevronLeft className="h-4 w-4" /> Back
                 </button>
-                <button onClick={handleSavePermissions} className={`${primaryBtn} flex-1`}>
+                <button onClick={async () => {
+                  const authToken = getAuthToken();
+                  if (authToken) await api.updateOnboardingStep(2, authToken);
+                  handleSavePermissions();
+                }} className={`${primaryBtn} flex-1`}>
                   Continue <ChevronRight className="h-4 w-4" />
                 </button>
               </div>
@@ -426,15 +489,27 @@ const { email } = useEmail();
               </div>
 
               <div className="mt-5 flex gap-2">
-                <button onClick={() => setStep(3)} className={ghostBtn}>
+                <button onClick={async () => {
+                  const authToken = getAuthToken();
+                  if (authToken) await api.updateOnboardingStep(3, authToken);
+                  setStep(3);
+                }} className={ghostBtn}>
                   <ChevronLeft className="h-4 w-4" /> Back
                 </button>
-                <button onClick={() => setStep(5)} className={`${primaryBtn} flex-1`}>
+                <button onClick={async () => {
+                  const authToken = getAuthToken();
+                  if (authToken) await api.updateOnboardingStep(5, authToken);
+                  setStep(5);
+                }} className={`${primaryBtn} flex-1`}>
                   Continue <ChevronRight className="h-4 w-4" />
                 </button>
               </div>
               {!verified && (
-                <button onClick={() => setStep(5)} className="mt-2 w-full text-center text-xs text-muted-foreground hover:text-foreground transition-colors">
+                <button onClick={async () => {
+                  const authToken = getAuthToken();
+                  if (authToken) await api.updateOnboardingStep(5, authToken);
+                  setStep(5);
+                }} className="mt-2 w-full text-center text-xs text-muted-foreground hover:text-foreground transition-colors">
                   Skip for now
                 </button>
               )}
@@ -466,7 +541,12 @@ const { email } = useEmail();
               </div>
 
               <button
-                onClick={() => router.push('/dashboard')}
+                onClick={async () => {
+                  const authToken = getAuthToken();
+                  if (authToken) await api.updateOnboardingStep(6, authToken);
+                  setStep(6);
+                  router.push('/dashboard');
+                }}
                 className={`${primaryBtn} mx-auto mt-7`}
               >
                 Go to Dashboard <ChevronRight className="h-4 w-4" />

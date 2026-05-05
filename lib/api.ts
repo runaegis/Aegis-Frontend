@@ -1,3 +1,4 @@
+import { get } from 'http';
 import {
   SessionAction,
   Session,
@@ -153,8 +154,11 @@ function aggregateSessions(actions: SessionAction[]): Session[] {
 }
 
 export const api = {
+  
+
   healthCheck: () =>
     fetch(`${API_BASE}/health`).then((r) => r.json()),
+  
 
   getRuns: async (userId?: string): Promise<SessionAction[]> => {
     if (!userId) return [];
@@ -196,6 +200,46 @@ updateRoomTools: (roomId: string, role: string, data: Record<string, boolean>, t
 }
       return json;
     }),
+
+    updateOnboardingStep: (onboardingStep: number, token: string) =>
+      fetch(`${API_BASE}/auth/onboarding-step`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          onboarding_step: onboardingStep,
+        }),
+      })
+        .then(async (res) => {
+          const json = await res.json();
+
+          if (!res.ok) {
+            const message =
+              typeof json.detail === "string"
+                ? json.detail
+                : JSON.stringify(json.detail);
+
+            throw new Error(message || `HTTP ${res.status}`);
+          }
+
+          return json;
+        }),
+
+    getOnboardingStep: (token: string) =>
+      fetch(`${API_BASE}/auth/onboarding-step`, {
+        headers: {
+          "Authorization": `Bearer ${token}`,
+        },
+      }).then(res => res.json()),
+
+    getUserDetails: (token: string) =>
+      fetch(`${API_BASE}/auth/user`, {
+        headers: {
+          "Authorization": `Bearer ${token}`,
+        },
+      }).then(res => res.json()),
 
   getSessionActions: async (sessionId: string, userId?: string): Promise<SessionAction[]> => {
     // If we have userId, pull from cache to avoid an extra fetch
@@ -529,3 +573,4 @@ updateRoomTools: (roomId: string, role: string, data: Record<string, boolean>, t
     return res.json();
   },
 };
+
