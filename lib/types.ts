@@ -12,6 +12,7 @@ export interface SessionAction {
   sequence_order: number;
   timestamp: string;
   user_id: string;
+  execution_time:number;
 }
 
 export type MCPApprovalStatus = 'pending' | 'approved' | 'rejected' | string;

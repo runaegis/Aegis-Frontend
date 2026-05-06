@@ -5,7 +5,7 @@ import { Activity, Search, ChevronDown, ChevronRight } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useUser, useAutoRefresh } from '@/lib/hooks';
 import { SessionAction, Metrics } from '@/lib/types';
-import { formatRelativeTime, formatFullTimestamp, truncate } from '@/lib/utils';
+import { formatRelativeTime, formatFullTimestamp, truncate, formatExecutionTimeMs } from '@/lib/utils';
 import Topbar from '@/components/layout/Topbar';
 import MetricCard from '@/components/ui/MetricCard';
 import DecisionBadge from '@/components/ui/DecisionBadge';
@@ -234,6 +234,11 @@ function RunRow({
         <td className="px-4 py-3">
           <div className="flex items-center gap-2 text-muted-foreground">
             <span className="text-xs">{formatRelativeTime(run.timestamp)}</span>
+            {run.execution_time !== undefined && run.execution_time !== null && (
+              <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">
+                {formatExecutionTimeMs(run.execution_time)}
+              </span>
+            )}
             {isExpanded ? (
               <ChevronDown className="h-3.5 w-3.5" />
             ) : (
@@ -250,7 +255,7 @@ function RunRow({
                 <p className="mb-1 text-xs text-muted-foreground">Full Summary</p>
                 <p className="text-sm text-foreground">{run.action_summary}</p>
               </div>
-              <div className="grid grid-cols-3 gap-4 text-sm">
+              <div className="grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
                 <div>
                   <p className="text-xs text-muted-foreground">Sequence</p>
                   <p className="font-mono text-foreground">#{run.sequence_order}</p>
@@ -268,6 +273,12 @@ function RunRow({
                 <div>
                   <p className="text-xs text-muted-foreground">Timestamp</p>
                   <p className="text-foreground">{formatFullTimestamp(run.timestamp)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Execution</p>
+                  <p className="text-foreground">
+                    {formatExecutionTimeMs(run.execution_time)}
+                  </p>
                 </div>
               </div>
             </div>

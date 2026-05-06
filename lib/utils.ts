@@ -53,6 +53,30 @@ export function formatDuration(startTime: string, endTime: string): string {
   return `${diffHr}h ${diffMin % 60}m`;
 }
 
+export function formatExecutionTimeMs(
+  value: number | string | bigint | null | undefined
+): string {
+  if (value === null || value === undefined) return '—';
+  const ms = typeof value === 'bigint' ? Number(value) : Number(value);
+  if (!Number.isFinite(ms) || ms < 0) return '—';
+  if (ms < 1000) return `${Math.round(ms)}ms`;
+
+  const totalSec = Math.round(ms / 1000);
+  if (totalSec < 60) {
+    const seconds = ms / 1000;
+    const decimals = ms < 10000 ? 2 : 1;
+    return `${seconds.toFixed(decimals)}s`;
+  }
+
+  const minutes = Math.floor(totalSec / 60);
+  const seconds = totalSec % 60;
+  if (minutes < 60) return `${minutes}m ${seconds}s`;
+
+  const hours = Math.floor(minutes / 60);
+  const minutesRemainder = minutes % 60;
+  return `${hours}h ${minutesRemainder}m`;
+}
+
 export function cn(...classes: (string | false | null | undefined)[]): string {
   return classes.filter(Boolean).join(' ');
 }

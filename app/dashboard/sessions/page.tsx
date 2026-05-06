@@ -5,7 +5,7 @@ import { Layers, ChevronDown, ChevronRight, Clock } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useAutoRefresh, useUser } from '@/lib/hooks';
 import { Session, SessionAction } from '@/lib/types';
-import { formatRelativeTime, formatDuration } from '@/lib/utils';
+import { formatRelativeTime, formatDuration, formatExecutionTimeMs } from '@/lib/utils';
 import Topbar from '@/components/layout/Topbar';
 import DecisionBadge from '@/components/ui/DecisionBadge';
 import AgentAvatar from '@/components/ui/AgentAvatar';
@@ -203,6 +203,11 @@ function SessionCard({
                         <span className="text-xs text-muted-foreground">
                           {formatRelativeTime(action.timestamp)}
                         </span>
+                        {action.execution_time !== undefined && action.execution_time !== null && (
+                          <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">
+                            {formatExecutionTimeMs(action.execution_time)}
+                          </span>
+                        )}
                       </div>
                       {action.arguments && Object.keys(action.arguments).length > 0 && (
                         <div className="mt-2">
