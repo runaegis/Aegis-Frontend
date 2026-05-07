@@ -344,8 +344,8 @@ const { email } = useEmail();
                   </div>
                   <div className="max-h-64 space-y-1 overflow-y-auto">
                     {repos.map((repo) => (
-                      <div key={repo.full_name} className="flex items-center justify-between rounded-md border border-border bg-muted/30 px-3 py-2 text-sm text-foreground">
-                        <span className="min-w-0 flex-1 truncate">{repo.full_name}</span>
+                      <div key={repo.name} className="flex items-center justify-between rounded-md border border-border bg-muted/30 px-3 py-2 text-sm text-foreground">
+                        <span className="min-w-0 flex-1 truncate">{repo.name}</span>
                         <span className="text-xs text-success">Allow</span>
                       </div>
                     ))}
@@ -404,8 +404,8 @@ const { email } = useEmail();
               </div>
               <div className="max-h-56 space-y-1 overflow-y-auto">
                 {repos.map((repo, i) => (
-                  <div key={repo.full_name} className="flex items-center justify-between rounded-md border border-border bg-muted/30 px-3 py-2">
-                    <span className="min-w-0 flex-1 truncate text-sm text-foreground">{repo.full_name}</span>
+                  <div key={repo.name} className="flex items-center justify-between rounded-md border border-border bg-muted/30 px-3 py-2">
+                    <span className="min-w-0 flex-1 truncate text-sm text-foreground">{repo.name}</span>
                     <div className="flex overflow-hidden rounded-md border border-border">
                       {permOptions.map((opt) => (
                         <button
