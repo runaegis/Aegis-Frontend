@@ -26,6 +26,7 @@ export interface MCPApproval {
   approved_at: string | null;
   result: any;
   context: Record<string, any>;
+  action_summary: string;
 }
 
 export interface Session {

@@ -179,8 +179,8 @@ export default function ApprovalsPage() {
               const repo =
                 typeof approval.arguments?.repo === 'string' ? approval.arguments.repo : 'N/A';
               const summary =
-                typeof approval.arguments?.message === 'string'
-                  ? approval.arguments.message
+                typeof approval.action_summary === 'string'
+                  ? approval.action_summary
                   : `Requested tool: ${approval.tool_name}`;
 
               return (
