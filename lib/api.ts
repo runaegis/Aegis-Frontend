@@ -159,6 +159,7 @@ export const api = {
   healthCheck: () =>
     fetch(`${API_BASE}/health`).then((r) => r.json()),
   
+  
 
   getRuns: async (userId?: string): Promise<SessionAction[]> => {
     if (!userId) return [];
@@ -565,11 +566,74 @@ updateRoomTools: (roomId: string, role: string, data: Record<string, boolean>, t
       method: 'POST',
       headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     });
-
     if (!res.ok) {
       throw new Error(`Failed to join room: ${await readErrorMessage(res)}`);
     }
+    return res.json();
+  },
 
+    createFreezeWindow: async (payload: any): Promise<any> => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
+    const res = await fetch(`${API_BASE}/freeze_window/create`, {
+      method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      body: JSON.stringify(payload),
+    });
+ 
+    if (!res.ok) {
+      throw new Error(`Failed to create freeze window: ${await readErrorMessage(res)}`);
+    }
+ 
+    return res.json();
+  },
+ 
+  getFreezeWindows: async (): Promise<any[]> => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
+    const res = await fetch(`${API_BASE}/freeze_window/get`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
+ 
+    if (!res.ok) {
+      throw new Error(`Failed to fetch freeze windows: ${await readErrorMessage(res)}`);
+    }
+ 
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+  },
+ 
+  updateFreezeWindow: async ( windowId: string, payload: any): Promise<any> => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
+    const res = await fetch(`${API_BASE}/freeze_window/update/${encodeURIComponent(windowId)}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(payload),
+    });
+ 
+    if (!res.ok) {
+      throw new Error(`Failed to update freeze window: ${await readErrorMessage(res)}`);
+    }
+ 
+    return res.json();
+  },
+ 
+  deleteFreezeWindow: async (windowId: string): Promise<any> => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
+    const res = await fetch(`${API_BASE}/freeze_window/delete/${encodeURIComponent(windowId)}`, {
+      method: 'DELETE',
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+ 
+    if (!res.ok) {
+      throw new Error(`Failed to delete freeze window: ${await readErrorMessage(res)}`);
+    }
     return res.json();
   },
 };

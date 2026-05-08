@@ -16,6 +16,7 @@ import {
   X,
   Plug,
   LogOut,
+  Clock,
 } from 'lucide-react';
 import { useUser } from '@/lib/hooks';
 import { getInitials } from '@/lib/utils';
@@ -27,6 +28,7 @@ const nav = [
   { name: 'Approvals', href: '/dashboard/approvals', icon: Bell },
   { name: 'Policies', href: '/dashboard/policies', icon: BookOpen },
   { name: 'Audit Trail', href: '/dashboard/audit', icon: FileText },
+  { name: 'Freeze Windows', href: '/dashboard/freeze-window', icon: Clock },
 ];
 
 export default function Sidebar() {
