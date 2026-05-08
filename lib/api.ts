@@ -6,6 +6,7 @@ import {
   RepoPermission,
   Metrics,
   MCPApproval,
+  TokenMeterResponse,
   RoomSummary,
   RoomDetails,
   RoomMember,
@@ -355,6 +356,15 @@ updateRoomTools: (roomId: string, role: string, data: Record<string, boolean>, t
         new Date(r.timestamp).getTime() > fiveMinutesAgo
     ).length;
     return [{ count }];
+  },
+
+  getUserTokenUsage: async (userId?: string): Promise<TokenMeterResponse[]> => {
+    if (!userId) return [];
+    const res = await fetch(`${API_BASE}/token-meter/user/${encodeURIComponent(userId)}`);
+    if (!res.ok) throw new Error(`Failed to fetch token usage: ${res.statusText}`);
+    const payload = await res.json();
+    if (!Array.isArray(payload)) return [];
+    return payload.map((row: any) => parseRow(row)) as TokenMeterResponse[];
   },
 
   saveUser: async (user: SaveUserPayload) => {

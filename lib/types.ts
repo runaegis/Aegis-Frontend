@@ -79,6 +79,17 @@ export interface Metrics {
   approvals: number;
 }
 
+export interface TokenMeterResponse {
+  id: string;
+  action_id: string;
+  user_id: string;
+  input_token: number;
+  output_token: number;
+  session_id: string;
+  timestamp?: string;
+  created_at?: string;
+}
+
 export interface RoomSummary {
   id?: string;
   room_id?: string;
