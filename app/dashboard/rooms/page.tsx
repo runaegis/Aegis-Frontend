@@ -73,7 +73,7 @@ export default function RoomsPage() {
     setLoading(true);
     try {
       console.log('[RoomsPage] Fetching rooms from API...');
-      const roomsData = await api.getMyRooms(authToken);
+      const roomsData = await api.getMyRooms();
       console.log('[RoomsPage] Rooms fetched successfully:', roomsData);
       setRooms(roomsData);
 
@@ -117,9 +117,9 @@ export default function RoomsPage() {
     try {
       console.log('[RoomsPage] Loading room details for:', selectedRoomId);
       const [roomData, memberData, inviteData] = await Promise.all([
-        api.getRoomDetails(selectedRoomId, authToken),
-        api.getRoomMembers(selectedRoomId, authToken),
-        api.getRoomInvites(selectedRoomId, authToken),
+        api.getRoomDetails(selectedRoomId),
+        api.getRoomMembers(selectedRoomId),
+        api.getRoomInvites(selectedRoomId),
       ]);
 
       // Find current user's role first
@@ -129,7 +129,7 @@ export default function RoomsPage() {
 
       // Fetch tools for the role being viewed (any user can view any role's policies)
       console.log('[RoomsPage] Fetching tools for role:', viewingRole);
-      const toolsData = await api.getRoomTools(selectedRoomId, viewingRole, authToken);
+      const toolsData = await api.getRoomTools(selectedRoomId, viewingRole);
       console.log('toolsData:', toolsData)
       setTools(toolsData || {});
 
@@ -159,7 +159,7 @@ export default function RoomsPage() {
     if (!authToken || !selectedRoomId || role !== 'OWNER') return;
 
     console.log('[RoomsPage] Effect: Loading tools for viewing role:', viewingRole);
-    api.getRoomTools(selectedRoomId, viewingRole, authToken)
+    api.getRoomTools(selectedRoomId, viewingRole)
       .then((toolsData) => setTools(toolsData || {}))
       .catch((err) => console.error('[RoomsPage] Failed to load tools:', err));
   }, [viewingRole, selectedRoomId, role, getAuthToken]);
@@ -188,7 +188,7 @@ export default function RoomsPage() {
     setSuccess(null);
     try {
       console.log('[RoomsPage] Creating room with repo ID:', newRepoId);
-      const created = await api.createRoom(newRepoId.trim(), authToken);
+      const created = await api.createRoom(newRepoId.trim());
       console.log('[RoomsPage] Room created successfully:', created);
       setNewRepoId('');
       setSuccess('Room created successfully');
@@ -249,7 +249,7 @@ export default function RoomsPage() {
 
     try {
       console.log('[RoomsPage] Updating tool policy for role:', targetRole, 'tool:', tool, 'value:', value);
-      await api.updateRoomTools(selectedRoomId, targetRole, updated, authToken);
+      await api.updateRoomTools(selectedRoomId, targetRole, updated);
       console.log('[RoomsPage] Tool policy updated successfully');
       setSuccess(`${tool} ${value ? 'allowed' : 'denied'}`);
     } catch (err) {
@@ -273,7 +273,7 @@ export default function RoomsPage() {
     setSuccess(null);
     try {
       console.log('[RoomsPage] Joining room with code:', joinCode);
-      await api.joinRoom(joinCode.trim(), authToken);
+      await api.joinRoom(joinCode.trim());
       console.log('[RoomsPage] Joined room successfully');
       setJoinCode('');
       setSuccess('Joined room successfully');
@@ -308,7 +308,7 @@ export default function RoomsPage() {
       }
 
       console.log('[RoomsPage] Creating invite with payload:', payload);
-      await api.createRoomInvite(selectedRoomId, payload, authToken);
+      await api.createRoomInvite(selectedRoomId, payload);
       console.log('[RoomsPage] Invite created successfully');
       setInviteMaxUses('');
       setInviteExpiresAt('');

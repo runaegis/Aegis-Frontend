@@ -64,11 +64,8 @@ function parseRow(row: any, columns?: string[]): any {
   return obj;
 }
 
-function getJsonHeaders(token?: string): HeadersInit {
+function getJsonHeaders(): HeadersInit {
   const headers: HeadersInit = { 'Content-Type': 'application/json' };
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
   return headers;
 }
 
@@ -176,17 +173,17 @@ export const api = {
     return aggregateSessions(rows);
   },
 
-  getRoomTools: (roomId: string, role: string, token: string) =>
+  getRoomTools: (roomId: string, role: string) =>
   fetch(`${API_BASE}/room/${roomId}/tools/${role}`, {
-    headers: { Authorization: `Bearer ${token}` },
+    credentials: 'include',
   }).then(res => res.json()),
 
-updateRoomTools: (roomId: string, role: string, data: Record<string, boolean>, token: string) =>
+updateRoomTools: (roomId: string, role: string, data: Record<string, boolean>) =>
   fetch(`${API_BASE}/room/${roomId}/tools/${role}`, {
     method: "PATCH",
+    credentials: 'include',
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${token}`,
     },
     body: JSON.stringify({ tools: data }),  // ← IMPORTANT: Wrap in { tools: ... }
   })
@@ -203,12 +200,12 @@ updateRoomTools: (roomId: string, role: string, data: Record<string, boolean>, t
       return json;
     }),
 
-    updateOnboardingStep: (onboardingStep: number, token: string) =>
+    updateOnboardingStep: (onboardingStep: number) =>
       fetch(`${API_BASE}/auth/onboarding-step`, {
         method: "POST",
+        credentials: 'include',
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
         },
         body: JSON.stringify({
           onboarding_step: onboardingStep,
@@ -229,18 +226,14 @@ updateRoomTools: (roomId: string, role: string, data: Record<string, boolean>, t
           return json;
         }),
 
-    getOnboardingStep: (token: string) =>
+    getOnboardingStep: () =>
       fetch(`${API_BASE}/auth/onboarding-step`, {
-        headers: {
-          "Authorization": `Bearer ${token}`,
-        },
+        credentials: 'include',
       }).then(res => res.json()),
 
-    getUserDetails: (token: string) =>
+    getUserDetails: () =>
       fetch(`${API_BASE}/auth/user`, {
-        headers: {
-          "Authorization": `Bearer ${token}`,
-        },
+        credentials: 'include',
       }).then(res => res.json()),
 
   getSessionActions: async (sessionId: string, userId?: string): Promise<SessionAction[]> => {
@@ -368,13 +361,11 @@ updateRoomTools: (roomId: string, role: string, data: Record<string, boolean>, t
   },
 
   saveUser: async (user: SaveUserPayload) => {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
-    
     const createResponse = await fetch(`${API_BASE}/user`, {
       method: 'POST',
+      credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
-        ...(token && { 'Authorization': `Bearer ${token}` }),
       },
       body: JSON.stringify({
         github_user_id: user.github_user_id,
@@ -488,10 +479,11 @@ updateRoomTools: (roomId: string, role: string, data: Record<string, boolean>, t
     }
   },
 
-  createRoom: async (repoId: string, token?: string): Promise<RoomDetails> => {
+  createRoom: async (repoId: string): Promise<RoomDetails> => {
     const res = await fetch(`${API_BASE}/room/`, {
       method: 'POST',
-      headers: getJsonHeaders(token),
+      credentials: 'include',
+      headers: getJsonHeaders(),
       body: JSON.stringify({ repo_id: repoId }),
     });
 
@@ -502,9 +494,9 @@ updateRoomTools: (roomId: string, role: string, data: Record<string, boolean>, t
     return res.json();
   },
 
-  getMyRooms: async (token?: string): Promise<RoomSummary[]> => {
+  getMyRooms: async (): Promise<RoomSummary[]> => {
     const res = await fetch(`${API_BASE}/room/`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      credentials: 'include',
     });
 
     if (!res.ok) {
@@ -515,9 +507,9 @@ updateRoomTools: (roomId: string, role: string, data: Record<string, boolean>, t
     return Array.isArray(data) ? data : [];
   },
 
-  getRoomDetails: async (roomId: string, token?: string): Promise<RoomDetails> => {
+  getRoomDetails: async (roomId: string): Promise<RoomDetails> => {
     const res = await fetch(`${API_BASE}/room/${encodeURIComponent(roomId)}`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      credentials: 'include',
     });
 
     if (!res.ok) {
@@ -527,9 +519,9 @@ updateRoomTools: (roomId: string, role: string, data: Record<string, boolean>, t
     return res.json();
   },
 
-  getRoomMembers: async (roomId: string, token?: string): Promise<RoomMember[]> => {
+  getRoomMembers: async (roomId: string): Promise<RoomMember[]> => {
     const res = await fetch(`${API_BASE}/room/${encodeURIComponent(roomId)}/members`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      credentials: 'include',
     });
 
     if (!res.ok) {
@@ -540,9 +532,9 @@ updateRoomTools: (roomId: string, role: string, data: Record<string, boolean>, t
     return Array.isArray(data) ? data : [];
   },
 
-  getRoomInvites: async (roomId: string, token?: string): Promise<RoomInvite[]> => {
+  getRoomInvites: async (roomId: string): Promise<RoomInvite[]> => {
     const res = await fetch(`${API_BASE}/room/${encodeURIComponent(roomId)}/invites`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      credentials: 'include',
     });
 
     if (!res.ok) {
@@ -555,12 +547,12 @@ updateRoomTools: (roomId: string, role: string, data: Record<string, boolean>, t
 
   createRoomInvite: async (
     roomId: string,
-    payload: { max_uses?: number; expires_at?: string },
-    token?: string
+    payload: { max_uses?: number; expires_at?: string }
   ): Promise<RoomInvite> => {
     const res = await fetch(`${API_BASE}/room/${encodeURIComponent(roomId)}/invite`, {
       method: 'POST',
-      headers: getJsonHeaders(token),
+      credentials: 'include',
+      headers: getJsonHeaders(),
       body: JSON.stringify(payload),
     });
 
@@ -571,10 +563,10 @@ updateRoomTools: (roomId: string, role: string, data: Record<string, boolean>, t
     return res.json();
   },
 
-  joinRoom: async (inviteCode: string, token?: string): Promise<any> => {
+  joinRoom: async (inviteCode: string): Promise<any> => {
     const res = await fetch(`${API_BASE}/room/join/${encodeURIComponent(inviteCode)}`, {
       method: 'POST',
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      credentials: 'include',
     });
     if (!res.ok) {
       throw new Error(`Failed to join room: ${await readErrorMessage(res)}`);
@@ -583,12 +575,11 @@ updateRoomTools: (roomId: string, role: string, data: Record<string, boolean>, t
   },
 
     createFreezeWindow: async (payload: any): Promise<any> => {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
     const res = await fetch(`${API_BASE}/freeze_window/create`, {
       method: 'POST',
+      credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
       body: JSON.stringify(payload),
     });
@@ -601,9 +592,8 @@ updateRoomTools: (roomId: string, role: string, data: Record<string, boolean>, t
   },
  
   getFreezeWindows: async (): Promise<any[]> => {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
     const res = await fetch(`${API_BASE}/freeze_window/get`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      credentials: 'include',
     });
  
     if (!res.ok) {
@@ -615,30 +605,24 @@ updateRoomTools: (roomId: string, role: string, data: Record<string, boolean>, t
   },
  
   updateFreezeWindow: async ( windowId: string, payload: any): Promise<any> => {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
     const res = await fetch(`${API_BASE}/freeze_window/update/${encodeURIComponent(windowId)}`, {
       method: 'PUT',
+      credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body: JSON.stringify(payload),
     });
- 
     if (!res.ok) {
       throw new Error(`Failed to update freeze window: ${await readErrorMessage(res)}`);
     }
- 
     return res.json();
   },
  
   deleteFreezeWindow: async (windowId: string): Promise<any> => {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
     const res = await fetch(`${API_BASE}/freeze_window/delete/${encodeURIComponent(windowId)}`, {
       method: 'DELETE',
-      headers: {
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
+      credentials: 'include',
     });
  
     if (!res.ok) {

@@ -14,29 +14,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   useEffect(() => {
     const verifyAndLoad = async () => {
-      const authToken = localStorage.getItem('access_token');
-      if (!authToken){
-        router.push("/login");
-        return; 
-      }
       try {
-        const [userResponse, stepResponse] = await Promise.all([
-          !user?.id ? api.getUserDetails(authToken) : Promise.resolve(user),
-          api.getOnboardingStep(authToken)
+        const [userResponse] = await Promise.all([
+          !user?.id ? api.getUserDetails() : Promise.resolve(user)
         ]);
 
         if (!user?.id) {
           setUser(userResponse);
         }
-        const realStep = stepResponse.onboarding_step;
-
-        if (realStep < 6) {
-          router.replace('/onboarding');
-        } else {
-          setIsReady(true);
-        }
       } catch (error) {
         console.error("Failed to verify dashboard access:", error);
+        router.push("/auth");
       }
     };
 
