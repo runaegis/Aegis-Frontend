@@ -13,23 +13,26 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
-    const verifyAndLoad = async () => {
-      try {
-        const [userResponse] = await Promise.all([
-          !user?.id ? api.getUserDetails() : Promise.resolve(user)
-        ]);
+  const verifyAndLoad = async () => {
+    try {
+      const [userResponse] = await Promise.all([
+        !user?.id ? api.getUserDetails() : Promise.resolve(user)
+      ]);
 
-        if (!user?.id) {
-          setUser(userResponse);
-        }
-      } catch (error) {
-        console.error("Failed to verify dashboard access:", error);
-        router.push("/auth");
+      if (!user?.id) {
+        setUser(userResponse);
       }
-    };
 
-    verifyAndLoad();
-  }, [router, setUser, user?.id]);
+      setIsReady(true);
+
+    } catch (error) {
+      console.error("Failed to verify dashboard access:", error);
+      router.push("/auth");
+    }
+  };
+
+  verifyAndLoad();
+}, [router, setUser, user?.id]);
 
   if (!isReady) {
     return (
