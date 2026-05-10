@@ -6,7 +6,7 @@ export interface SessionAction {
   arguments: Record<string, any>;
   action_summary: string;
   result: string;
-  decision: 'ALLOW' | 'DENY' | 'REWRITE' | 'REQUIRE_APPROVAL' | string;
+  decision: 'ALLOW' | 'DENY' | 'cd' | 'REQUIRE_APPROVAL' | string;
   target_repo: string;
   target_branch: string;
   sequence_order: number;
