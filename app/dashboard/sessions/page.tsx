@@ -1,19 +1,27 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
-import { Layers, ChevronDown, ChevronRight, Clock } from 'lucide-react';
+import { Layers, ChevronDown, ChevronRight, Clock, GitBranch } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useAutoRefresh, useUser } from '@/lib/hooks';
 import { Session, SessionAction } from '@/lib/types';
-import { formatRelativeTime, formatDuration, formatExecutionTimeMs } from '@/lib/utils';
+import {
+  cn,
+  formatRelativeTime,
+  formatDuration,
+  formatExecutionTimeMs,
+  formatMcpAegisToolDisplayName,
+  getToolChipStyle,
+  getToolAccentHue,
+} from '@/lib/utils';
 import Topbar from '@/components/layout/Topbar';
 import DecisionBadge from '@/components/ui/DecisionBadge';
 import AgentAvatar from '@/components/ui/AgentAvatar';
-import JsonViewer from '@/components/ui/JsonViewer';
 import EmptyState from '@/components/ui/EmptyState';
 import ErrorBanner from '@/components/ui/ErrorBanner';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import Link from 'next/link';
+import { ActionPointersDetail, decisionStripeClass } from '@/components/dashboard/ActionPointers';
 
 export default function SessionsPage() {
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -63,46 +71,74 @@ export default function SessionsPage() {
   }
 
   return (
-    <div className="min-h-screen">
-      <Topbar
-        title="Sessions"
-        subtitle="Agent working sessions"
-        lastUpdated={lastUpdated}
-        onRefresh={fetchData}
+    <div className="relative min-h-screen overflow-hidden bg-background">
+      <div
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_120%_80%_at_50%_-20%,rgba(52,211,153,0.12),transparent_50%),radial-gradient(ellipse_90%_60%_at_100%_0%,rgba(139,92,246,0.1),transparent_45%),radial-gradient(ellipse_70%_50%_at_0%_100%,rgba(56,189,248,0.06),transparent_40%)]"
+        aria-hidden
       />
-      <div className="p-6">
-        {error && (
-          <div className="mb-4">
-            <ErrorBanner message={error} onDismiss={() => setError(null)} onRetry={fetchData} />
-          </div>
-        )}
+      <div className="relative">
+        <Topbar
+          title="Sessions"
+          subtitle="Agent working sessions"
+          lastUpdated={lastUpdated}
+          onRefresh={fetchData}
+        />
+        <div className="p-6">
+          {error && (
+            <div className="mb-4">
+              <ErrorBanner message={error} onDismiss={() => setError(null)} onRetry={fetchData} />
+            </div>
+          )}
 
-        {sessions.length === 0 ? (
-          <div className="rounded-md border border-border bg-card">
-            <EmptyState
-              icon={<Layers className="h-6 w-6" />}
-              title="No sessions yet"
-              description="Sessions will appear here once your agent starts working."
-            />
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {sessions.map((session) => (
-              <SessionCard
-                key={session.session_id}
-                session={session}
-                userId={user?.id}
-                isExpanded={expandedSession === session.session_id}
-                onToggle={() =>
-                  setExpandedSession(
-                    expandedSession === session.session_id ? null : session.session_id
-                  )
-                }
+          {sessions.length === 0 ? (
+            <div className="rounded-2xl border border-white/10 bg-card/70 shadow-xl shadow-black/30 ring-1 ring-white/5 backdrop-blur-sm">
+              <EmptyState
+                icon={<Layers className="h-6 w-6" />}
+                title="No sessions yet"
+                description="Sessions will appear here once your agent starts working."
               />
-            ))}
-          </div>
-        )}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {sessions.map((session) => (
+                <SessionCard
+                  key={session.session_id}
+                  session={session}
+                  userId={user?.id}
+                  isExpanded={expandedSession === session.session_id}
+                  onToggle={() =>
+                    setExpandedSession(
+                      expandedSession === session.session_id ? null : session.session_id
+                    )
+                  }
+                />
+              ))}
+            </div>
+          )}
+        </div>
       </div>
+    </div>
+  );
+}
+
+function SessionSummaryStats({ session }: { session: Session }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {Number(session.allows) > 0 && (
+        <span className="rounded-md bg-emerald-950/50 px-2 py-0.5 text-[10px] font-medium text-emerald-400/85">
+          {session.allows} allow
+        </span>
+      )}
+      {Number(session.denies) > 0 && (
+        <span className="rounded-md bg-red-950/45 px-2 py-0.5 text-[10px] font-medium text-red-400/80">
+          {session.denies} deny
+        </span>
+      )}
+      {Number(session.rewrites) > 0 && (
+        <span className="rounded-md bg-amber-950/40 px-2 py-0.5 text-[10px] font-medium text-amber-400/85">
+          {session.rewrites} rewrite
+        </span>
+      )}
     </div>
   );
 }
@@ -139,51 +175,44 @@ function SessionCard({
   const repos = Array.isArray(session.repos) ? session.repos.filter(Boolean) : [];
 
   return (
-    <div className="overflow-hidden rounded-md border border-border bg-card">
-      <button onClick={handleToggle} className="w-full px-4 py-3 text-left">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <AgentAvatar name={session.agent_name || ''} size="sm" />
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-foreground">{session.agent_name}</span>
-                <code className="text-xs text-muted-foreground">
-                  {session.session_id?.substring(0, 8)}...
-                </code>
-              </div>
-              <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                <span className="flex items-center gap-1">
-                  <Clock className="h-3 w-3" />
-                  {formatRelativeTime(session.started_at)}
+    <div className="overflow-hidden rounded-2xl border border-white/10 bg-card/80 shadow-lg shadow-black/25 ring-1 ring-inset ring-white/[0.04] backdrop-blur-sm">
+      <button
+        type="button"
+        onClick={handleToggle}
+        className="w-full px-4 py-3.5 text-left transition-colors hover:bg-white/[0.03]"
+      >
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="shrink-0 rounded-full ring-1 ring-zinc-700/80 ring-offset-2 ring-offset-zinc-950">
+              <AgentAvatar name={session.agent_name || ''} size="sm" />
+            </span>
+            <div className="min-w-0">
+              <span className="block truncate text-sm font-medium text-zinc-100">{session.agent_name}</span>
+              <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-500">
+                <span className="inline-flex items-center gap-1">
+                  <Clock className="h-3 w-3 shrink-0" />
+                  Last activity {formatRelativeTime(session.last_action_at)}
                 </span>
                 <span>{session.action_count} actions</span>
-                {repos.length > 0 && <span>{repos.join(', ')}</span>}
+                {repos.length > 0 && (
+                  <span className="truncate text-zinc-400">{repos.join(' · ')}</span>
+                )}
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1 text-xs">
-              {Number(session.allows) > 0 && (
-                <span className="text-success">{session.allows} allow</span>
-              )}
-              {Number(session.denies) > 0 && (
-                <span className="text-destructive">{session.denies} deny</span>
-              )}
-              {Number(session.rewrites) > 0 && (
-                <span className="text-amber-500">{session.rewrites} rewrite</span>
-              )}
-            </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <SessionSummaryStats session={session} />
             {isExpanded ? (
-              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+              <ChevronDown className="h-4 w-4 text-zinc-500" />
             ) : (
-              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+              <ChevronRight className="h-4 w-4 text-zinc-500" />
             )}
           </div>
         </div>
       </button>
 
       {isExpanded && (
-        <div className="border-t border-border bg-muted/30 px-4 py-4">
+        <div className="border-t border-white/[0.08] bg-zinc-950/35 px-4 py-4">
           {loadingActions ? (
             <div className="flex justify-center py-6">
               <LoadingSpinner />
@@ -192,50 +221,93 @@ function SessionCard({
             <>
               <div className="space-y-3">
                 {actions.map((action) => (
-                  <div
-                    key={action.id}
-                    className="flex items-start justify-between rounded-md border border-border bg-card p-3"
-                  >
-                    <div>
-                      <p className="text-sm text-foreground">{action.action_summary}</p>
-                      <div className="mt-1 flex items-center gap-2">
-                        <code className="text-xs text-muted-foreground">{action.tool_name}</code>
-                        <span className="text-xs text-muted-foreground">
-                          {formatRelativeTime(action.timestamp)}
-                        </span>
-                        {action.execution_time !== undefined && action.execution_time !== null && (
-                          <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">
-                            {formatExecutionTimeMs(action.execution_time)}
-                          </span>
-                        )}
-                      </div>
-                      {action.arguments && Object.keys(action.arguments).length > 0 && (
-                        <div className="mt-2">
-                          <JsonViewer data={action.arguments} />
-                        </div>
-                      )}
-                    </div>
-                    <DecisionBadge decision={action.decision} size="sm" />
-                  </div>
+                  <SessionActionCard key={action.id} action={action} />
                 ))}
               </div>
-              <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
-                <span>
-                  Duration: {formatDuration(session.started_at, session.last_action_at)}
-                </span>
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-xs text-zinc-500">
+                <span>Duration: {formatDuration(session.started_at, session.last_action_at)}</span>
                 <Link
-                  href={`/dashboard?session=${session.session_id}`}
-                  className="text-foreground/60 hover:text-foreground transition-colors"
+                  href="/dashboard"
+                  className="font-medium text-zinc-400 transition-colors hover:text-zinc-200"
                 >
-                  View all runs
+                  Open runs
                 </Link>
               </div>
             </>
           ) : (
-            <p className="py-4 text-center text-sm text-muted-foreground">No actions found.</p>
+            <p className="py-4 text-center text-sm text-zinc-500">No actions found.</p>
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function SessionActionCard({ action }: { action: SessionAction }) {
+  const toolDisplay = formatMcpAegisToolDisplayName(action.tool_name || '');
+  const chipStyle = getToolChipStyle(action.tool_name || '');
+  const toolHue = getToolAccentHue(action.tool_name || '');
+  const hasPointers = (action.action_pointers?.length ?? 0) > 0;
+  const hasArgs = action.arguments && Object.keys(action.arguments).length > 0;
+
+  return (
+    <div
+      className={cn(
+        'rounded-lg border border-white/[0.06] border-l-[3px] bg-zinc-900/40 p-3',
+        decisionStripeClass(action.decision)
+      )}
+    >
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+        <div className="min-w-0 flex-1 space-y-2">
+          <p className="text-sm font-medium leading-snug text-zinc-100">{action.action_summary}</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <code
+              className="inline-flex max-w-full truncate rounded-md border-0 px-2 py-0.5 font-mono text-[11px] shadow-none outline-none ring-0"
+              style={chipStyle}
+              title={action.tool_name || undefined}
+            >
+              {toolDisplay}
+            </code>
+            <span className="text-xs text-zinc-500">{formatRelativeTime(action.timestamp)}</span>
+            {action.execution_time !== undefined && action.execution_time !== null && (
+              <span className="rounded-md bg-zinc-800/55 px-1.5 py-0.5 text-[10px] font-medium font-mono text-zinc-500">
+                {formatExecutionTimeMs(action.execution_time)}
+              </span>
+            )}
+            {action.target_repo && (
+              <span className="inline-flex max-w-[12rem] items-center gap-1 truncate text-xs text-zinc-500">
+                <GitBranch className="h-3 w-3 shrink-0 text-zinc-600" aria-hidden />
+                {action.target_repo}
+              </span>
+            )}
+          </div>
+          {(hasPointers || hasArgs) && (
+            <div className="rounded-lg bg-zinc-950/50 p-3">
+              <p className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+                {toolHue != null ? (
+                  <span
+                    className="inline-block h-1 w-6 rounded-full"
+                    style={{
+                      backgroundColor: `hsla(${toolHue}, 38%, 46%, 0.55)`,
+                    }}
+                  />
+                ) : (
+                  <span className="inline-block h-1 w-6 rounded-full bg-zinc-600/70" />
+                )}
+                Details
+              </p>
+              <ActionPointersDetail
+                pointers={action.action_pointers}
+                argumentsFallback={action.arguments as Record<string, unknown>}
+                accentHue={toolHue}
+              />
+            </div>
+          )}
+        </div>
+        <div className="shrink-0 sm:pt-0.5">
+          <DecisionBadge decision={action.decision} size="sm" />
+        </div>
+      </div>
     </div>
   );
 }
