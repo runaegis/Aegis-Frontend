@@ -30,6 +30,41 @@ const API_BASE = getAPIBase();
 if (typeof window !== 'undefined') {
   console.log('[Aegis API] Using endpoint:', API_BASE);
 }
+export async function apiFetch(
+    input: RequestInfo,
+    init: RequestInit = {},
+    retry = true
+  ): Promise<Response> {
+    const response = await fetch(input, {
+      ...init,
+      credentials: 'include',
+    });
+
+    // Access token expired
+    if (response.status === 401 && retry) {
+      const refreshResponse = await fetch(`${API_BASE}/auth/refresh`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+
+      // Refresh succeeded
+      if (refreshResponse.ok) {
+        return apiFetch(input, init, false);
+      }
+
+      // Refresh failed
+      localStorage.removeItem('aegis_user');
+      localStorage.removeItem('aegis_onboarding_step');
+
+      if (typeof window !== 'undefined') {
+        window.location.href = '/auth';
+      }
+
+      throw new Error('Session expired');
+    }
+
+    return response;
+  }
 
 function parseDatetime(value: any): string | any {
   if (typeof value !== 'string') return value;
@@ -174,14 +209,14 @@ export const api = {
   },
 
   getRoomTools: (roomId: string, role: string) =>
-  fetch(`${API_BASE}/room/${roomId}/tools/${role}`, {
-    credentials: 'include',
+  apiFetch(`${API_BASE}/room/${roomId}/tools/${role}`, {
+    // credentials: 'include',
   }).then(res => res.json()),
 
 updateRoomTools: (roomId: string, role: string, data: Record<string, boolean>) =>
-  fetch(`${API_BASE}/room/${roomId}/tools/${role}`, {
+  apiFetch(`${API_BASE}/room/${roomId}/tools/${role}`, {
     method: "PATCH",
-    credentials: 'include',
+    // credentials: 'include',
     headers: {
       "Content-Type": "application/json",
     },
@@ -201,9 +236,9 @@ updateRoomTools: (roomId: string, role: string, data: Record<string, boolean>) =
     }),
 
     updateOnboardingStep: (onboardingStep: number) =>
-      fetch(`${API_BASE}/auth/onboarding-step`, {
+      apiFetch(`${API_BASE}/auth/onboarding-step`, {
         method: "POST",
-        credentials: 'include',
+        // credentials: 'include',
         headers: {
           "Content-Type": "application/json",
         },
@@ -227,13 +262,13 @@ updateRoomTools: (roomId: string, role: string, data: Record<string, boolean>) =
         }),
 
     getOnboardingStep: () =>
-      fetch(`${API_BASE}/auth/onboarding-step`, {
-        credentials: 'include',
+      apiFetch(`${API_BASE}/auth/onboarding-step`, {
+        // credentials: 'include',
       }).then(res => res.json()),
 
     getUserDetails: () =>
-      fetch(`${API_BASE}/auth/user`, {
-        credentials: 'include',
+      apiFetch(`${API_BASE}/auth/user`, {
+        // credentials: 'include',
       }).then(res => res.json()),
 
   getSessionActions: async (sessionId: string, userId?: string): Promise<SessionAction[]> => {
@@ -361,9 +396,9 @@ updateRoomTools: (roomId: string, role: string, data: Record<string, boolean>) =
   },
 
   saveUser: async (user: SaveUserPayload) => {
-    const createResponse = await fetch(`${API_BASE}/user`, {
+    const createResponse = await apiFetch(`${API_BASE}/user`, {
       method: 'POST',
-      credentials: 'include',
+      // credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
       },
@@ -480,9 +515,9 @@ updateRoomTools: (roomId: string, role: string, data: Record<string, boolean>) =
   },
 
   createRoom: async (repoId: string): Promise<RoomDetails> => {
-    const res = await fetch(`${API_BASE}/room/`, {
+    const res = await apiFetch(`${API_BASE}/room/`, {
       method: 'POST',
-      credentials: 'include',
+      // credentials: 'include',
       headers: getJsonHeaders(),
       body: JSON.stringify({ repo_id: repoId }),
     });
@@ -495,8 +530,8 @@ updateRoomTools: (roomId: string, role: string, data: Record<string, boolean>) =
   },
 
   getMyRooms: async (): Promise<RoomSummary[]> => {
-    const res = await fetch(`${API_BASE}/room/`, {
-      credentials: 'include',
+    const res = await apiFetch(`${API_BASE}/room/`, {
+      // credentials: 'include',
     });
 
     if (!res.ok) {
@@ -508,8 +543,8 @@ updateRoomTools: (roomId: string, role: string, data: Record<string, boolean>) =
   },
 
   getRoomDetails: async (roomId: string): Promise<RoomDetails> => {
-    const res = await fetch(`${API_BASE}/room/${encodeURIComponent(roomId)}`, {
-      credentials: 'include',
+    const res = await apiFetch(`${API_BASE}/room/${encodeURIComponent(roomId)}`, {
+      // credentials: 'include',
     });
 
     if (!res.ok) {
@@ -520,8 +555,8 @@ updateRoomTools: (roomId: string, role: string, data: Record<string, boolean>) =
   },
 
   getRoomMembers: async (roomId: string): Promise<RoomMember[]> => {
-    const res = await fetch(`${API_BASE}/room/${encodeURIComponent(roomId)}/members`, {
-      credentials: 'include',
+    const res = await apiFetch(`${API_BASE}/room/${encodeURIComponent(roomId)}/members`, {
+      // credentials: 'include',
     });
 
     if (!res.ok) {
@@ -533,8 +568,8 @@ updateRoomTools: (roomId: string, role: string, data: Record<string, boolean>) =
   },
 
   getRoomInvites: async (roomId: string): Promise<RoomInvite[]> => {
-    const res = await fetch(`${API_BASE}/room/${encodeURIComponent(roomId)}/invites`, {
-      credentials: 'include',
+    const res = await apiFetch(`${API_BASE}/room/${encodeURIComponent(roomId)}/invites`, {
+      // credentials: 'include',
     });
 
     if (!res.ok) {
@@ -549,9 +584,9 @@ updateRoomTools: (roomId: string, role: string, data: Record<string, boolean>) =
     roomId: string,
     payload: { max_uses?: number; expires_at?: string }
   ): Promise<RoomInvite> => {
-    const res = await fetch(`${API_BASE}/room/${encodeURIComponent(roomId)}/invite`, {
+    const res = await apiFetch(`${API_BASE}/room/${encodeURIComponent(roomId)}/invite`, {
       method: 'POST',
-      credentials: 'include',
+      // credentials: 'include',
       headers: getJsonHeaders(),
       body: JSON.stringify(payload),
     });
@@ -564,9 +599,9 @@ updateRoomTools: (roomId: string, role: string, data: Record<string, boolean>) =
   },
 
   joinRoom: async (inviteCode: string): Promise<any> => {
-    const res = await fetch(`${API_BASE}/room/join/${encodeURIComponent(inviteCode)}`, {
+    const res = await apiFetch(`${API_BASE}/room/join/${encodeURIComponent(inviteCode)}`, {
       method: 'POST',
-      credentials: 'include',
+      // credentials: 'include',
     });
     if (!res.ok) {
       throw new Error(`Failed to join room: ${await readErrorMessage(res)}`);
@@ -575,12 +610,12 @@ updateRoomTools: (roomId: string, role: string, data: Record<string, boolean>) =
   },
 
     createFreezeWindow: async (payload: any): Promise<any> => {
-    const res = await fetch(`${API_BASE}/freeze_window/create`, {
+    const res = await apiFetch(`${API_BASE}/freeze_window/create`, {
       method: 'POST',
-      credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+      // credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+      },
       body: JSON.stringify(payload),
     });
  
@@ -592,8 +627,8 @@ updateRoomTools: (roomId: string, role: string, data: Record<string, boolean>) =
   },
  
   getFreezeWindows: async (): Promise<any[]> => {
-    const res = await fetch(`${API_BASE}/freeze_window/get`, {
-      credentials: 'include',
+    const res = await apiFetch(`${API_BASE}/freeze_window/get`, {
+      // credentials: 'include',
     });
  
     if (!res.ok) {
@@ -605,9 +640,9 @@ updateRoomTools: (roomId: string, role: string, data: Record<string, boolean>) =
   },
  
   updateFreezeWindow: async ( windowId: string, payload: any): Promise<any> => {
-    const res = await fetch(`${API_BASE}/freeze_window/update/${encodeURIComponent(windowId)}`, {
+    const res = await apiFetch(`${API_BASE}/freeze_window/update/${encodeURIComponent(windowId)}`, {
       method: 'PUT',
-      credentials: 'include',
+      // credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
       },
@@ -620,9 +655,9 @@ updateRoomTools: (roomId: string, role: string, data: Record<string, boolean>) =
   },
  
   deleteFreezeWindow: async (windowId: string): Promise<any> => {
-    const res = await fetch(`${API_BASE}/freeze_window/delete/${encodeURIComponent(windowId)}`, {
+    const res = await apiFetch(`${API_BASE}/freeze_window/delete/${encodeURIComponent(windowId)}`, {
       method: 'DELETE',
-      credentials: 'include',
+      // credentials: 'include',
     });
  
     if (!res.ok) {

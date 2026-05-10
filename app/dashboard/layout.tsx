@@ -22,7 +22,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       if (!user?.id) {
         setUser(userResponse);
       }
-
       setIsReady(true);
 
     } catch (error) {

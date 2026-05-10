@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import { useUser, useEmail } from '@/lib/hooks';
 import { User } from '@/lib/types';
+import { apiFetch } from '@/lib/api';
 
 type AuthMode = 'signin' | 'signup' | 'forgot';
 
@@ -147,11 +148,12 @@ const handleResendEmail = async () => {
   setResendCooldown(30);
 
   try {
-    const res = await fetch(`${BACKEND_URL}/auth/resend-verification`, {
+    const res = await apiFetch(`${BACKEND_URL}/auth/resend-verification`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
+      // credentials: 'include', // Include cookies for authentication
       body: JSON.stringify({ email: signupEmail }),
     });
 
@@ -173,11 +175,12 @@ const handleResendEmail = async () => {
   setErrors({});
 
   try {
-    const res = await fetch(`${BACKEND_URL}/auth/register`, {
+    const res = await apiFetch(`${BACKEND_URL}/auth/register`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
+      // credentials: 'include', // Include cookies for authentication
       body: JSON.stringify({
         name,
         email,
@@ -218,11 +221,12 @@ const handleResendEmail = async () => {
   setErrors({});
 
   try {
-    const res = await fetch(`${BACKEND_URL}/auth/login`, {
+    const res = await apiFetch(`${BACKEND_URL}/auth/login`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
+      // credentials: 'include', // Include cookies for authentication
       body: JSON.stringify({
         email,
         password,
@@ -235,15 +239,12 @@ const handleResendEmail = async () => {
       throw new Error(data.detail || "Login failed");
     }
 
-    localStorage.setItem("access_token", data.access_token);
-    localStorage.setItem("refresh_token", data.refresh_token);
-
     // Store user data with email
     const userData: User = {
       email: email,
       github_user_id: data.github_user_id || 0,
       username: data.username || '',
-      access_token: data.access_token || '',
+      access_token: data.access_token || '', // Github PAT
     };
     setUser(userData);
 
@@ -284,11 +285,12 @@ const handleForgotPassword = async () => {
   setErrors({});
 
   try {
-    await fetch(`${BACKEND_URL}/auth/forgot-password`, {
+    await apiFetch(`${BACKEND_URL}/auth/forgot-password`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
+      // credentials: 'include', // Include cookies for authentication
       body: JSON.stringify({ email }),
     });
 
