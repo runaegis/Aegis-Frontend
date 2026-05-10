@@ -3,6 +3,7 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import { Coins, Database, Sigma, Sparkles, Wallet } from 'lucide-react';
 import {
+  Area,
   Bar,
   CartesianGrid,
   Cell,
@@ -30,10 +31,11 @@ type SessionBucket = {
   total: number;
 };
 
-/** Series colors: input / output bars per session. */
+/** Series colors: input / output bars and total (purple area) per session. */
 const CHART = {
   input: '#0ea5e9',
   output: '#f59e0b',
+  total: '#a855f7',
 } as const;
 
 const PIE_COLORS = [CHART.input, CHART.output];
@@ -325,10 +327,11 @@ export default function TokenSpenditurePage() {
               <div className="mb-4">
                 <h2 className="text-sm font-semibold text-foreground">Usage by session</h2>
                 <p className="text-xs text-muted-foreground">
-                  Input and output tokens aggregated per <span className="font-mono">session_id</span> for the
-                  selected range (Today / 7 days / …). Axis shows a short session id prefix; hover for the full id.
+                  Input and output bars plus total tokens (purple) per <span className="font-mono">session_id</span>{' '}
+                  for the selected range. Axis shows a short session id prefix; hover for the full id.
                 </p>
                 <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+                  <LegendPill label="Total" color={CHART.total} />
                   <LegendPill label="Input" color={CHART.input} />
                   <LegendPill label="Output" color={CHART.output} />
                 </div>
@@ -336,6 +339,12 @@ export default function TokenSpenditurePage() {
               <div className="h-[340px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={sessionData}>
+                    <defs>
+                      <linearGradient id="tokenTotalGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor={CHART.total} stopOpacity={0.35} />
+                        <stop offset="95%" stopColor={CHART.total} stopOpacity={0.06} />
+                      </linearGradient>
+                    </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                     <XAxis
                       dataKey="label"
@@ -347,20 +356,34 @@ export default function TokenSpenditurePage() {
                     />
                     <YAxis tick={{ fill: 'var(--muted-foreground)', fontSize: 12 }} />
                     <Tooltip
-                      cursor={{ fill: 'rgba(14, 165, 233, 0.06)' }}
+                      cursor={{ fill: 'rgba(168, 85, 247, 0.08)' }}
                       contentStyle={{
                         background: 'var(--card)',
                         border: '1px solid var(--border)',
                         borderRadius: 8,
                         boxShadow: '0 8px 24px rgba(0, 0, 0, 0.22)',
                       }}
-                      formatter={(value: number | string | undefined) =>
-                        typeof value === 'number' ? value.toLocaleString() : String(value ?? '')
-                      }
+                      formatter={(value) => {
+                        if (typeof value === 'number') return value.toLocaleString();
+                        if (Array.isArray(value)) {
+                          return value
+                            .map((v) => (typeof v === 'number' ? v.toLocaleString() : String(v)))
+                            .join(', ');
+                        }
+                        return String(value ?? '');
+                      }}
                       labelFormatter={(_, payload) => {
                         const row = payload?.[0]?.payload as SessionBucket | undefined;
                         return row?.session ?? '';
                       }}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="total"
+                      name="Total"
+                      stroke={CHART.total}
+                      strokeWidth={2}
+                      fill="url(#tokenTotalGradient)"
                     />
                     <Bar dataKey="input" name="Input" fill={CHART.input} radius={[4, 4, 0, 0]} />
                     <Bar dataKey="output" name="Output" fill={CHART.output} radius={[4, 4, 0, 0]} />
