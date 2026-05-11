@@ -32,7 +32,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         console.error(error);
       }
-    }
   };
 
   verifyAndLoad();
