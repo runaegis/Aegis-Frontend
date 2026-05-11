@@ -9,7 +9,10 @@ import { formatFullTimestamp, truncate } from '@/lib/utils';
 import Topbar from '@/components/layout/Topbar';
 import DecisionBadge from '@/components/ui/DecisionBadge';
 import AgentAvatar from '@/components/ui/AgentAvatar';
-import JsonViewer from '@/components/ui/JsonViewer';
+import { RunDetailViewModeToggle } from '@/components/dashboard/RunDetailViewModeToggle';
+import { CanonicalJsonViewer } from '@/components/ui/CanonicalJsonViewer';
+import { toCanonicalSessionAction, sortSessionActionsDesc, toSessionActionRawJsonView } from '@/lib/canonicalSessionAction';
+import { downloadAuditPdf } from '@/lib/auditExportPdf';
 import EmptyState from '@/components/ui/EmptyState';
 import ErrorBanner from '@/components/ui/ErrorBanner';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
@@ -66,11 +69,14 @@ export default function AuditPage() {
         `${startDate}T00:00:00Z`,
         `${endDate}T23:59:59Z`
       );
+      const sorted = [...allEvents].sort(sortSessionActionsDesc);
       const exportData = {
+        schema: 'aegis.audit_export.v1',
         exported_at: new Date().toISOString(),
-        exported_by: user?.username || 'unknown',
-        total_records: allEvents.length,
-        events: allEvents,
+        exported_by: user?.username ?? null,
+        date_range: { start: `${startDate}T00:00:00.000Z`, end: `${endDate}T23:59:59.999Z` },
+        total_records: sorted.length,
+        events: sorted.map(toCanonicalSessionAction),
       };
       const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
@@ -81,6 +87,35 @@ export default function AuditPage() {
       URL.revokeObjectURL(url);
     } catch {
       setError('Failed to export audit trail');
+    }
+  };
+
+  const exportPdf = async () => {
+    if (!user?.id) {
+      setError('No authenticated user found for export');
+      return;
+    }
+    try {
+      const allEvents = await api.getAuditTrailByDateRange(
+        user.id,
+        `${startDate}T00:00:00Z`,
+        `${endDate}T23:59:59Z`
+      );
+      const sorted = [...allEvents].sort(sortSessionActionsDesc);
+      const exportData = {
+        schema: 'aegis.audit_export.v1',
+        exported_at: new Date().toISOString(),
+        exported_by: user?.username ?? null,
+        date_range: { start: `${startDate}T00:00:00.000Z`, end: `${endDate}T23:59:59.999Z` },
+        total_records: sorted.length,
+        events: sorted.map(toCanonicalSessionAction),
+      };
+      await downloadAuditPdf(
+        exportData,
+        `aegis-audit-${new Date().toISOString().split('T')[0]}.pdf`
+      );
+    } catch {
+      setError('Failed to export PDF audit trail');
     }
   };
 
@@ -110,14 +145,26 @@ export default function AuditPage() {
               className="rounded-md border border-border bg-muted px-2 py-1 text-foreground"
             />
           </div>
-          <button
-            onClick={exportJson}
-            disabled={!user?.id || userLoading}
-            className="flex items-center gap-1.5 rounded-md bg-foreground px-3 py-1.5 text-sm font-medium text-background hover:bg-foreground/90"
-          >
-            <Download className="h-4 w-4" />
-            Export JSON
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={exportPdf}
+              disabled={!user?.id || userLoading}
+              className="flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted"
+            >
+              <Download className="h-4 w-4" />
+              Export PDF
+            </button>
+            <button
+              type="button"
+              onClick={exportJson}
+              disabled={!user?.id || userLoading}
+              className="flex items-center gap-1.5 rounded-md bg-foreground px-3 py-1.5 text-sm font-medium text-background hover:bg-foreground/90"
+            >
+              <Download className="h-4 w-4" />
+              Export JSON
+            </button>
+          </div>
         </div>
 
         {loading ? (
@@ -186,6 +233,7 @@ export default function AuditPage() {
 }
 
 function AuditRow({ event, isExpanded, onToggle }: { event: SessionAction; isExpanded: boolean; onToggle: () => void }) {
+  const [detailMode, setDetailMode] = useState<'details' | 'raw_json'>('details');
   return (
     <>
       <tr onClick={onToggle} className="cursor-pointer border-b border-border hover:bg-muted/30">
@@ -210,13 +258,30 @@ function AuditRow({ event, isExpanded, onToggle }: { event: SessionAction; isExp
       </tr>
       {isExpanded && (
         <tr>
-          <td colSpan={6} className="border-b border-border bg-muted/30 px-4 py-4">
-            <p className="mb-2 text-xs text-muted-foreground">Full Summary</p>
-            <p className="text-sm text-foreground">{event.action_summary}</p>
-            {event.arguments && (
-              <div className="mt-3">
-                <JsonViewer data={event.arguments} collapsed={false} />
+          <td
+            colSpan={6}
+            className="border-b border-border bg-muted/30 px-4 py-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <RunDetailViewModeToggle mode={detailMode} onModeChange={setDetailMode} className="mb-3" />
+            {detailMode === 'raw_json' ? (
+              <div className="space-y-2">
+                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  Canonical action fields (agent, tool, arguments, result, repo, branch)
+                </p>
+                <CanonicalJsonViewer value={toSessionActionRawJsonView(event)} />
               </div>
+            ) : (
+              <>
+                <p className="mb-2 text-xs text-muted-foreground">Full Summary</p>
+                <p className="text-sm text-foreground">{event.action_summary}</p>
+                {event.arguments && Object.keys(event.arguments).length > 0 && (
+                  <div className="mt-3">
+                    <p className="mb-2 text-xs text-muted-foreground">Tool arguments</p>
+                    <CanonicalJsonViewer value={event.arguments} maxHeightClass="max-h-56" />
+                  </div>
+                )}
+              </>
             )}
           </td>
         </tr>

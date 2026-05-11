@@ -22,6 +22,9 @@ import ErrorBanner from '@/components/ui/ErrorBanner';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import Link from 'next/link';
 import { ActionPointersDetail, decisionStripeClass } from '@/components/dashboard/ActionPointers';
+import { RunDetailViewModeToggle } from '@/components/dashboard/RunDetailViewModeToggle';
+import { CanonicalJsonViewer } from '@/components/ui/CanonicalJsonViewer';
+import { toSessionActionRawJsonView } from '@/lib/canonicalSessionAction';
 
 export default function SessionsPage() {
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -244,6 +247,7 @@ function SessionCard({
 }
 
 function SessionActionCard({ action }: { action: SessionAction }) {
+  const [detailMode, setDetailMode] = useState<'details' | 'raw_json'>('details');
   const toolDisplay = formatMcpAegisToolDisplayName(action.tool_name || '');
   const chipStyle = getToolChipStyle(action.tool_name || '');
   const toolHue = getToolAccentHue(action.tool_name || '');
@@ -257,57 +261,67 @@ function SessionActionCard({ action }: { action: SessionAction }) {
         decisionStripeClass(action.decision)
       )}
     >
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
-        <div className="min-w-0 flex-1 space-y-2">
-          <p className="text-sm font-medium leading-snug text-zinc-100">{action.action_summary}</p>
-          <div className="flex flex-wrap items-center gap-2">
-            <code
-              className="inline-flex max-w-full truncate rounded-md border-0 px-2 py-0.5 font-mono text-[11px] shadow-none outline-none ring-0"
-              style={chipStyle}
-              title={action.tool_name || undefined}
-            >
-              {toolDisplay}
-            </code>
-            <span className="text-xs text-zinc-500">{formatRelativeTime(action.timestamp)}</span>
-            {action.execution_time !== undefined && action.execution_time !== null && (
-              <span className="rounded-md bg-zinc-800/55 px-1.5 py-0.5 text-[10px] font-medium font-mono text-zinc-500">
-                {formatExecutionTimeMs(action.execution_time)}
-              </span>
-            )}
-            {action.target_repo && (
-              <span className="inline-flex max-w-[12rem] items-center gap-1 truncate text-xs text-zinc-500">
-                <GitBranch className="h-3 w-3 shrink-0 text-zinc-600" aria-hidden />
-                {action.target_repo}
-              </span>
+      <RunDetailViewModeToggle mode={detailMode} onModeChange={setDetailMode} className="mb-3" />
+      {detailMode === 'raw_json' ? (
+        <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+            Canonical action fields (agent, tool, arguments, result, repo, branch)
+          </p>
+          <CanonicalJsonViewer value={toSessionActionRawJsonView(action)} />
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+          <div className="min-w-0 flex-1 space-y-2">
+            <p className="text-sm font-medium leading-snug text-zinc-100">{action.action_summary}</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <code
+                className="inline-flex max-w-full truncate rounded-md border-0 px-2 py-0.5 font-mono text-[11px] shadow-none outline-none ring-0"
+                style={chipStyle}
+                title={action.tool_name || undefined}
+              >
+                {toolDisplay}
+              </code>
+              <span className="text-xs text-zinc-500">{formatRelativeTime(action.timestamp)}</span>
+              {action.execution_time !== undefined && action.execution_time !== null && (
+                <span className="rounded-md bg-zinc-800/55 px-1.5 py-0.5 text-[10px] font-medium font-mono text-zinc-500">
+                  {formatExecutionTimeMs(action.execution_time)}
+                </span>
+              )}
+              {action.target_repo && (
+                <span className="inline-flex max-w-[12rem] items-center gap-1 truncate text-xs text-zinc-500">
+                  <GitBranch className="h-3 w-3 shrink-0 text-zinc-600" aria-hidden />
+                  {action.target_repo}
+                </span>
+              )}
+            </div>
+            {(hasPointers || hasArgs) && (
+              <div className="rounded-lg bg-zinc-950/50 p-3">
+                <p className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+                  {toolHue != null ? (
+                    <span
+                      className="inline-block h-1 w-6 rounded-full"
+                      style={{
+                        backgroundColor: `hsla(${toolHue}, 38%, 46%, 0.55)`,
+                      }}
+                    />
+                  ) : (
+                    <span className="inline-block h-1 w-6 rounded-full bg-zinc-600/70" />
+                  )}
+                  Details
+                </p>
+                <ActionPointersDetail
+                  pointers={action.action_pointers}
+                  argumentsFallback={action.arguments as Record<string, unknown>}
+                  accentHue={toolHue}
+                />
+              </div>
             )}
           </div>
-          {(hasPointers || hasArgs) && (
-            <div className="rounded-lg bg-zinc-950/50 p-3">
-              <p className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
-                {toolHue != null ? (
-                  <span
-                    className="inline-block h-1 w-6 rounded-full"
-                    style={{
-                      backgroundColor: `hsla(${toolHue}, 38%, 46%, 0.55)`,
-                    }}
-                  />
-                ) : (
-                  <span className="inline-block h-1 w-6 rounded-full bg-zinc-600/70" />
-                )}
-                Details
-              </p>
-              <ActionPointersDetail
-                pointers={action.action_pointers}
-                argumentsFallback={action.arguments as Record<string, unknown>}
-                accentHue={toolHue}
-              />
-            </div>
-          )}
+          <div className="shrink-0 sm:pt-0.5">
+            <DecisionBadge decision={action.decision} size="sm" />
+          </div>
         </div>
-        <div className="shrink-0 sm:pt-0.5">
-          <DecisionBadge decision={action.decision} size="sm" />
-        </div>
-      </div>
+      )}
     </div>
   );
 }

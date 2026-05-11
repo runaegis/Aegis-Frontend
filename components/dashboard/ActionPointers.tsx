@@ -2,9 +2,16 @@
 
 import JsonViewer from '@/components/ui/JsonViewer';
 
-/** Left stripe color by decision — muted semantic (matches Runs rows). */
-export function decisionStripeClass(decision: string): string {
+/** Left stripe color by decision. Use `vibrant` on Runs for bright accent borders. */
+export function decisionStripeClass(decision: string, tone: 'muted' | 'vibrant' = 'muted'): string {
   const u = decision?.toUpperCase() || '';
+  if (tone === 'vibrant') {
+    if (u === 'ALLOW') return 'border-l-emerald-400';
+    if (u === 'DENY') return 'border-l-rose-500';
+    if (u === 'REWRITE') return 'border-l-amber-400';
+    if (u.includes('APPROVAL')) return 'border-l-sky-400';
+    return 'border-l-violet-400';
+  }
   if (u === 'ALLOW') return 'border-l-emerald-700/40';
   if (u === 'DENY') return 'border-l-red-900/40';
   if (u === 'REWRITE') return 'border-l-amber-700/35';

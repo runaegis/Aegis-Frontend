@@ -124,10 +124,10 @@ export default function Sidebar() {
 
         <div className="mt-2 flex items-center gap-2.5 px-3 py-2">
           <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-foreground">
-            {user ? getInitials(user.username) : '?'}
+            {user ? getInitials(user.username || user.email) : '?'}
           </div>
           <span className="truncate text-sm text-muted-foreground">
-            {user?.username || 'Not connected'}
+            {user?.username || user?.email || 'Not connected'}
           </span>
         </div>
       </div>

@@ -24,6 +24,9 @@ import ErrorBanner from '@/components/ui/ErrorBanner';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import Link from 'next/link';
 import { ActionPointersDetail, decisionStripeClass } from '@/components/dashboard/ActionPointers';
+import { RunDetailViewModeToggle } from '@/components/dashboard/RunDetailViewModeToggle';
+import { CanonicalJsonViewer } from '@/components/ui/CanonicalJsonViewer';
+import { toSessionActionRawJsonView } from '@/lib/canonicalSessionAction';
 
 export default function DashboardPage() {
   const { user, isLoading: userLoading } = useUser();
@@ -247,6 +250,7 @@ function RunRow({
   isExpanded: boolean;
   onToggle: () => void;
 }) {
+  const [detailMode, setDetailMode] = useState<'details' | 'raw_json'>('details');
   const toolDisplay = formatMcpAegisToolDisplayName(run.tool_name || '');
   const toolChipStyle = getToolChipStyle(run.tool_name || '');
   const toolHue: number | null = getToolAccentHue(run.tool_name || '');
@@ -255,8 +259,8 @@ function RunRow({
       <tr
         onClick={onToggle}
         className={cn(
-          'cursor-pointer border-b border-white/[0.06] border-l-[3px] transition-colors duration-200',
-          decisionStripeClass(run.decision),
+          'cursor-pointer border-b border-white/[0.06] border-l-[4px] transition-colors duration-200',
+          decisionStripeClass(run.decision, 'vibrant'),
           'hover:bg-gradient-to-r hover:from-white/[0.04] hover:to-transparent',
           isExpanded && 'bg-white/[0.03]'
         )}
@@ -319,63 +323,77 @@ function RunRow({
       </tr>
       {isExpanded && (
         <tr>
-          <td colSpan={7} className="border-b border-white/[0.06] bg-zinc-950/45 px-4 py-5">
-            <div className="space-y-5">
-              <div className="relative rounded-xl bg-zinc-900/55 p-4">
-                <div className="absolute right-3 top-3 text-zinc-600">
-                  <Sparkles className="h-5 w-5" aria-hidden />
-                </div>
-                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
-                  Summary
+          <td
+            colSpan={7}
+            className="border-b border-white/[0.06] bg-zinc-950/45 px-4 py-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <RunDetailViewModeToggle mode={detailMode} onModeChange={setDetailMode} className="mb-4" />
+            {detailMode === 'raw_json' ? (
+              <div className="space-y-2">
+                <p className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">
+                  Canonical action fields (agent, tool, arguments, result, repo, branch)
                 </p>
-                <p className="pr-8 text-base font-medium leading-snug text-zinc-50 md:text-lg">
-                  {run.action_summary}
-                </p>
+                <CanonicalJsonViewer value={toSessionActionRawJsonView(run)} />
               </div>
-              <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
-                <div className="rounded-lg bg-zinc-900/45 px-3 py-2.5">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
-                    Sequence
+            ) : (
+              <div className="space-y-5">
+                <div className="relative rounded-xl bg-zinc-900/55 p-4">
+                  <div className="absolute right-3 top-3 text-zinc-600">
+                    <Sparkles className="h-5 w-5" aria-hidden />
+                  </div>
+                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+                    Summary
                   </p>
-                  <p className="mt-1 font-mono text-sm text-zinc-100">#{run.sequence_order}</p>
-                </div>
-                <div className="rounded-lg bg-zinc-900/45 px-3 py-2.5">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
-                    Timestamp
+                  <p className="pr-8 text-base font-medium leading-snug text-zinc-50 md:text-lg">
+                    {run.action_summary}
                   </p>
-                  <p className="mt-1 text-zinc-200">{formatFullTimestamp(run.timestamp)}</p>
                 </div>
-                <div className="col-span-2 rounded-lg bg-zinc-900/45 px-3 py-2.5 sm:col-span-1">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
-                    Execution
-                  </p>
-                  <p className="mt-1 text-zinc-200">{formatExecutionTimeMs(run.execution_time)}</p>
+                <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
+                  <div className="rounded-lg bg-zinc-900/45 px-3 py-2.5">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+                      Sequence
+                    </p>
+                    <p className="mt-1 font-mono text-sm text-zinc-100">#{run.sequence_order}</p>
+                  </div>
+                  <div className="rounded-lg bg-zinc-900/45 px-3 py-2.5">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+                      Timestamp
+                    </p>
+                    <p className="mt-1 text-zinc-200">{formatFullTimestamp(run.timestamp)}</p>
+                  </div>
+                  <div className="col-span-2 rounded-lg bg-zinc-900/45 px-3 py-2.5 sm:col-span-1">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+                      Execution
+                    </p>
+                    <p className="mt-1 text-zinc-200">{formatExecutionTimeMs(run.execution_time)}</p>
+                  </div>
                 </div>
+                {(run.action_pointers?.length ||
+                  (run.arguments && Object.keys(run.arguments).length > 0)) && (
+                  <div className="rounded-xl bg-zinc-900/40 p-4">
+                    <p className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+                      {toolHue != null ? (
+                        <span
+                          className="inline-block h-1 w-7 rounded-full"
+                          style={{
+                            backgroundColor: `hsla(${toolHue}, 38%, 46%, 0.55)`,
+                          }}
+                        />
+                      ) : (
+                        <span className="inline-block h-1 w-7 rounded-full bg-zinc-600/70" />
+                      )}
+                      Details
+                    </p>
+                    <ActionPointersDetail
+                      pointers={run.action_pointers}
+                      argumentsFallback={run.arguments as Record<string, unknown>}
+                      accentHue={toolHue}
+                    />
+                  </div>
+                )}
               </div>
-              {(run.action_pointers?.length ||
-                (run.arguments && Object.keys(run.arguments).length > 0)) && (
-                <div className="rounded-xl bg-zinc-900/40 p-4">
-                  <p className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
-                    {toolHue != null ? (
-                      <span
-                        className="inline-block h-1 w-7 rounded-full"
-                        style={{
-                          backgroundColor: `hsla(${toolHue}, 38%, 46%, 0.55)`,
-                        }}
-                      />
-                    ) : (
-                      <span className="inline-block h-1 w-7 rounded-full bg-zinc-600/70" />
-                    )}
-                    Details
-                  </p>
-                  <ActionPointersDetail
-                    pointers={run.action_pointers}
-                    argumentsFallback={run.arguments as Record<string, unknown>}
-                    accentHue={toolHue}
-                  />
-                </div>
-              )}
-            </div>
+            )}
           </td>
         </tr>
       )}
