@@ -9,7 +9,6 @@ import {
   cn,
   formatRelativeTime,
   formatFullTimestamp,
-  truncate,
   formatExecutionTimeMs,
   formatMcpAegisToolDisplayName,
   getToolChipStyle,
@@ -203,16 +202,21 @@ export default function DashboardPage() {
 
             {/* Table */}
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full table-fixed text-sm">
                 <thead>
                   <tr className="border-b border-white/10 bg-zinc-900/70 text-left text-xs font-semibold uppercase tracking-wide text-zinc-400">
-                    <th className="px-4 py-3 font-medium">Agent</th>
-                    <th className="px-4 py-3 font-medium">Tool</th>
-                    <th className="px-4 py-3 font-medium">Summary</th>
-                    <th className="px-4 py-3 font-medium">Repository</th>
-                    <th className="px-4 py-3 font-medium">Branch</th>
-                    <th className="px-4 py-3 font-medium">Decision</th>
-                    <th className="px-4 py-3 font-medium">Time</th>
+                    <th className="min-w-[300px] px-4 py-3 font-medium" style={{ width: '32%' }}>
+                      Agent
+                    </th>
+                    <th className="w-[12%] px-4 py-3 font-medium">Tool</th>
+                    <th className="min-w-0 px-4 py-3 font-medium" style={{ width: '11%' }}>
+                      Repository
+                    </th>
+                    <th className="min-w-0 px-4 py-3 font-medium" style={{ width: '24%' }}>
+                      Branch
+                    </th>
+                    <th className="w-[10%] px-4 py-3 font-medium">Decision</th>
+                    <th className="w-[11%] px-4 py-3 font-medium">Time</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -265,15 +269,22 @@ function RunRow({
           isExpanded && 'bg-white/[0.03]'
         )}
       >
-        <td className="px-4 py-3">
-          <div className="flex items-center gap-2.5">
-            <span className="rounded-full ring-1 ring-zinc-700/80 ring-offset-2 ring-offset-zinc-950">
+        <td className="min-w-[300px] px-4 py-3 align-top">
+          <div className="flex items-start gap-2.5">
+            <span className="shrink-0 rounded-full ring-1 ring-zinc-700/80 ring-offset-2 ring-offset-zinc-950">
               <AgentAvatar name={run.agent_name || ''} size="sm" />
             </span>
-            <span className="font-medium text-zinc-100">{run.agent_name}</span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate font-medium leading-tight text-zinc-100">{run.agent_name}</p>
+              {run.action_summary ? (
+                <p className="mt-1 whitespace-normal break-words text-[0.75rem] leading-snug text-zinc-500">
+                  {run.action_summary}
+                </p>
+              ) : null}
+            </div>
           </div>
         </td>
-        <td className="px-4 py-3">
+        <td className="min-w-0 px-4 py-3">
           <code
             className="inline-flex max-w-[min(18rem,calc(100vw-12rem))] items-center truncate rounded-md border-0 px-2 py-1 font-mono text-[11px] leading-snug shadow-none outline-none ring-0"
             style={toolChipStyle}
@@ -282,24 +293,23 @@ function RunRow({
             {toolDisplay}
           </code>
         </td>
-        <td className="max-w-[14rem] px-4 py-3 text-zinc-300">
-          {truncate(run.action_summary, 40)}
-        </td>
-        <td className="px-4 py-3">
-          <span className="inline-flex min-h-[1.25rem] items-center gap-1.5 text-sm text-zinc-400">
-            <GitBranch className="h-3.5 w-3.5 shrink-0 text-zinc-600" aria-hidden />
+        <td className="min-w-0 px-4 py-3 align-top">
+          <span className="flex min-h-[1.25rem] min-w-0 items-start gap-1.5 text-sm text-zinc-400">
+            <GitBranch className="mt-0.5 h-3.5 w-3.5 shrink-0 text-zinc-600" aria-hidden />
             {run.target_repo ? (
-              run.target_repo
+              <span className="min-w-0 truncate">{run.target_repo}</span>
             ) : (
               <span className="text-xs text-zinc-600 italic">No repo</span>
             )}
           </span>
         </td>
-        <td className="px-4 py-3">
-          {run.target_branch && (
-            <code className="rounded-md bg-zinc-800/60 px-2 py-0.5 font-mono text-[11px] text-zinc-400">
+        <td className="min-w-0 px-4 py-3 align-top">
+          {run.target_branch ? (
+            <code className="block w-full min-w-0 whitespace-normal break-all rounded-md bg-zinc-800/60 px-2 py-0.5 font-mono text-[11px] leading-snug text-zinc-400">
               {run.target_branch}
             </code>
+          ) : (
+            <span className="text-sm text-zinc-600">—</span>
           )}
         </td>
         <td className="px-4 py-3">
@@ -324,7 +334,7 @@ function RunRow({
       {isExpanded && (
         <tr>
           <td
-            colSpan={7}
+            colSpan={6}
             className="border-b border-white/[0.06] bg-zinc-950/45 px-4 py-5"
             onClick={(e) => e.stopPropagation()}
           >
@@ -345,7 +355,7 @@ function RunRow({
                   <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
                     Summary
                   </p>
-                  <p className="pr-8 text-base font-medium leading-snug text-zinc-50 md:text-lg">
+                  <p className="whitespace-normal break-words pr-8 text-base font-medium leading-snug text-zinc-50 md:text-lg">
                     {run.action_summary}
                   </p>
                 </div>
