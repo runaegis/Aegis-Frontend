@@ -30,6 +30,14 @@ const API_BASE = getAPIBase();
 if (typeof window !== 'undefined') {
   console.log('[Aegis API] Using endpoint:', API_BASE);
 }
+
+export class AuthError extends Error {
+  constructor(message = 'Unauthorized') {
+    super(message);
+    this.name = 'AuthError';
+  }
+}
+
 export async function apiFetch(
     input: RequestInfo,
     init: RequestInit = {},
@@ -60,7 +68,7 @@ export async function apiFetch(
         window.location.href = '/auth';
       }
 
-      throw new Error('Session expired');
+      throw new AuthError();
     }
 
     return response;

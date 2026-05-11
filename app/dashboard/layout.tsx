@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { api } from '@/lib/api';
+import { api, AuthError } from '@/lib/api';
 import { useRouter } from 'next/navigation';
 import { useUser } from '@/lib/hooks';
 import Layout from '@/components/layout/Layout';
@@ -25,8 +25,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       setIsReady(true);
 
     } catch (error) {
-      console.error("Failed to verify dashboard access:", error);
-      router.push("/auth");
+        if (error instanceof AuthError) {
+          router.replace('/auth');
+          return;
+        }
+
+        console.error(error);
+      }
     }
   };
 
