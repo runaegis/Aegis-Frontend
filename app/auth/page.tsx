@@ -148,12 +148,12 @@ const handleResendEmail = async () => {
   setResendCooldown(30);
 
   try {
-    const res = await apiFetch(`${BACKEND_URL}/auth/resend-verification`, {
+    const res = await fetch(`${BACKEND_URL}/auth/resend-verification`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      // credentials: 'include', // Include cookies for authentication
+      credentials: 'include', // Include cookies for authentication
       body: JSON.stringify({ email: signupEmail }),
     });
 
@@ -175,12 +175,12 @@ const handleResendEmail = async () => {
   setErrors({});
 
   try {
-    const res = await apiFetch(`${BACKEND_URL}/auth/register`, {
+    const res = await fetch(`${BACKEND_URL}/auth/register`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      // credentials: 'include', // Include cookies for authentication
+      credentials: 'include', // Include cookies for authentication
       body: JSON.stringify({
         name,
         email,
@@ -192,7 +192,10 @@ const handleResendEmail = async () => {
       const data = await res.json();
 
       if (data.detail || data.message) {
-        throw new Error(data.detail || data.message);
+        throw data.detail || {
+        code: 'UNKNOWN_ERROR',
+        message: 'Signup failed',
+      };
       }
 
       throw new Error("Signup failed");
@@ -204,12 +207,26 @@ const handleResendEmail = async () => {
     setSignupSuccess(true);
 
   } catch (err: any) {
-    if (err.message.includes("already exists")) {
-      setErrors({ form: "email_exists" });
-    } else {
-      setErrors({ form: err.message || "Something went wrong" });
-    }
-  } finally {
+  const detail = err?.detail || err;
+
+  switch (detail.code) {
+    case 'ACCOUNT_EXISTS':
+      setErrors({ form: 'email_exists' });
+      break;
+
+    case 'SIGNUP_FAILED':
+      setErrors({
+        form: 'Could not create account. Please try again.',
+      });
+      break;
+
+    default:
+      setErrors({
+        form: detail.message || 'Something went wrong.',
+      });
+  }
+}
+  finally {
     setLoading(false);
   }
 };
@@ -221,12 +238,12 @@ const handleResendEmail = async () => {
   setErrors({});
 
   try {
-    const res = await apiFetch(`${BACKEND_URL}/auth/login`, {
+    const res = await fetch(`${BACKEND_URL}/auth/login`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      // credentials: 'include', // Include cookies for authentication
+      credentials: 'include', // Include cookies for authentication
       body: JSON.stringify({
         email,
         password,
@@ -236,7 +253,10 @@ const handleResendEmail = async () => {
     const data = await res.json();
 
     if (!res.ok) {
-      throw new Error(data.detail || "Login failed");
+      throw data.detail || {
+  code: 'UNKNOWN_ERROR',
+  message: 'Login failed',
+};
     }
 
     // Store user data with email
@@ -255,14 +275,31 @@ const handleResendEmail = async () => {
     }, 1000);
 
   } catch (err: any) {
-    const message = err.message;
+  const detail = err?.detail || err;
 
-    if (message.includes("Invalid credentials")) {
-      setErrors({ form: "Incorrect email or password." });
-    } else {
-      setErrors({ form: "Something went wrong. Please try again." });
-    }
-  } finally {
+  switch (detail.code) {
+    case 'ACCOUNT_NOT_FOUND':
+      setErrors({ form: 'not_found' });
+      break;
+
+    case 'INVALID_PASSWORD':
+      setErrors({
+        form: 'Incorrect password.',
+      });
+      break;
+
+    case 'EMAIL_NOT_VERIFIED':
+      setErrors({ form: 'unverified' });
+      break;
+
+    default:
+      setErrors({
+        form:
+          detail.message ||
+          'Something went wrong. Please try again.',
+      });
+  }
+} finally {
     setLoading(false);
   }
 };
@@ -285,12 +322,12 @@ const handleForgotPassword = async () => {
   setErrors({});
 
   try {
-    await apiFetch(`${BACKEND_URL}/auth/forgot-password`, {
+    await fetch(`${BACKEND_URL}/auth/forgot-password`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      // credentials: 'include', // Include cookies for authentication
+      credentials: 'include', // Include cookies for authentication
       body: JSON.stringify({ email }),
     });
 
