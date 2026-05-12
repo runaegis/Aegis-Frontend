@@ -12,20 +12,20 @@ export default function Home() {
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        // Backend + cookies are now the source of truth
-        const user = await api.getUserDetails();
+        // Validate session first
+        await api.getUserDetails();
 
-        // Onboarding completed
-        if (user?.onboarding_step >= 5) {
+        // Then fetch onboarding progress
+        const onboarding = await api.getOnboardingStep();
+
+        if (onboarding.onboarding_step >= 5) {
           router.replace('/dashboard');
           return;
         }
 
-        // Logged in but onboarding incomplete
         router.replace('/onboarding');
 
       } catch {
-        // No valid session
         router.replace('/auth');
       }
     };
