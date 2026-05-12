@@ -150,7 +150,7 @@ export default function AuditPage() {
               type="button"
               onClick={exportPdf}
               disabled={!user?.id || userLoading}
-              className="flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted"
+              className="flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted cursor-pointer"
             >
               <Download className="h-4 w-4" />
               Export PDF
@@ -159,7 +159,7 @@ export default function AuditPage() {
               type="button"
               onClick={exportJson}
               disabled={!user?.id || userLoading}
-              className="flex items-center gap-1.5 rounded-md bg-foreground px-3 py-1.5 text-sm font-medium text-background hover:bg-foreground/90"
+              className="flex items-center gap-1.5 rounded-md bg-foreground px-3 py-1.5 text-sm font-medium text-background hover:bg-foreground/90 cursor-pointer"
             >
               <Download className="h-4 w-4" />
               Export JSON
@@ -212,14 +212,14 @@ export default function AuditPage() {
                 <button
                   onClick={() => setPage(Math.max(0, page - 1))}
                   disabled={page === 0}
-                  className="rounded-md border border-border p-1.5 hover:bg-muted disabled:opacity-40"
+                  className="rounded-md border border-border p-1.5 hover:bg-muted disabled:opacity-40 cursor-pointer"
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </button>
                 <button
                   onClick={() => setPage(page + 1)}
                   disabled={events.length < pageSize}
-                  className="rounded-md border border-border p-1.5 hover:bg-muted disabled:opacity-40"
+                  className="rounded-md border border-border p-1.5 hover:bg-muted disabled:opacity-40 cursor-pointer"
                 >
                   <ChevronRight className="h-4 w-4" />
                 </button>

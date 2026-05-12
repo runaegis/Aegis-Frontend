@@ -316,7 +316,7 @@ const { email } = useEmail();
                   Create token <ExternalLink className="h-3 w-3" />
                 </a>
               </div>
-              <button onClick={handleStep1} disabled={step1Loading} className={`${primaryBtn} w-full`}>
+              <button onClick={handleStep1} disabled={step1Loading} className={`${primaryBtn} w-full cursor-pointer`}>
                 {step1Loading && <Loader2 className="h-4 w-4 animate-spin" />}
                 Continue <ChevronRight className="h-4 w-4" />
               </button>
@@ -333,7 +333,7 @@ const { email } = useEmail();
             </div>
             <div className="p-5">
               {!synced ? (
-                <button onClick={handleSync} disabled={syncing} className={`${primaryBtn} w-full`}>
+                <button onClick={handleSync} disabled={syncing} className={`${primaryBtn} w-full cursor-pointer`}>
                   {syncing ? <><RefreshCw className="h-4 w-4 animate-spin" /> Syncing...</> : <><RefreshCw className="h-4 w-4" /> Sync repositories</>}
                 </button>
               ) : (
@@ -355,14 +355,14 @@ const { email } = useEmail();
                       const authToken = getAuthToken();
                       if (authToken) await api.updateOnboardingStep(1, authToken);
                       setStep(1);
-                    }} className={ghostBtn}>
+                    }} className={`${ghostBtn} cursor-pointer`}>
                       <ChevronLeft className="h-4 w-4" /> Back
                     </button>
                     <button onClick={async() => {
                       const authToken = getAuthToken();
                       if (authToken) await api.updateOnboardingStep(2, authToken);
                       setStep(3);
-                    }} className={`${primaryBtn} flex-1`}>
+                    }} className={`${primaryBtn} flex-1 cursor-pointer`}>
                       Continue <ChevronRight className="h-4 w-4" />
                     </button>
                   </div>
@@ -397,7 +397,7 @@ const { email } = useEmail();
               <div className="mb-3 flex items-center gap-2">
                 <span className="text-xs text-muted-foreground">Apply to all:</span>
                 {permOptions.map((opt) => (
-                  <button key={opt.value} onClick={() => handleBulkPermission(opt.value)} className="rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
+                  <button key={opt.value} onClick={() => handleBulkPermission(opt.value)} className="rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer">
                     {opt.label}
                   </button>
                 ))}
@@ -411,7 +411,7 @@ const { email } = useEmail();
                         <button
                           key={opt.value}
                           onClick={() => handleSetPermission(i, opt.value)}
-                          className={`px-2 py-1 text-xs font-medium transition-colors ${getPermissionLabel(repo) === opt.value ? opt.activeClass : 'bg-card text-muted-foreground hover:bg-muted'}`}
+                          className={`px-2 py-1 text-xs font-medium transition-colors cursor-pointer ${getPermissionLabel(repo) === opt.value ? opt.activeClass : 'bg-card text-muted-foreground hover:bg-muted'}`}
                         >
                           {opt.label}
                         </button>
@@ -425,14 +425,14 @@ const { email } = useEmail();
                   const authToken = getAuthToken();
                   if (authToken) await api.updateOnboardingStep(2, authToken);
                   setStep(2);
-                }} className={ghostBtn}>
+                }} className={`${ghostBtn} cursor-pointer`}>
                   <ChevronLeft className="h-4 w-4" /> Back
                 </button>
                 <button onClick={async () => {
                   const authToken = getAuthToken();
                   if (authToken) await api.updateOnboardingStep(2, authToken);
                   handleSavePermissions();
-                }} className={`${primaryBtn} flex-1`}>
+                }} className={`${primaryBtn} flex-1 cursor-pointer`}>
                   Continue <ChevronRight className="h-4 w-4" />
                 </button>
               </div>
@@ -453,7 +453,7 @@ const { email } = useEmail();
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
-                    className={`flex-1 rounded px-3 py-1.5 text-xs font-medium transition-all ${activeTab === tab.id ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                    className={`flex-1 rounded px-3 py-1.5 text-xs font-medium transition-all cursor-pointer ${activeTab === tab.id ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
                   >
                     {tab.label}
                   </button>
@@ -493,14 +493,14 @@ const { email } = useEmail();
                   const authToken = getAuthToken();
                   if (authToken) await api.updateOnboardingStep(3, authToken);
                   setStep(3);
-                }} className={ghostBtn}>
+                }} className={`${ghostBtn} cursor-pointer`}>
                   <ChevronLeft className="h-4 w-4" /> Back
                 </button>
                 <button onClick={async () => {
                   const authToken = getAuthToken();
                   if (authToken) await api.updateOnboardingStep(5, authToken);
                   setStep(5);
-                }} className={`${primaryBtn} flex-1`}>
+                }} className={`${primaryBtn} flex-1 cursor-pointer`}>
                   Continue <ChevronRight className="h-4 w-4" />
                 </button>
               </div>
@@ -509,7 +509,7 @@ const { email } = useEmail();
                   const authToken = getAuthToken();
                   if (authToken) await api.updateOnboardingStep(5, authToken);
                   setStep(5);
-                }} className="mt-2 w-full text-center text-xs text-muted-foreground hover:text-foreground transition-colors">
+                }} className="mt-2 w-full text-center text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
                   Skip for now
                 </button>
               )}
@@ -547,7 +547,7 @@ const { email } = useEmail();
                   setStep(6);
                   router.push('/dashboard');
                 }}
-                className={`${primaryBtn} mx-auto mt-7`}
+                className={`${primaryBtn} mx-auto mt-7 cursor-pointer`}
               >
                 Go to Dashboard <ChevronRight className="h-4 w-4" />
               </button>

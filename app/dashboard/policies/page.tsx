@@ -145,7 +145,7 @@ const handleSave = async () => {
                   {/* TOGGLE */}
                   <button
                     onClick={() => togglePolicy(policy.key)}
-                    className={`relative h-5 w-9 rounded-full transition-colors ${
+                    className={`relative h-5 w-9 rounded-full transition-colors cursor-pointer ${
                       isActive ? 'bg-foreground/80' : 'bg-muted'
                     }`}
                   >

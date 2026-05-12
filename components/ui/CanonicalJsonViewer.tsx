@@ -60,7 +60,7 @@ function JsonTreeNode({ value }: { value: unknown }) {
             e.stopPropagation();
             setOpen((o) => !o);
           }}
-          className="-ml-0.5 inline-flex shrink-0 rounded p-0.5 text-zinc-500 hover:bg-white/10 hover:text-zinc-300"
+          className="-ml-0.5 inline-flex shrink-0 rounded p-0.5 text-zinc-500 hover:bg-white/10 hover:text-zinc-300 cursor-pointer"
           aria-expanded={open}
           aria-label={open ? 'Collapse array' : 'Expand array'}
         >
@@ -98,7 +98,7 @@ function JsonTreeNode({ value }: { value: unknown }) {
           e.stopPropagation();
           setOpen((o) => !o);
         }}
-        className="-ml-0.5 inline-flex shrink-0 rounded p-0.5 text-zinc-500 hover:bg-white/10 hover:text-zinc-300"
+        className="-ml-0.5 inline-flex shrink-0 rounded p-0.5 text-zinc-500 hover:bg-white/10 hover:text-zinc-300 cursor-pointer"
         aria-expanded={open}
         aria-label={open ? 'Collapse object' : 'Expand object'}
       >
@@ -163,7 +163,7 @@ export function CanonicalJsonViewer({
             e.stopPropagation();
             handleCopy();
           }}
-          className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-zinc-400 transition-colors hover:bg-white/10 hover:text-zinc-200"
+          className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-zinc-400 transition-colors hover:bg-white/10 hover:text-zinc-200 cursor-pointer"
         >
           {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
           {copied ? 'Copied' : 'Copy JSON'}

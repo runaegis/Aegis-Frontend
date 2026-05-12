@@ -269,7 +269,7 @@ export default function TokenSpenditurePage() {
               key={opt.value}
               type="button"
               onClick={() => setUsageRange(opt.value)}
-              className={`rounded-lg border px-3 py-1.5 text-sm transition-colors ${
+              className={`rounded-lg border px-3 py-1.5 text-sm transition-colors cursor-pointer ${
                 usageRange === opt.value
                   ? 'border-violet-500/50 bg-violet-500/20 text-white'
                   : 'border-border bg-muted/30 text-muted-foreground hover:bg-muted/50'

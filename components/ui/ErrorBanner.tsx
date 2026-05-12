@@ -16,13 +16,13 @@ export default function ErrorBanner({ message, onDismiss, onRetry }: ErrorBanner
       {onRetry && (
         <button
           onClick={onRetry}
-          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground cursor-pointer"
         >
           <RefreshCw className="h-3.5 w-3.5" />
           Retry
         </button>
       )}
-      <button onClick={onDismiss} className="text-muted-foreground hover:text-foreground">
+      <button onClick={onDismiss} className="text-muted-foreground hover:text-foreground cursor-pointer">
         <X className="h-4 w-4" />
       </button>
     </div>

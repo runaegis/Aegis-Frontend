@@ -28,6 +28,7 @@ export function RunDetailViewModeToggle({
         aria-selected={mode === 'details'}
         className={cn(
           tabBtn,
+          'cursor-pointer',
           mode === 'details'
             ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-200'
             : 'border-white/10 bg-zinc-900/50 text-zinc-500 hover:border-white/20 hover:text-zinc-300'
@@ -42,6 +43,7 @@ export function RunDetailViewModeToggle({
         aria-selected={mode === 'raw_json'}
         className={cn(
           tabBtn,
+          'cursor-pointer',
           mode === 'raw_json'
             ? 'border-violet-500/40 bg-violet-500/15 text-violet-200'
             : 'border-white/10 bg-zinc-900/50 text-zinc-500 hover:border-white/20 hover:text-zinc-300'

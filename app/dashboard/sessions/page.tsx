@@ -182,7 +182,7 @@ function SessionCard({
       <button
         type="button"
         onClick={handleToggle}
-        className="w-full px-4 py-3.5 text-left transition-colors hover:bg-white/[0.03]"
+        className="w-full px-4 py-3.5 text-left transition-colors hover:bg-white/[0.03] cursor-pointer"
       >
         <div className="hover:cursor-pointer flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
