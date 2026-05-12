@@ -34,7 +34,7 @@ export default function Topbar({ title, subtitle, lastUpdated, onRefresh }: Topb
           )}
           <button
             onClick={onRefresh}
-            className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+            className="flex items-center gap-1.5 rounded-md border hover:cursor-pointer border-border px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
           >
             <RefreshCw className="h-3.5 w-3.5" />
             Refresh

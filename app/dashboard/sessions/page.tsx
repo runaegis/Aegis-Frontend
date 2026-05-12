@@ -178,13 +178,13 @@ function SessionCard({
   const repos = Array.isArray(session.repos) ? session.repos.filter(Boolean) : [];
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-white/10 bg-card/80 shadow-lg shadow-black/25 ring-1 ring-inset ring-white/[0.04] backdrop-blur-sm">
+    <div className=" overflow-hidden rounded-2xl border border-white/10 bg-card/80 shadow-lg shadow-black/25 ring-1 ring-inset ring-white/[0.04] backdrop-blur-sm">
       <button
         type="button"
         onClick={handleToggle}
         className="w-full px-4 py-3.5 text-left transition-colors hover:bg-white/[0.03]"
       >
-        <div className="flex items-center justify-between gap-3">
+        <div className="hover:cursor-pointer flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
             <span className="shrink-0 rounded-full ring-1 ring-zinc-700/80 ring-offset-2 ring-offset-zinc-950">
               <AgentAvatar name={session.agent_name || ''} size="sm" />
@@ -257,7 +257,7 @@ function SessionActionCard({ action }: { action: SessionAction }) {
   return (
     <div
       className={cn(
-        'rounded-lg border border-white/[0.06] border-l-[3px] bg-zinc-900/40 p-3',
+        'rounded-lg border border-white/[0.06] border-l-[3px] bg-zinc-900/40 p-3 ',
         decisionStripeClass(action.decision)
       )}
     >
