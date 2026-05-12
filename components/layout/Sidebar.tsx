@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { useUser } from '@/lib/hooks';
 import { getInitials } from '@/lib/utils';
+import { api } from '@/lib/api';
 
 const nav = [
   { name: 'Runs', href: '/dashboard', icon: Activity },
@@ -43,9 +44,9 @@ export default function Sidebar() {
     return pathname.startsWith(href);
   };
 
-  const handleLogout = () => {
-    window.location.href = '/auth';
-  };
+  const handleLogout = async () => {
+    await api.logOut();
+  };  
 
   const NavContent = () => (
     <>

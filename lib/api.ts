@@ -12,6 +12,7 @@ import {
   RoomMember,
   RoomInvite,
 } from './types';
+import { LogOut } from 'lucide-react';
 
 type SaveUserPayload = Pick<User, 'github_user_id' | 'username' | 'github_pat'> & {
   email?: string;
@@ -199,8 +200,23 @@ export const api = {
 
   healthCheck: () =>
     fetch(`${API_BASE}/health`).then((r) => r.json()),
-  
-  
+
+  logOut: async () => {
+    try {
+      await fetch(`${API_BASE}/auth/logout`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+    } catch {
+      // ignore logout network failures
+    } finally {
+      localStorage.removeItem('aegis_user');
+      localStorage.removeItem('aegis_onboarding_step');
+
+      window.location.href = '/auth';
+    }
+
+  },
 
   getRuns: async (userId?: string): Promise<SessionAction[]> => {
     if (!userId) return [];

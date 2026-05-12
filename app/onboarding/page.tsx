@@ -82,9 +82,9 @@ export default function OnboardingPage() {
   const { step, setStep } = useOnboardingStep();
   const { email } = useEmail();
 
-  const [username, setUsername] = useState(user?.username || '');
-  const [githubId, setGithubId] = useState(String(user?.github_user_id || ''));
-  const [token, setToken] = useState(user?.access_token || '');
+  const [username, setUsername] = useState('');
+  const [githubId, setGithubId] = useState('');
+  const [token, setToken] = useState('');
   const [step1Loading, setStep1Loading] = useState(false);
   const [step1Error, setStep1Error] = useState('');
 
@@ -134,7 +134,7 @@ export default function OnboardingPage() {
 
     // onboarding completed
     if (currentStep >= 5) {
-      router.push('/dashboard');
+      router.replace('/dashboard');
       return;
     }
 
@@ -162,13 +162,31 @@ export default function OnboardingPage() {
   }, [setStep]);
 
   useEffect(() => {
-  if (!user) return;
+  const recoverUser = async () => {
+    // already hydrated
+    if (user) return;
 
-  setUsername(user.username || '');
-  setGithubId(String(user.github_user_id || ''));
-  setToken(user.access_token || '');
-}, [user]);
+    try {
+      const freshUser = await api.getUserDetails();
 
+      setUser(freshUser);
+
+      // restore onboarding inputs
+      if (step > 1) {
+        setUsername(freshUser.username || '');
+        setGithubId(
+          String(freshUser.github_user_id || '')
+        );
+        setToken(freshUser.access_token || '');
+      }
+
+    } catch {
+      router.replace('/auth');
+    }
+  };
+
+  recoverUser();
+}, [user, router, setUser, step]);
 
   const handleStep1 = async () => {
     if (!username || !githubId || !token) { setStep1Error('All fields are required.'); return; }
@@ -190,10 +208,10 @@ export default function OnboardingPage() {
   const handleSync = async () => {
     setSyncing(true);
     try {
-      if (!user?.github_user_id || !user?.access_token) throw new Error('User not initialized');
-      const syncResponse = await api.syncRepos(user.github_user_id, user.access_token);
+      if (!githubId || !token) throw new Error('User not initialized');
+      const syncResponse = await api.syncRepos(Number(githubId), token);
       if (!syncResponse.success) throw new Error(syncResponse.message || 'Sync failed');
-      const reposResponse = await api.getRepos(user.id || '');
+      const reposResponse = await api.getRepos(user?.id || '');
       if (reposResponse?.repos && Array.isArray(reposResponse.repos)) setRepos(reposResponse.repos);
       setSynced(true);
     } catch (error) {
@@ -232,10 +250,12 @@ export default function OnboardingPage() {
     return 'deny';
   };
 
-  const handleSavePermissions = async () => {
+const handleSavePermissions = async () => {
   if (!user?.id) return;
 
   try {
+    setTransitionLoading(true);
+
     const permissions = repos.map(
       ({ github_repo_id, can_read, can_write }) => ({
         github_repo_id,
@@ -252,6 +272,8 @@ export default function OnboardingPage() {
     setPageError(
       'Failed to save repository permissions.'
     );
+  } finally {
+    setTransitionLoading(false);
   }
 };
 
@@ -271,9 +293,9 @@ export default function OnboardingPage() {
       } catch { /* ignore */ } finally {
         setChecking(false);
       }
-    }, 1000);
+    }, 5000);
     return () => clearInterval(interval);
-  }, [step, verified, user?.username, username]);
+  }, [step, verified, user?.username, username, user?.id]);
 
   useEffect(() => {
     if (step !== 5) return;
@@ -309,7 +331,7 @@ export default function OnboardingPage() {
   ];
 
   const inputClass = 'w-full rounded-md border border-border bg-muted px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-foreground/40 focus:outline-none';
-  const primaryBtn = 'flex items-center justify-center gap-2 rounded-md bg-foreground px-4 py-2 text-sm font-medium text-background hover:bg-foreground/90 disabled:opacity-40 transition-all';
+  const primaryBtn = 'flex items-center justify-center gap-2 rounded-md bg-foreground px-4 py-2 text-sm font-medium text-background hover:bg-foreground/90 disabled:opacity-40 disabled:cursor-not-allowed transition-all';
   const ghostBtn = 'flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-all';
 
   return (
@@ -359,10 +381,22 @@ export default function OnboardingPage() {
                   Create token <ExternalLink className="h-3 w-3" />
                 </a>
               </div>
-              <button onClick={handleStep1} disabled={step1Loading} className={`${primaryBtn} w-full`} >
-                {step1Loading && <Loader2 className="h-4 w-4 animate-spin" />}
-                Continue <ChevronRight className="h-4 w-4" />
-              </button>
+              <button
+                  onClick={handleStep1}
+                  disabled={step1Loading}
+                  className={`${primaryBtn} w-full`}
+                >
+                  {step1Loading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      Continue <ChevronRight className="h-4 w-4" />
+                    </>
+                  )}
+                </button>
             </div>
           </div>
         )}
@@ -396,13 +430,22 @@ export default function OnboardingPage() {
               <div className="mt-5 flex gap-2">
                 <button onClick={async() => {
                   await moveToStep(1);
-                }} className={ghostBtn} disabled={transitionLoading}>
+                }} className={ghostBtn}>
                   <ChevronLeft className="h-4 w-4"  /> Back
                 </button>
                 <button onClick={async() => {
                     await moveToStep(3);
                 }} className={`${primaryBtn} flex-1`} disabled={transitionLoading}>
-                  Continue <ChevronRight className="h-4 w-4" />
+                  {transitionLoading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Continuing...
+                    </>
+                  ) : (
+                    <>
+                      Continue <ChevronRight className="h-4 w-4" />
+                    </>
+                  )}
                 </button>
               </div>
                 </>
@@ -468,7 +511,16 @@ export default function OnboardingPage() {
                 <button onClick={async () => {
                   await handleSavePermissions(); 
                 }} className={`${primaryBtn} flex-1`} disabled={transitionLoading}>
-                  Continue <ChevronRight className="h-4 w-4" />
+                  {transitionLoading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Continuing...
+                    </>
+                  ) : (
+                    <>
+                      Continue <ChevronRight className="h-4 w-4" />
+                    </>
+                  )}
                 </button>
               </div>
             </div>
@@ -526,13 +578,22 @@ export default function OnboardingPage() {
               <div className="mt-5 flex gap-2">
                 <button onClick={async () => {
                   await moveToStep(3);
-                }} className={ghostBtn} disabled={transitionLoading}>
+                }} className={ghostBtn}>
                   <ChevronLeft className="h-4 w-4" /> Back
                 </button>
                 <button onClick={async () => {
                   await moveToStep(5);
                 }} className={`${primaryBtn} flex-1`} disabled={transitionLoading}>
-                  Continue <ChevronRight className="h-4 w-4" />
+                  {transitionLoading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Continuing...
+                    </>
+                  ) : (
+                    <>
+                      Continue <ChevronRight className="h-4 w-4" />
+                    </>
+                  )}
                 </button>
               </div>
               {!verified && (
@@ -571,7 +632,7 @@ export default function OnboardingPage() {
 
               <button
                 onClick={async () => {
-                  router.push('/dashboard');
+                  router.replace('/dashboard');
                 }}
                 className={`${primaryBtn} mx-auto mt-7`}
                 disabled={transitionLoading}
