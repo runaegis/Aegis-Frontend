@@ -369,7 +369,7 @@ export const api = {
   ): Promise<SessionAction[]> => {
     // If we have userId, pull from cache to avoid an extra fetch
     if (userId) {
-      const rows = await getUserActions(userId);
+      const { items: rows } = await getUserActions(userId);
       return rows
         .filter((r) => r.session_id === sessionId)
         .sort((a, b) => (a.sequence_order ?? 0) - (b.sequence_order ?? 0));
@@ -393,7 +393,7 @@ export const api = {
   getMetrics: async (userId?: string): Promise<Metrics> => {
     if (!userId)
       return { total: 0, allows: 0, denies: 0, rewrites: 0, approvals: 0 };
-    const runs = await getUserActions(userId);
+    const { items: runs } = await getUserActions(userId);
     return {
       total: runs.length,
       allows: runs.filter((r) => r.result?.toUpperCase() === "ALLOW").length,
@@ -408,7 +408,7 @@ export const api = {
 
   getApprovals: async (userId?: string): Promise<SessionAction[]> => {
     if (!userId) return [];
-    const rows = await getUserActions(userId);
+    const { items: rows } = await getUserActions(userId);
     return rows.filter((r) => r.decision?.toUpperCase().includes("APPROVAL"));
   },
 
@@ -466,7 +466,7 @@ export const api = {
     offset = 0,
   ): Promise<SessionAction[]> => {
     if (!userId) return [];
-    const rows = await getUserActions(userId);
+    const { items: rows } = await getUserActions(userId);
     return rows
       .sort(
         (a, b) =>
@@ -480,7 +480,7 @@ export const api = {
     startDate: string,
     endDate: string,
   ): Promise<SessionAction[]> => {
-    const rows = await getUserActions(userId);
+    const { items: rows } = await getUserActions(userId);
     const start = new Date(startDate).getTime();
     const end = new Date(endDate).getTime();
     return rows.filter((r) => {
@@ -493,7 +493,7 @@ export const api = {
     userId: string,
     username: string,
   ): Promise<{ count: number }[]> => {
-    const rows = await getUserActions(userId);
+    const { items: rows } = await getUserActions(userId);
     const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
     const count = rows.filter(
       (r) =>
@@ -508,8 +508,11 @@ export const api = {
     page = 1,
     page_size = 20,
   ): Promise<PaginatedResponse<TokenMeterResponse>> => {
-    if (!userId) return { items: [], total: 0, page: 1, page_size: 20, pages: 0 };
-    const url = new URL(`${API_BASE}/token-meter/user/${encodeURIComponent(userId)}`);
+    if (!userId)
+      return { items: [], total: 0, page: 1, page_size: 20, pages: 0 };
+    const url = new URL(
+      `${API_BASE}/token-meter/user/${encodeURIComponent(userId)}`,
+    );
     url.searchParams.set("page", String(page));
     url.searchParams.set("page_size", String(page_size));
     const res = await fetch(url.toString());
@@ -517,7 +520,9 @@ export const api = {
       throw new Error(`Failed to fetch token usage: ${res.statusText}`);
     const payload = await res.json();
     return {
-      items: (payload.items ?? []).map((row: unknown) => parseRow(row) as TokenMeterResponse),
+      items: (payload.items ?? []).map(
+        (row: unknown) => parseRow(row) as TokenMeterResponse,
+      ),
       total: payload.total ?? 0,
       page: payload.page ?? page,
       page_size: payload.page_size ?? page_size,
