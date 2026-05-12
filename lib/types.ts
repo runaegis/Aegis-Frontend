@@ -95,21 +95,24 @@ export interface TokenMeterResponse {
 export interface RoomSummary {
   id?: string;
   room_id?: string;
-  repo_id: string;
-  owner_id?: string;
+
+  repo_name: string;
+  owner_username?: string;
+
+  role?: string;
+  is_active?: boolean;
+
   created_at?: string;
 }
-
 export interface RoomDetails extends RoomSummary {
   [key: string]: any;
 }
 
 export interface RoomMember {
-  id?: string;
-  user_id: string;
-  username?: string;
+  username: string;
   role?: string;
   joined_at?: string;
+
   [key: string]: any;
 }
 
@@ -118,7 +121,7 @@ export interface RoomInvite {
   invite_code?: string;
   code?: string;
   room_id?: string;
-  created_by?: string;
+  created_by_username?: string;
   max_uses?: number | null;
   used_count?: number;
   expires_at?: string | null;

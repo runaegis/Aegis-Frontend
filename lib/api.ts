@@ -116,13 +116,23 @@ function getJsonHeaders(): HeadersInit {
 async function readErrorMessage(res: Response): Promise<string> {
   try {
     const body = await res.json();
-    if (typeof body?.detail === 'string') return body.detail;
-    if (typeof body?.message === 'string') return body.message;
-    if (typeof body?.error === 'string') return body.error;
+
+    if (body?.detail?.error?.message) {
+      return body.detail.error.message;
+    }
+
+    if (body?.error?.message) {
+      return body.error.message;
+    }
+
+    if (typeof body?.detail === 'string') {
+      return body.detail;
+    }
+
+    return 'Request failed';
   } catch {
-    // Fallback to generic status text
+    return 'Network error';
   }
-  return res.statusText || 'Request failed';
 }
 
 // ── Cache keyed by userId so switching accounts works correctly ───────────────
@@ -538,12 +548,41 @@ updateRoomTools: (roomId: string, role: string, data: Record<string, boolean>) =
     }
   },
 
-  createRoom: async (repoId: string): Promise<RoomDetails> => {
+  getMyRoomMembership(roomId: string): Promise<{ role: string } | null> {
+    return apiFetch(`${API_BASE}/room/${encodeURIComponent(roomId)}/me`, {
+      // credentials: 'include',
+    })
+      .then((res) => {
+        if (res.status === 404) return null; // Not a member
+        if (!res.ok) throw new Error(`Failed to fetch room membership: ${res.statusText}`);
+        return res.json();
+      }
+      ).then((data) => {
+        if (data?.detail) throw new Error(data.detail);
+        return data;
+      });
+  },
+
+  async getRoomIntegrationConfig(roomId: string) {
+    const res = await fetch(
+      `${API_BASE}/room/${roomId}/integration-url`,
+      {
+        credentials: 'include',
+      }
+    );
+
+    if (!res.ok) {
+      throw new Error(await readErrorMessage(res));
+    }
+
+    return res.json();
+  },
+  createRoom: async (repoName: string): Promise<RoomDetails> => {
     const res = await apiFetch(`${API_BASE}/room/`, {
       method: 'POST',
       // credentials: 'include',
       headers: getJsonHeaders(),
-      body: JSON.stringify({ repo_id: repoId }),
+      body: JSON.stringify({ repo_name: repoName }),
     });
 
     if (!res.ok) {
