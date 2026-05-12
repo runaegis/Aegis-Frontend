@@ -23,13 +23,6 @@ import { useAutoRefresh, useUser } from '@/lib/hooks';
 import { api } from '@/lib/api';
 import { TokenMeterResponse } from '@/lib/types';
 
-type HourBucket = {
-  label: string;
-  input: number;
-  output: number;
-  total: number;
-};
-
 type SessionBucket = {
   label: string;
   session: string;
@@ -38,7 +31,7 @@ type SessionBucket = {
   total: number;
 };
 
-/** Series colors: high contrast on dark UI (input / output / total). */
+/** Series colors: input / output bars and total (purple area) per session. */
 const CHART = {
   input: '#0ea5e9',
   output: '#f59e0b',
@@ -73,29 +66,6 @@ function formatDateKeyIST(d: Date): string {
   }).format(d);
 }
 
-function getHourIST(d: Date): number {
-  const hour = new Intl.DateTimeFormat('en-US', {
-    timeZone: TZ_IST,
-    hour: 'numeric',
-    hourCycle: 'h23',
-  }).formatToParts(d).find((p) => p.type === 'hour')?.value;
-  return hour != null ? parseInt(hour, 10) : 0;
-}
-
-function istMinuteKey(d: Date): string {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: TZ_IST,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hourCycle: 'h23',
-  }).formatToParts(d);
-  const get = (t: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === t)?.value ?? '';
-  return `${get('year')}-${get('month')}-${get('day')}-${get('hour')}-${get('minute')}`;
-}
-
 function formatTimeIST(value?: string): string {
   if (!value) return '—';
   const d = parseApiDate(value);
@@ -109,17 +79,89 @@ function formatTimeIST(value?: string): string {
   }).format(d);
 }
 
-function isTodayIST(value?: string): boolean {
-  if (!value) return true;
-  const d = parseApiDate(value);
-  if (Number.isNaN(d.getTime())) return true;
-  const now = new Date();
-  return formatDateKeyIST(d) === formatDateKeyIST(now);
+type UsageRange = 'today' | '7d' | '30d' | 'all';
+
+const USAGE_RANGE_OPTIONS: { value: UsageRange; label: string }[] = [
+  { value: 'today', label: 'Today' },
+  { value: '7d', label: '7 days' },
+  { value: '30d', label: '30 days' },
+  { value: 'all', label: 'All time' },
+];
+
+/** Calendar-day key YYYY-MM-DD in IST; used with string compare for inclusive ranges. */
+function todayKeyIST(): string {
+  return formatDateKeyIST(new Date());
+}
+
+function minDateKeyInclusiveRangeIST(todayKey: string, calendarDaysSpan: number): string {
+  const [y, mo, da] = todayKey.split('-').map(Number);
+  const d = new Date(Date.UTC(y, mo - 1, da));
+  d.setUTCDate(d.getUTCDate() - (calendarDaysSpan - 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+}
+
+function rowMatchesUsageRange(row: TokenMeterResponse, range: UsageRange, todayKey: string): boolean {
+  if (range === 'all') return true;
+  const source = row.timestamp ?? row.created_at;
+  if (!source) return false;
+  const d = parseApiDate(source);
+  if (Number.isNaN(d.getTime())) return false;
+  const rowKey = formatDateKeyIST(d);
+  if (range === 'today') return rowKey === todayKey;
+  const span = range === '7d' ? 7 : 30;
+  const minKey = minDateKeyInclusiveRangeIST(todayKey, span);
+  return rowKey >= minKey && rowKey <= todayKey;
+}
+
+function usageRangeSubtitle(range: UsageRange): string {
+  switch (range) {
+    case 'today':
+      return 'Daily token usage for your account (India Standard Time)';
+    case '7d':
+      return 'Token usage in the last 7 calendar days (IST)';
+    case '30d':
+      return 'Token usage in the last 30 calendar days (IST)';
+    case 'all':
+      return 'All token usage returned for your account (IST dates)';
+    default:
+      return 'Token usage for your account';
+  }
+}
+
+function usageRangeEmptyDescription(range: UsageRange): string {
+  switch (range) {
+    case 'today':
+      return 'Token records for today will appear here as actions are executed.';
+    case '7d':
+      return 'No token usage in the last 7 days for this account.';
+    case '30d':
+      return 'No token usage in the last 30 days for this account.';
+    case 'all':
+      return 'No token usage records were returned for this account.';
+    default:
+      return 'No token usage for the selected range.';
+  }
+}
+
+function usageRangeTableCaption(range: UsageRange): string {
+  switch (range) {
+    case 'today':
+      return 'today';
+    case '7d':
+      return 'last 7 days (IST)';
+    case '30d':
+      return 'last 30 days (IST)';
+    case 'all':
+      return 'all loaded records';
+    default:
+      return 'selected range';
+  }
 }
 
 export default function TokenSpenditurePage() {
   const { user, isLoading: userLoading } = useUser();
   const [rows, setRows] = useState<TokenMeterResponse[]>([]);
+  const [usageRange, setUsageRange] = useState<UsageRange>('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -155,70 +197,26 @@ export default function TokenSpenditurePage() {
 
   const { lastUpdated } = useAutoRefresh(fetchData, 30000);
 
-  const todayRows = useMemo(() => {
-    return rows.filter((row) => isTodayIST(row.timestamp ?? row.created_at));
-  }, [rows]);
+  const displayRows = useMemo(() => {
+    const todayKey = todayKeyIST();
+    return rows.filter((row) => rowMatchesUsageRange(row, usageRange, todayKey));
+  }, [rows, usageRange]);
 
   const summary = useMemo(() => {
-    const input = todayRows.reduce((acc, row) => acc + toNumber(row.input_token), 0);
-    const output = todayRows.reduce((acc, row) => acc + toNumber(row.output_token), 0);
+    const input = displayRows.reduce((acc, row) => acc + toNumber(row.input_token), 0);
+    const output = displayRows.reduce((acc, row) => acc + toNumber(row.output_token), 0);
     const total = input + output;
-    const sessions = new Set(todayRows.map((row) => row.session_id)).size;
-    return { input, output, total, sessions, count: todayRows.length };
-  }, [todayRows]);
-
-  const hourlyData = useMemo<HourBucket[]>(() => {
-    const buckets = new Map<number, HourBucket>();
-    for (let h = 0; h < 24; h += 1) {
-      const label = `${String(h).padStart(2, '0')}:00`;
-      buckets.set(h, { label, input: 0, output: 0, total: 0 });
-    }
-
-    for (const row of todayRows) {
-      const source = row.timestamp ?? row.created_at;
-      const d = source ? parseApiDate(source) : null;
-      if (!d || Number.isNaN(d.getTime())) continue;
-      const bucket = buckets.get(getHourIST(d));
-      if (!bucket) continue;
-      bucket.input += toNumber(row.input_token);
-      bucket.output += toNumber(row.output_token);
-      bucket.total = bucket.input + bucket.output;
-    }
-    return Array.from(buckets.values());
-  }, [todayRows]);
-
-  const hasTimestampedRows = useMemo(
-    () => todayRows.some((row) => !!row.timestamp || !!row.created_at),
-    [todayRows]
-  );
-
-  const uniqueTimestampCount = useMemo(() => {
-    const keys = new Set(
-      todayRows
-        .map((row) => row.timestamp ?? row.created_at)
-        .filter((value): value is string => !!value)
-        .map((value) => {
-          const d = parseApiDate(value);
-          if (Number.isNaN(d.getTime())) return null;
-          return istMinuteKey(d);
-        })
-        .filter((value): value is string => !!value)
-    );
-    return keys.size;
-  }, [todayRows]);
-
-  const timelineHasSignal = useMemo(() => {
-    if (!hasTimestampedRows) return false;
-    return uniqueTimestampCount > 1;
-  }, [hasTimestampedRows, uniqueTimestampCount]);
+    const sessions = new Set(displayRows.map((row) => row.session_id)).size;
+    return { input, output, total, sessions, count: displayRows.length };
+  }, [displayRows]);
 
   const sessionData = useMemo<SessionBucket[]>(() => {
     const map = new Map<string, SessionBucket>();
-    for (const row of todayRows) {
+    for (const row of displayRows) {
       const sid = row.session_id || 'unknown';
       if (!map.has(sid)) {
         map.set(sid, {
-          label: `${sid.slice(0, 6)}...`,
+          label: sid === 'unknown' ? 'unknown' : `${sid.slice(0, 8)}…`,
           session: sid,
           input: 0,
           output: 0,
@@ -233,22 +231,7 @@ export default function TokenSpenditurePage() {
     }
     return Array.from(map.values())
       .sort((a, b) => b.total - a.total);
-  }, [todayRows]);
-
-  const activityData = useMemo<HourBucket[] | SessionBucket[]>(() => {
-    if (timelineHasSignal) return hourlyData;
-    if (hasTimestampedRows) return sessionData;
-    return todayRows.map((row, idx) => {
-      const input = toNumber(row.input_token);
-      const output = toNumber(row.output_token);
-      return {
-        label: `#${idx + 1}`,
-        input,
-        output,
-        total: input + output,
-      };
-    });
-  }, [timelineHasSignal, hourlyData, hasTimestampedRows, sessionData, todayRows]);
+  }, [displayRows]);
 
   const pieData = useMemo(
     () => [
@@ -270,7 +253,7 @@ export default function TokenSpenditurePage() {
     <div className="min-h-screen">
       <Topbar
         title="Token Spenditure"
-        subtitle="Daily token usage for your account"
+        subtitle={usageRangeSubtitle(usageRange)}
         lastUpdated={lastUpdated}
         onRefresh={fetchData}
       />
@@ -280,13 +263,34 @@ export default function TokenSpenditurePage() {
           <ErrorBanner message={error} onDismiss={() => setError(null)} onRetry={fetchData} />
         )}
 
+        <div className="flex flex-wrap gap-2">
+          {USAGE_RANGE_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => setUsageRange(opt.value)}
+              className={`rounded-lg border px-3 py-1.5 text-sm transition-colors cursor-pointer ${
+                usageRange === opt.value
+                  ? 'border-violet-500/50 bg-violet-500/20 text-white'
+                  : 'border-border bg-muted/30 text-muted-foreground hover:bg-muted/50'
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+
         <div className="relative overflow-hidden rounded-2xl border border-violet-500/30 bg-gradient-to-br from-violet-500/20 via-purple-500/10 to-cyan-500/10 p-5">
           <div className="pointer-events-none absolute -right-12 -top-12 h-36 w-36 rounded-full bg-violet-500/25 blur-3xl" />
           <div className="pointer-events-none absolute -bottom-14 left-8 h-32 w-32 rounded-full bg-cyan-500/20 blur-3xl" />
           <div className="relative flex items-center justify-between gap-4">
             <div>
               <p className="text-xs uppercase tracking-wider text-violet-200/80">Token spenditure</p>
-              <h2 className="mt-1 text-xl font-semibold text-white">Today you used {summary.total.toLocaleString()} tokens</h2>
+              <h2 className="mt-1 text-xl font-semibold text-white">
+                {usageRange === 'today'
+                  ? `Today you used ${summary.total.toLocaleString()} tokens`
+                  : `${summary.total.toLocaleString()} tokens in this range`}
+              </h2>
               <p className="mt-2 text-sm text-violet-100/80">
                 {summary.count.toLocaleString()} actions across {summary.sessions.toLocaleString()} sessions
               </p>
@@ -298,31 +302,33 @@ export default function TokenSpenditurePage() {
         </div>
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <MetricCard title="Total tokens today" value={summary.total} icon={<Coins className="h-4 w-4" />} accent="violet" />
+          <MetricCard
+            title={usageRange === 'today' ? 'Total tokens today' : 'Total tokens'}
+            value={summary.total}
+            icon={<Coins className="h-4 w-4" />}
+            accent="violet"
+          />
           <MetricCard title="Input tokens" value={summary.input} icon={<Database className="h-4 w-4" />} accent="cyan" />
           <MetricCard title="Output tokens" value={summary.output} icon={<Sigma className="h-4 w-4" />} accent="purple" />
           <MetricCard title="Sessions used" value={summary.sessions} icon={<Wallet className="h-4 w-4" />} accent="emerald" />
         </div>
 
-        {todayRows.length === 0 ? (
+        {displayRows.length === 0 ? (
           <div className="rounded-md border border-border bg-card">
             <EmptyState
               icon={<Coins className="h-6 w-6" />}
-              title="No token usage today"
-              description="Token records for today will appear here as actions are executed."
+              title={usageRange === 'today' ? 'No token usage today' : 'No token usage in this range'}
+              description={usageRangeEmptyDescription(usageRange)}
             />
           </div>
         ) : (
           <div className="grid gap-6 xl:grid-cols-3">
             <div className="rounded-2xl border border-border/80 bg-card/80 p-4 shadow-sm backdrop-blur-sm xl:col-span-2">
               <div className="mb-4">
-                <h2 className="text-sm font-semibold text-foreground">Usage timeline</h2>
+                <h2 className="text-sm font-semibold text-foreground">Usage by session</h2>
                 <p className="text-xs text-muted-foreground">
-                  {timelineHasSignal
-                    ? 'Interactive timeline for input, output, and total tokens. Hour labels are India Standard Time (IST).'
-                    : hasTimestampedRows
-                      ? 'Session-wise usage view (timestamps are identical in this dataset).'
-                      : 'Interactive usage chart (timestamps not returned by API).'}
+                  Input and output bars plus total tokens (purple) per <span className="font-mono">session_id</span>{' '}
+                  for the selected range. Axis shows a short session id prefix; hover for the full id.
                 </p>
                 <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
                   <LegendPill label="Total" color={CHART.total} />
@@ -332,7 +338,7 @@ export default function TokenSpenditurePage() {
               </div>
               <div className="h-[340px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={activityData}>
+                  <ComposedChart data={sessionData}>
                     <defs>
                       <linearGradient id="tokenTotalGradient" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor={CHART.total} stopOpacity={0.35} />
@@ -344,9 +350,9 @@ export default function TokenSpenditurePage() {
                       dataKey="label"
                       tick={{ fill: 'var(--muted-foreground)', fontSize: 12 }}
                       interval={0}
-                      angle={timelineHasSignal ? 0 : -20}
-                      textAnchor={timelineHasSignal ? 'middle' : 'end'}
-                      height={timelineHasSignal ? 36 : 50}
+                      angle={-20}
+                      textAnchor="end"
+                      height={56}
                     />
                     <YAxis tick={{ fill: 'var(--muted-foreground)', fontSize: 12 }} />
                     <Tooltip
@@ -357,16 +363,30 @@ export default function TokenSpenditurePage() {
                         borderRadius: 8,
                         boxShadow: '0 8px 24px rgba(0, 0, 0, 0.22)',
                       }}
+                      formatter={(value) => {
+                        if (typeof value === 'number') return value.toLocaleString();
+                        if (Array.isArray(value)) {
+                          return value
+                            .map((v) => (typeof v === 'number' ? v.toLocaleString() : String(v)))
+                            .join(', ');
+                        }
+                        return String(value ?? '');
+                      }}
+                      labelFormatter={(_, payload) => {
+                        const row = payload?.[0]?.payload as SessionBucket | undefined;
+                        return row?.session ?? '';
+                      }}
                     />
                     <Area
                       type="monotone"
                       dataKey="total"
+                      name="Total"
                       stroke={CHART.total}
                       strokeWidth={2}
                       fill="url(#tokenTotalGradient)"
                     />
-                    <Bar dataKey="input" fill={CHART.input} radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="output" fill={CHART.output} radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="input" name="Input" fill={CHART.input} radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="output" name="Output" fill={CHART.output} radius={[4, 4, 0, 0]} />
                   </ComposedChart>
                 </ResponsiveContainer>
               </div>
@@ -375,7 +395,11 @@ export default function TokenSpenditurePage() {
             <div className="rounded-2xl border border-border/80 bg-card/80 p-4 shadow-sm backdrop-blur-sm">
               <div className="mb-4">
                 <h2 className="text-sm font-semibold text-foreground">Input vs output split</h2>
-                <p className="text-xs text-muted-foreground">Distribution of tokens used today.</p>
+                <p className="text-xs text-muted-foreground">
+                  {usageRange === 'today'
+                    ? 'Distribution of tokens used today.'
+                    : 'Distribution of tokens in the selected range.'}
+                </p>
               </div>
               <div className="h-[340px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
@@ -411,7 +435,9 @@ export default function TokenSpenditurePage() {
 
         <div className="rounded-md border border-border bg-card">
           <div className="border-b border-border px-4 py-3">
-            <h2 className="text-sm font-medium text-foreground">Recent usage records (today, IST)</h2>
+            <h2 className="text-sm font-medium text-foreground">
+              Recent usage records ({usageRangeTableCaption(usageRange)})
+            </h2>
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
@@ -425,7 +451,7 @@ export default function TokenSpenditurePage() {
                 </tr>
               </thead>
               <tbody>
-                {todayRows.map((row) => {
+                {displayRows.map((row) => {
                   const input = toNumber(row.input_token);
                   const output = toNumber(row.output_token);
                   return (
@@ -448,7 +474,7 @@ export default function TokenSpenditurePage() {
             </table>
           </div>
           <div className="border-t border-border px-4 py-2 text-xs text-muted-foreground">
-            {todayRows.length} record{todayRows.length !== 1 ? 's' : ''} today (times in India Standard Time).
+            {displayRows.length} record{displayRows.length !== 1 ? 's' : ''} — times in India Standard Time.
           </div>
         </div>
       </div>

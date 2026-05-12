@@ -402,7 +402,7 @@ const handleForgotPassword = async () => {
                 ) : (
                   <button
                     onClick={handleResendEmail}
-                    className="font-medium text-foreground hover:underline"
+                    className="font-medium text-foreground hover:underline cursor-pointer"
                   >
                     Resend email
                   </button>
@@ -424,7 +424,7 @@ const handleForgotPassword = async () => {
               </p>
               <button
                 onClick={() => setMode('signin')}
-                className="text-sm font-medium text-foreground hover:underline"
+                className="text-sm font-medium text-foreground hover:underline cursor-pointer"
               >
                 Back to Log In
               </button>
@@ -438,7 +438,7 @@ const handleForgotPassword = async () => {
               <div className="flex border-b border-border">
                 <button
                   onClick={() => setMode('signup')}
-                  className={`flex-1 py-3 text-sm font-medium transition-colors ${
+                  className={`flex-1 py-3 text-sm font-medium transition-colors cursor-pointer ${
                     mode === 'signup'
                       ? 'border-b-2 border-foreground text-foreground'
                       : 'text-muted-foreground hover:text-foreground'
@@ -448,7 +448,7 @@ const handleForgotPassword = async () => {
                 </button>
                 <button
                   onClick={() => setMode('signin')}
-                  className={`flex-1 py-3 text-sm font-medium transition-colors ${
+                  className={`flex-1 py-3 text-sm font-medium transition-colors cursor-pointer ${
                     mode === 'signin'
                       ? 'border-b-2 border-foreground text-foreground'
                       : 'text-muted-foreground hover:text-foreground'
@@ -478,7 +478,7 @@ const handleForgotPassword = async () => {
                     <button
                       onClick={() => handleOAuth('google')}
                       disabled={oauthLoading !== null}
-                      className="flex w-full items-center justify-center gap-2 rounded-md border border-border bg-muted px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted/80 disabled:opacity-50"
+                      className="flex w-full items-center justify-center gap-2 rounded-md border border-border bg-muted px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted/80 disabled:opacity-50 cursor-pointer"
                     >
                       {oauthLoading === 'google' ? (
                         <>
@@ -517,7 +517,7 @@ const handleForgotPassword = async () => {
                     <button
                       onClick={() => handleOAuth('github')}
                       disabled={oauthLoading !== null}
-                      className="flex w-full items-center justify-center gap-2 rounded-md border border-border bg-muted px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted/80 disabled:opacity-50"
+                      className="flex w-full items-center justify-center gap-2 rounded-md border border-border bg-muted px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted/80 disabled:opacity-50 cursor-pointer"
                     >
                       {oauthLoading === 'github' ? (
                         <>
@@ -596,7 +596,7 @@ const handleForgotPassword = async () => {
                       <button
                         type="button"
                         onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
                       >
                         {showPassword ? (
                           <EyeOff className="h-4 w-4" />
@@ -613,7 +613,7 @@ const handleForgotPassword = async () => {
                       <button
                         type="button"
                         onClick={() => setMode('forgot')}
-                        className="mt-1.5 text-xs text-muted-foreground hover:text-foreground"
+                        className="mt-1.5 text-xs text-muted-foreground hover:text-foreground cursor-pointer"
                       >
                         Forgot password?
                       </button>
@@ -636,7 +636,7 @@ const handleForgotPassword = async () => {
                       <button
                         type="button"
                         onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
                       >
                         {showConfirmPassword ? (
                           <EyeOff className="h-4 w-4" />
@@ -660,7 +660,7 @@ const handleForgotPassword = async () => {
                         <button
                           type="button"
                           onClick={() => setMode('signin')}
-                          className="font-medium underline"
+                          className="font-medium underline cursor-pointer"
                         >
                           Log in instead?
                         </button>
@@ -671,7 +671,7 @@ const handleForgotPassword = async () => {
                         <button
                           type="button"
                           onClick={handleResendEmail}
-                          className="font-medium underline"
+                          className="font-medium underline cursor-pointer"
                           disabled={resendCooldown > 0}
                         >
                           {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend verification email?'}
@@ -683,7 +683,7 @@ const handleForgotPassword = async () => {
                         <button
                           type="button"
                           onClick={() => setMode('signup')}
-                          className="font-medium underline"
+                          className="font-medium underline cursor-pointer"
                         >
                           Sign up instead?
                         </button>
@@ -701,7 +701,7 @@ const handleForgotPassword = async () => {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="flex w-full items-center justify-center gap-2 rounded-md bg-foreground px-4 py-2.5 text-sm font-medium text-background transition-colors hover:bg-foreground/90 disabled:opacity-50"
+                  className="flex w-full items-center justify-center gap-2 rounded-md bg-foreground px-4 py-2.5 text-sm font-medium text-background transition-colors hover:bg-foreground/90 disabled:opacity-50 cursor-pointer"
                 >
                   {loading && <Loader2 className="h-4 w-4 animate-spin" />}
                   {mode === 'signup' && (loading ? 'Creating account...' : 'Create Account')}
@@ -714,7 +714,7 @@ const handleForgotPassword = async () => {
                   <button
                     type="button"
                     onClick={() => setMode('signin')}
-                    className="w-full text-center text-sm text-muted-foreground hover:text-foreground"
+                    className="w-full text-center text-sm text-muted-foreground hover:text-foreground cursor-pointer"
                   >
                     Back to Log In
                   </button>

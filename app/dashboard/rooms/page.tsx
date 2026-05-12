@@ -437,7 +437,7 @@ export default function RoomsPage() {
                     <button
                       key={roomId}
                       onClick={() => setSelectedRoomId(roomId)}
-                      className={`w-full rounded-md border px-3 py-2 text-left text-sm transition-colors ${
+                      className={`w-full rounded-md border px-3 py-2 text-left text-sm transition-colors cursor-pointer ${
                         active
                           ? 'border-foreground bg-muted text-foreground'
                           : 'border-border text-muted-foreground hover:bg-muted hover:text-foreground'
@@ -472,7 +472,7 @@ export default function RoomsPage() {
                       type="button"
                       onClick={copyIntegrationUrl}
                       disabled={!roomIntegrationUrl}
-                      className="rounded-md border border-border px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
+                      className="rounded-md border border-border px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50 cursor-pointer"
                     >
                       Copy URL
                     </button>
@@ -549,7 +549,7 @@ export default function RoomsPage() {
                             <div className="flex gap-2">
                               <button
                                 onClick={() => toggleTool(tool, true)}
-                                className={`rounded px-2 py-1 text-xs transition-colors ${
+                                className={`rounded px-2 py-1 text-xs transition-colors cursor-pointer ${
                                   isAllowed
                                     ? 'bg-green-600 text-white'
                                     : 'border border-border text-muted-foreground hover:bg-muted hover:text-foreground'
@@ -559,7 +559,7 @@ export default function RoomsPage() {
                               </button>
                               <button
                                 onClick={() => toggleTool(tool, false)}
-                                className={`rounded px-2 py-1 text-xs transition-colors ${
+                                className={`rounded px-2 py-1 text-xs transition-colors cursor-pointer ${
                                   isDenied
                                     ? 'bg-red-600 text-white'
                                     : 'border border-border text-muted-foreground hover:bg-muted hover:text-foreground'
@@ -634,7 +634,7 @@ export default function RoomsPage() {
                               </div>
                               <button
                                 onClick={() => copyInviteCode(code)}
-                                className="rounded-md border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                                className="rounded-md border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground cursor-pointer"
                               >
                                 Copy
                               </button>

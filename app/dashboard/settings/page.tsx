@@ -165,7 +165,7 @@ export default function SettingsPage() {
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
-                    className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm ${
+                    className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm cursor-pointer ${
                       activeTab === tab.id ? 'bg-muted text-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                     }`}
                   >
@@ -219,7 +219,7 @@ export default function SettingsPage() {
                     <button
                       onClick={handleSaveProfile}
                       disabled={saving}
-                      className="flex items-center gap-1.5 rounded-md bg-foreground px-3 py-1.5 text-sm font-medium text-background hover:bg-foreground/90 disabled:opacity-50"
+                      className="flex items-center gap-1.5 rounded-md bg-foreground px-3 py-1.5 text-sm font-medium text-background hover:bg-foreground/90 disabled:opacity-50 cursor-pointer"
                     >
                       {saving && <RefreshCw className="h-3.5 w-3.5 animate-spin" />}
                       Save
@@ -236,7 +236,7 @@ export default function SettingsPage() {
                   <button
                     onClick={handleSyncRepos}
                     disabled={syncing}
-                    className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+                    className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground cursor-pointer"
                   >
                     <RefreshCw className={`h-3.5 w-3.5 ${syncing ? 'animate-spin' : ''}`} />
                     Sync
@@ -256,7 +256,7 @@ export default function SettingsPage() {
                             <div className="flex items-center gap-2">
                               <button
                                 onClick={() => handleSetPermission(i, 'read')}
-                                className={`px-2 py-1 text-xs font-medium rounded ${
+                                className={`px-2 py-1 text-xs font-medium rounded cursor-pointer ${
                                   repos[i].can_read
                                     ? 'bg-blue-500 text-white hover:bg-blue-600'
                                     : 'bg-card text-muted-foreground hover:bg-muted border border-border'
@@ -267,7 +267,7 @@ export default function SettingsPage() {
                               <button
                                 onClick={() => handleSetPermission(i, 'write')}
                                 disabled={!repos[i].can_read}
-                                className={`px-2 py-1 text-xs font-medium rounded ${
+                                className={`px-2 py-1 text-xs font-medium rounded cursor-pointer ${
                                   repos[i].can_write
                                     ? 'bg-yellow-500 text-white hover:bg-yellow-600'
                                     : repos[i].can_read
@@ -285,7 +285,7 @@ export default function SettingsPage() {
                         <button
                           onClick={handleSavePermissions}
                           disabled={saving}
-                        className="flex items-center gap-1.5 rounded-md bg-foreground px-3 py-1.5 text-sm font-medium text-background hover:bg-foreground/90 disabled:opacity-50"
+                        className="flex items-center gap-1.5 rounded-md bg-foreground px-3 py-1.5 text-sm font-medium text-background hover:bg-foreground/90 disabled:opacity-50 cursor-pointer"
                         >
                           {saving && <RefreshCw className="h-3.5 w-3.5 animate-spin" />}
                           Save

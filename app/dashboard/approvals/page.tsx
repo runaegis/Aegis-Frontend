@@ -114,7 +114,7 @@ export default function ApprovalsPage() {
         <div className="mb-4 flex flex-wrap items-center gap-2 text-sm">
           <button
             onClick={() => setStatusFilter('all')}
-            className={`rounded-md border px-3 py-1.5 transition-colors ${
+            className={`rounded-md border px-3 py-1.5 transition-colors cursor-pointer ${
               statusFilter === 'all'
                 ? 'border-foreground bg-foreground text-background'
                 : 'border-border text-muted-foreground hover:bg-muted hover:text-foreground'
@@ -124,7 +124,7 @@ export default function ApprovalsPage() {
           </button>
           <button
             onClick={() => setStatusFilter('pending')}
-            className={`rounded-md border px-3 py-1.5 transition-colors ${
+            className={`rounded-md border px-3 py-1.5 transition-colors cursor-pointer ${
               statusFilter === 'pending'
                 ? 'border-amber-500 bg-amber-500/10 text-amber-600'
                 : 'border-border text-muted-foreground hover:bg-muted hover:text-foreground'
@@ -134,7 +134,7 @@ export default function ApprovalsPage() {
           </button>
           <button
             onClick={() => setStatusFilter('approved')}
-            className={`rounded-md border px-3 py-1.5 transition-colors ${
+            className={`rounded-md border px-3 py-1.5 transition-colors cursor-pointer ${
               statusFilter === 'approved'
                 ? 'border-success bg-success/10 text-success'
                 : 'border-border text-muted-foreground hover:bg-muted hover:text-foreground'
@@ -144,7 +144,7 @@ export default function ApprovalsPage() {
           </button>
           <button
             onClick={() => setStatusFilter('rejected')}
-            className={`rounded-md border px-3 py-1.5 transition-colors ${
+            className={`rounded-md border px-3 py-1.5 transition-colors cursor-pointer ${
               statusFilter === 'rejected'
                 ? 'border-destructive bg-destructive/10 text-destructive'
                 : 'border-border text-muted-foreground hover:bg-muted hover:text-foreground'
@@ -240,7 +240,7 @@ export default function ApprovalsPage() {
                       <button
                         onClick={() => handleAction(approval.id, false)}
                         disabled={isActioning}
-                        className="flex items-center gap-1.5 rounded-md bg-success px-3 py-1.5 text-sm font-medium text-white hover:bg-success/90 disabled:cursor-not-allowed disabled:opacity-60"
+                        className="flex items-center gap-1.5 rounded-md bg-success px-3 py-1.5 text-sm font-medium text-white hover:bg-success/90 disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer"
                       >
                         <Check className="h-4 w-4" />
                         Approve
@@ -248,7 +248,7 @@ export default function ApprovalsPage() {
                       <button
                         onClick={() => handleAction(approval.id, true)}
                         disabled={isActioning}
-                        className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                        className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer"
                       >
                         <X className="h-4 w-4" />
                         Reject

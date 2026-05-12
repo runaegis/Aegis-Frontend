@@ -4,11 +4,13 @@ export interface SessionAction {
   agent_name: string;
   tool_name: string;
   arguments: Record<string, any>;
+  /** Human-readable bullet points; preferred over raw `arguments` in the UI when present. */
+  action_pointers?: string[];
   action_summary: string;
   result: string;
-  decision: 'ALLOW' | 'DENY' | 'REWRITE' | 'REQUIRE_APPROVAL' | string;
+  decision: 'ALLOW' | 'DENY' | 'cd' | 'REQUIRE_APPROVAL' | string;
   target_repo: string;
-  target_branch: string;
+  target_branch: string | null;
   sequence_order: number;
   timestamp: string;
   user_id: string;

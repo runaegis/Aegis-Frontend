@@ -196,7 +196,7 @@ export default function IntegrationsPage() {
                     <span className="text-xs text-muted-foreground">.vscode/mcp.json</span>
                     <button
                       onClick={handleCopyVscode}
-                      className="flex items-center gap-1.5 rounded-md bg-foreground px-2 py-1 text-xs font-medium text-background hover:bg-foreground/90 transition-colors"
+                      className="flex items-center gap-1.5 rounded-md bg-foreground px-2 py-1 text-xs font-medium text-background hover:bg-foreground/90 transition-colors cursor-pointer"
                     >
                       {copiedVscode ? (
                         <>
@@ -258,7 +258,7 @@ export default function IntegrationsPage() {
                     <span className="text-xs text-muted-foreground">~/.cursor/mcp.json</span>
                     <button
                       onClick={handleCopyCursor}
-                      className="flex items-center gap-1.5 rounded-md bg-foreground px-2 py-1 text-xs font-medium text-background hover:bg-foreground/90 transition-colors"
+                      className="flex items-center gap-1.5 rounded-md bg-foreground px-2 py-1 text-xs font-medium text-background hover:bg-foreground/90 transition-colors cursor-pointer"
                     >
                       {copiedCursor ? (
                         <>
@@ -321,7 +321,7 @@ export default function IntegrationsPage() {
                     <span className="text-xs text-muted-foreground">~/.claude/mcp.json</span>
                     <button
                       onClick={handleCopyClaude}
-                      className="flex items-center gap-1.5 rounded-md bg-foreground px-2 py-1 text-xs font-medium text-background hover:bg-foreground/90 transition-colors"
+                      className="flex items-center gap-1.5 rounded-md bg-foreground px-2 py-1 text-xs font-medium text-background hover:bg-foreground/90 transition-colors cursor-pointer"
                     >
                       {copiedClaude ? (
                         <>

@@ -410,7 +410,7 @@ const handleSavePermissions = async () => {
             </div>
             <div className="p-5">
               {!synced ? (
-                <button onClick={handleSync} disabled={syncing} className={`${primaryBtn} w-full`}>
+                <button onClick={handleSync} disabled={syncing} className={`${primaryBtn} w-full cursor-pointer`}>
                   {syncing ? <><RefreshCw className="h-4 w-4 animate-spin" /> Syncing...</> : <><RefreshCw className="h-4 w-4" /> Sync repositories</>}
                 </button>
               ) : (
@@ -479,7 +479,7 @@ const handleSavePermissions = async () => {
               <div className="mb-3 flex items-center gap-2">
                 <span className="text-xs text-muted-foreground">Apply to all:</span>
                 {permOptions.map((opt) => (
-                  <button key={opt.value} onClick={() => handleBulkPermission(opt.value)} className="rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
+                  <button key={opt.value} onClick={() => handleBulkPermission(opt.value)} className="rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer">
                     {opt.label}
                   </button>
                 ))}
@@ -493,7 +493,7 @@ const handleSavePermissions = async () => {
                         <button
                           key={opt.value}
                           onClick={() => handleSetPermission(i, opt.value)}
-                          className={`px-2 py-1 text-xs font-medium transition-colors ${getPermissionLabel(repo) === opt.value ? opt.activeClass : 'bg-card text-muted-foreground hover:bg-muted'}`}
+                          className={`px-2 py-1 text-xs font-medium transition-colors cursor-pointer ${getPermissionLabel(repo) === opt.value ? opt.activeClass : 'bg-card text-muted-foreground hover:bg-muted'}`}
                         >
                           {opt.label}
                         </button>
@@ -540,7 +540,7 @@ const handleSavePermissions = async () => {
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
-                    className={`flex-1 rounded px-3 py-1.5 text-xs font-medium transition-all ${activeTab === tab.id ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                    className={`flex-1 rounded px-3 py-1.5 text-xs font-medium transition-all cursor-pointer ${activeTab === tab.id ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
                   >
                     {tab.label}
                   </button>
