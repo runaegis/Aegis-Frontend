@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { useUser } from '@/lib/hooks';
 import { getInitials } from '@/lib/utils';
+import { api } from '@/lib/api';
 
 const nav = [
   { name: 'Runs', href: '/dashboard', icon: Activity },
@@ -43,11 +44,9 @@ export default function Sidebar() {
     return pathname.startsWith(href);
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
-    window.location.href = '/auth';
-  };
+  const handleLogout = async () => {
+    await api.logOut();
+  };  
 
   const NavContent = () => (
     <>
@@ -116,7 +115,7 @@ export default function Sidebar() {
 
         <button
           onClick={handleLogout}
-          className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-sm text-red-500 transition-colors hover:bg-red-500/10 cursor-pointer"
+          className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-sm text-destructive transition-all hover:bg-muted hover:text-destructive"
         >
           <LogOut className="h-4 w-4" />
           Logout

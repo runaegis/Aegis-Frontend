@@ -45,7 +45,10 @@ function ResetPasswordPage() {
           setError(null);
         } else {
           const data = await res.json();
-          setError(data.detail || "Reset link has expired or is invalid");
+          setError(
+            data?.detail?.message ||
+            "Reset link has expired or is invalid"
+          );
         }
       } catch (err) {
         setError("Failed to validate reset link");
@@ -110,7 +113,10 @@ function ResetPasswordPage() {
 
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.detail || "Failed to reset password");
+        throw data.detail || {
+  code: 'PASSWORD_RESET_FAILED',
+  message: 'Failed to reset password',
+};
       }
 
       setSuccess(true);
@@ -122,8 +128,34 @@ function ResetPasswordPage() {
         window.location.href = "/auth";
       }, 2000);
     } catch (err: any) {
-      setError(err.message || "Failed to reset password. Please try again.");
-    } finally {
+  const detail = err?.detail || err;
+
+  switch (detail.code) {
+    case 'INVALID_RESET_TOKEN':
+      setError(
+        'This password reset link has expired or is invalid.'
+      );
+      break;
+
+    case 'USER_NOT_FOUND':
+      setError(
+        'This account no longer exists.'
+      );
+      break;
+
+    case 'PASSWORD_RESET_FAILED':
+      setError(
+        'Failed to reset password. Please try again.'
+      );
+      break;
+
+    default:
+      setError(
+        detail.message ||
+        'Something went wrong. Please try again.'
+      );
+  }
+} finally {
       setLoading(false);
     }
   };
@@ -178,7 +210,7 @@ function ResetPasswordPage() {
         <div className="w-full max-w-md">
           <div className="rounded-md border border-border bg-card p-6 sm:p-8">
             <div className="flex justify-center mb-4">
-              <CheckCircle className="w-12 h-12 text-green-500" />
+              <CheckCircle className="w-12 h-12 text-green-500" animate-pulse />
             </div>
             <h1 className="text-xl font-semibold text-center mb-2 text-foreground">
               Password Reset Successful

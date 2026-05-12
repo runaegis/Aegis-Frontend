@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { api } from '@/lib/api';
+import { api, AuthError } from '@/lib/api';
 import { useRouter } from 'next/navigation';
 import { useUser } from '@/lib/hooks';
 import Layout from '@/components/layout/Layout';
@@ -13,35 +13,29 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
-    const verifyAndLoad = async () => {
-      const authToken = localStorage.getItem('access_token');
-      if (!authToken){
-        router.push("/login");
-        return; 
+  const verifyAndLoad = async () => {
+    try {
+      const [userResponse] = await Promise.all([
+        !user?.id ? api.getUserDetails() : Promise.resolve(user)
+      ]);
+
+      if (!user?.id) {
+        setUser(userResponse);
       }
-      try {
-        const [userResponse, stepResponse] = await Promise.all([
-          !user?.id ? api.getUserDetails(authToken) : Promise.resolve(user),
-          api.getOnboardingStep(authToken)
-        ]);
+      setIsReady(true);
 
-        if (!user?.id) {
-          setUser(userResponse);
+    } catch (error) {
+        if (error instanceof AuthError) {
+          router.replace('/auth');
+          return;
         }
-        const realStep = stepResponse.onboarding_step;
 
-        if (realStep < 6) {
-          router.replace('/onboarding');
-        } else {
-          setIsReady(true);
-        }
-      } catch (error) {
-        console.error("Failed to verify dashboard access:", error);
+        console.error(error);
       }
-    };
+  };
 
-    verifyAndLoad();
-  }, [router, setUser, user?.id]);
+  verifyAndLoad();
+}, [router, setUser, user?.id]);
 
   if (!isReady) {
     return (

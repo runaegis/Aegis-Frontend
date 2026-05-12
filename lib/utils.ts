@@ -27,13 +27,16 @@ export function formatFullTimestamp(timestamp: string): string {
   });
 }
 
-export function getInitials(name: string | null | undefined): string {
-  if (name == null || typeof name !== 'string') return '?';
-  const trimmed = name.trim();
-  if (!trimmed) return '?';
-  const parts = trimmed.split(/[_\-\s]+/).filter(Boolean);
+export function getInitials(name?: string | null): string {
+  if (!name || typeof name !== 'string') return '?';
+
+  const parts = name.split(/[_\-\s]+/).filter(Boolean);
+
   if (parts.length === 0) return '?';
-  if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+  if (parts.length === 1) {
+    return parts[0].substring(0, 2).toUpperCase();
+  }
+
   return (parts[0][0] + parts[1][0]).toUpperCase();
 }
 

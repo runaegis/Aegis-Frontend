@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import { useUser, useEmail } from '@/lib/hooks';
 import { User } from '@/lib/types';
+import { apiFetch } from '@/lib/api';
 
 type AuthMode = 'signin' | 'signup' | 'forgot';
 
@@ -152,6 +153,7 @@ const handleResendEmail = async () => {
       headers: {
         "Content-Type": "application/json",
       },
+      credentials: 'include', // Include cookies for authentication
       body: JSON.stringify({ email: signupEmail }),
     });
 
@@ -178,6 +180,7 @@ const handleResendEmail = async () => {
       headers: {
         "Content-Type": "application/json",
       },
+      credentials: 'include', // Include cookies for authentication
       body: JSON.stringify({
         name,
         email,
@@ -189,7 +192,10 @@ const handleResendEmail = async () => {
       const data = await res.json();
 
       if (data.detail || data.message) {
-        throw new Error(data.detail || data.message);
+        throw data.detail || {
+        code: 'UNKNOWN_ERROR',
+        message: 'Signup failed',
+      };
       }
 
       throw new Error("Signup failed");
@@ -201,12 +207,26 @@ const handleResendEmail = async () => {
     setSignupSuccess(true);
 
   } catch (err: any) {
-    if (err.message.includes("already exists")) {
-      setErrors({ form: "email_exists" });
-    } else {
-      setErrors({ form: err.message || "Something went wrong" });
-    }
-  } finally {
+  const detail = err?.detail || err;
+
+  switch (detail.code) {
+    case 'ACCOUNT_EXISTS':
+      setErrors({ form: 'email_exists' });
+      break;
+
+    case 'SIGNUP_FAILED':
+      setErrors({
+        form: 'Could not create account. Please try again.',
+      });
+      break;
+
+    default:
+      setErrors({
+        form: detail.message || 'Something went wrong.',
+      });
+  }
+}
+  finally {
     setLoading(false);
   }
 };
@@ -223,6 +243,7 @@ const handleResendEmail = async () => {
       headers: {
         "Content-Type": "application/json",
       },
+      credentials: 'include', // Include cookies for authentication
       body: JSON.stringify({
         email,
         password,
@@ -232,36 +253,53 @@ const handleResendEmail = async () => {
     const data = await res.json();
 
     if (!res.ok) {
-      throw new Error(data.detail || "Login failed");
+      throw data.detail || {
+  code: 'UNKNOWN_ERROR',
+  message: 'Login failed',
+};
     }
-
-    localStorage.setItem("access_token", data.access_token);
-    localStorage.setItem("refresh_token", data.refresh_token);
 
     // Store user data with email
     const userData: User = {
       email: email,
       github_user_id: data.github_user_id || 0,
       username: data.username || '',
-      access_token: data.access_token || '',
+      access_token: data.access_token || '', // Github PAT
     };
     setUser(userData);
 
     setLoggingIn(true);
 
     setTimeout(() => {
-      router.push("/auth-callback");
+      router.push("/onboarding");
     }, 1000);
 
   } catch (err: any) {
-    const message = err.message;
+  const detail = err?.detail || err;
 
-    if (message.includes("Invalid credentials")) {
-      setErrors({ form: "Incorrect email or password." });
-    } else {
-      setErrors({ form: "Something went wrong. Please try again." });
-    }
-  } finally {
+  switch (detail.code) {
+    case 'ACCOUNT_NOT_FOUND':
+      setErrors({ form: 'not_found' });
+      break;
+
+    case 'INVALID_PASSWORD':
+      setErrors({
+        form: 'Incorrect password.',
+      });
+      break;
+
+    case 'EMAIL_NOT_VERIFIED':
+      setErrors({ form: 'unverified' });
+      break;
+
+    default:
+      setErrors({
+        form:
+          detail.message ||
+          'Something went wrong. Please try again.',
+      });
+  }
+} finally {
     setLoading(false);
   }
 };
@@ -289,6 +327,7 @@ const handleForgotPassword = async () => {
       headers: {
         "Content-Type": "application/json",
       },
+      credentials: 'include', // Include cookies for authentication
       body: JSON.stringify({ email }),
     });
 
