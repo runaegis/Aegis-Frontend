@@ -60,7 +60,7 @@ export default function RoomsPage() {
 }, [role]);
 
 const canEditViewedRole = useMemo(() => {
-  return ROLE_LEVELS[role] > ROLE_LEVELS[viewingRole];
+  return ROLE_LEVELS[role] >= ROLE_LEVELS[viewingRole];
 }, [role, viewingRole]);
 
 const canCreateInvites = useMemo(() => {
