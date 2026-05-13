@@ -203,8 +203,13 @@ async function getAggregatedUserActions(
 }
 
 export function invalidateCache(userId?: string) {
-  if (userId) _cache.delete(userId);
-  else _cache.clear();
+  if (userId) {
+    for (const key of [..._cache.keys()]) {
+      if (key.startsWith(`${userId}:`)) _cache.delete(key);
+    }
+  } else {
+    _cache.clear();
+  }
 }
 
 // ── Session aggregation helper ────────────────────────────────────────────────
@@ -280,6 +285,22 @@ export const api = {
       (a, b) =>
         new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
     );
+  },
+
+  /** One page of session actions (runs). Default matches server pagination (20). */
+  getSessionActionsPage: async (
+    userId: string,
+    page = 1,
+    page_size = 20,
+  ): Promise<PaginatedResponse<SessionAction>> => {
+    const data = await getUserActions(userId, { page, page_size });
+    return {
+      ...data,
+      items: [...data.items].sort(
+        (a, b) =>
+          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+      ),
+    };
   },
 
   getSessions: async (userId?: string): Promise<Session[]> => {

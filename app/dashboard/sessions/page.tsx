@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Layers, ChevronDown, ChevronRight, Clock, GitBranch } from 'lucide-react';
-import { api } from '@/lib/api';
-import { useAutoRefresh, useUser } from '@/lib/hooks';
+import { useUser } from '@/lib/hooks';
+import { useDashboardData } from '@/lib/dashboardDataContext';
 import { AggregatedSessionAction, PaginatedResponse, SessionAction } from '@/lib/types';
 import {
   cn,
@@ -43,20 +43,43 @@ export default function SessionsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedSession, setExpandedSession] = useState<string | null>(null);
+  const pageRef = useRef(page);
+  useEffect(() => {
+    pageRef.current = page;
+  }, [page]);
+
   const { user, isLoading: userLoading } = useUser();
+  const { fetchAggregatedPage, globalDataEpoch, lastUpdated } = useDashboardData();
 
-  const fetchData = useCallback(async () => {
-    if (!user?.id) {
-      if (!userLoading) {
-        setData(EMPTY_PAGE);
-        setLoading(false);
+  const fetchData = useCallback(
+    async (options?: { soft?: boolean }) => {
+      if (!user?.id) {
+        if (!userLoading) {
+          setData(EMPTY_PAGE);
+          setLoading(false);
+        }
+        return;
       }
-      return;
-    }
 
+      if (!options?.soft) setLoading(true);
+      try {
+        const result = await fetchAggregatedPage(page, { force: false });
+        setData(result);
+        setError(null);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load sessions');
+      } finally {
+        if (!options?.soft) setLoading(false);
+      }
+    },
+    [user?.id, userLoading, page, fetchAggregatedPage],
+  );
+
+  const refreshForce = useCallback(async () => {
+    if (!user?.id) return;
     setLoading(true);
     try {
-      const result = await api.getAggregatedSessions(user.id, page, PAGE_SIZE);
+      const result = await fetchAggregatedPage(page, { force: true });
       setData(result);
       setError(null);
     } catch (err) {
@@ -64,18 +87,31 @@ export default function SessionsPage() {
     } finally {
       setLoading(false);
     }
-  }, [user?.id, userLoading, page]);
+  }, [user?.id, page, fetchAggregatedPage]);
 
   useEffect(() => {
-    if (user?.id) {
-      fetchData();
-    } else if (!userLoading) {
-      setData(EMPTY_PAGE);
-      setLoading(false);
-    }
-  }, [user?.id, userLoading, fetchData]);
+    void fetchData({ soft: false });
+  }, [fetchData]);
 
-  const { lastUpdated } = useAutoRefresh(fetchData, 30000);
+  useEffect(() => {
+    if (globalDataEpoch === 0) return;
+    if (!user?.id || userLoading) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const result = await fetchAggregatedPage(pageRef.current, { force: false });
+        if (!cancelled) {
+          setData(result);
+          setError(null);
+        }
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load sessions');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [globalDataEpoch, user?.id, userLoading, fetchAggregatedPage]);
 
   if (userLoading || loading) {
     return (
@@ -96,12 +132,12 @@ export default function SessionsPage() {
           title="Sessions"
           subtitle="Agent working sessions"
           lastUpdated={lastUpdated}
-          onRefresh={fetchData}
+          onRefresh={refreshForce}
         />
         <div className="p-6">
           {error && (
             <div className="mb-4">
-              <ErrorBanner message={error} onDismiss={() => setError(null)} onRetry={fetchData} />
+              <ErrorBanner message={error} onDismiss={() => setError(null)} onRetry={refreshForce} />
             </div>
           )}
 
