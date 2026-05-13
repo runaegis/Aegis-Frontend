@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState } from 'react';
 import { Activity, GitBranch, Search, ChevronDown, ChevronRight, Sparkles } from 'lucide-react';
-import { api } from '@/lib/api';
-import { useUser, useAutoRefresh } from '@/lib/hooks';
-import { SessionAction, Metrics } from '@/lib/types';
+import { useUser } from '@/lib/hooks';
+import { useDashboardData } from '@/lib/dashboardDataContext';
+import { SessionAction } from '@/lib/types';
 import {
   cn,
   formatRelativeTime,
@@ -29,45 +29,22 @@ import { toSessionActionRawJsonView } from '@/lib/canonicalSessionAction';
 
 export default function DashboardPage() {
   const { user, isLoading: userLoading } = useUser();
-  const [runs, setRuns] = useState<SessionAction[]>([]);
-  const [metrics, setMetrics] = useState<Metrics>({ total: 0, allows: 0, denies: 0, rewrites: 0, approvals: 0 });
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    sessionActions: runs,
+    runsLoading,
+    runsLoadingMore,
+    runsError,
+    dismissRunsError,
+    hasMoreRuns,
+    loadMoreRuns,
+    refreshRuns,
+    metrics,
+    metricsPartial,
+    lastUpdated,
+  } = useDashboardData();
   const [search, setSearch] = useState('');
   const [decisionFilter, setDecisionFilter] = useState('all');
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
-
-  const fetchData = useCallback(async () => {
-    // Don't fetch until user is resolved
-    if (!user?.id) return;
-
-    setLoading(true);
-    try {
-      const [runsData, metricsData] = await Promise.all([
-        api.getRuns(user.id),
-        api.getMetrics(user.id),
-      ]);
-      setRuns(runsData);
-      setMetrics(metricsData);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not connect to backend');
-    } finally {
-      setLoading(false);
-    }
-  }, [user?.id]);
-
-  // Trigger fetch when user becomes available
-  useEffect(() => {
-    if (user?.id) {
-      fetchData();
-    } else if (!userLoading) {
-      // User finished loading but is null/unauthenticated
-      setLoading(false);
-    }
-  }, [user?.id, userLoading, fetchData]);
-
-  const { lastUpdated } = useAutoRefresh(fetchData, 30000);
 
   const filteredRuns = runs.filter((run) => {
     const q = search.toLowerCase();
@@ -94,8 +71,7 @@ export default function DashboardPage() {
     return matchesSearch && matchesDecision;
   });
 
-  // Show spinner while user auth is resolving OR data is loading
-  if (userLoading || loading) {
+  if (userLoading || (runsLoading && runs.length === 0)) {
     return (
       <div className="flex h-[60vh] items-center justify-center">
         <LoadingSpinner size="lg" />
@@ -114,13 +90,17 @@ export default function DashboardPage() {
           title="Runs"
           subtitle="Real-time agent activity"
           lastUpdated={lastUpdated}
-          onRefresh={fetchData}
+          onRefresh={refreshRuns}
         />
 
         <div className="p-6">
-        {error && (
+        {runsError && (
           <div className="mb-4">
-            <ErrorBanner message={error} onDismiss={() => setError(null)} onRetry={fetchData} />
+            <ErrorBanner
+              message={runsError}
+              onDismiss={dismissRunsError}
+              onRetry={refreshRuns}
+            />
           </div>
         )}
 
@@ -156,6 +136,14 @@ export default function DashboardPage() {
             className="border-sky-500/25 bg-gradient-to-br from-sky-500/12 to-card shadow-lg shadow-sky-500/10 ring-1 ring-inset ring-sky-400/10"
           />
         </div>
+
+        {metricsPartial && (
+          <p className="mb-4 text-xs text-zinc-500">
+            Allow / deny / rewrite / approval counts reflect loaded actions only (
+            {runs.length.toLocaleString()} of {metrics.total.toLocaleString()}).
+            Use &quot;Load more&quot; below for additional rows.
+          </p>
+        )}
 
         {runs.length === 0 ? (
           <div className="rounded-2xl border border-white/10 bg-card/70 shadow-xl shadow-black/40 ring-1 ring-white/5 backdrop-blur-sm">
@@ -235,6 +223,28 @@ export default function DashboardPage() {
             {filteredRuns.length === 0 && search && (
               <div className="border-t border-white/5 py-12 text-center text-sm text-zinc-500">
                 No runs match your search.
+              </div>
+            )}
+
+            {hasMoreRuns && (
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 px-4 py-3">
+                <p className="text-xs text-zinc-500">
+                  Showing{' '}
+                  <span className="font-medium text-zinc-300">{runs.length.toLocaleString()}</span>{' '}
+                  of{' '}
+                  <span className="font-medium text-zinc-300">
+                    {metrics.total.toLocaleString()}
+                  </span>{' '}
+                  actions loaded.
+                </p>
+                <button
+                  type="button"
+                  disabled={runsLoadingMore}
+                  onClick={() => void loadMoreRuns()}
+                  className="rounded-lg border border-white/15 bg-zinc-950/50 px-3 py-1.5 text-sm text-zinc-200 hover:cursor-pointer hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {runsLoadingMore ? 'Loading…' : 'Load more'}
+                </button>
               </div>
             )}
           </div>

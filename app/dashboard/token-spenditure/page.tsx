@@ -21,7 +21,8 @@ import ErrorBanner from '@/components/ui/ErrorBanner';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { useAutoRefresh, useUser } from '@/lib/hooks';
 import { api } from '@/lib/api';
-import { TokenMeterResponse } from '@/lib/types';
+import { TokenMeterResponse, PaginatedResponse } from '@/lib/types';
+import PaginatedLayout from '@/components/ui/PaginatedLayout';
 
 type SessionBucket = {
   label: string;
@@ -158,9 +159,20 @@ function usageRangeTableCaption(range: UsageRange): string {
   }
 }
 
+const PAGE_SIZE = 20;
+
+const EMPTY_PAGE: PaginatedResponse<TokenMeterResponse> = {
+  items: [],
+  total: 0,
+  page: 1,
+  page_size: PAGE_SIZE,
+  pages: 0,
+};
+
 export default function TokenSpenditurePage() {
   const { user, isLoading: userLoading } = useUser();
-  const [rows, setRows] = useState<TokenMeterResponse[]>([]);
+  const [data, setData] = useState<PaginatedResponse<TokenMeterResponse>>(EMPTY_PAGE);
+  const [page, setPage] = useState(1);
   const [usageRange, setUsageRange] = useState<UsageRange>('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -168,7 +180,7 @@ export default function TokenSpenditurePage() {
   const fetchData = useCallback(async () => {
     if (!user?.id) {
       if (!userLoading) {
-        setRows([]);
+        setData(EMPTY_PAGE);
         setLoading(false);
       }
       return;
@@ -176,21 +188,21 @@ export default function TokenSpenditurePage() {
 
     setLoading(true);
     try {
-      const data = await api.getUserTokenUsage(user.id);
-      setRows(data);
+      const result = await api.getUserTokenUsage(user.id, page, PAGE_SIZE);
+      setData(result);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load token usage');
     } finally {
       setLoading(false);
     }
-  }, [user?.id, userLoading]);
+  }, [user?.id, userLoading, page]);
 
   useEffect(() => {
     if (user?.id) {
       fetchData();
     } else if (!userLoading) {
-      setRows([]);
+      setData(EMPTY_PAGE);
       setLoading(false);
     }
   }, [user?.id, userLoading, fetchData]);
@@ -199,8 +211,8 @@ export default function TokenSpenditurePage() {
 
   const displayRows = useMemo(() => {
     const todayKey = todayKeyIST();
-    return rows.filter((row) => rowMatchesUsageRange(row, usageRange, todayKey));
-  }, [rows, usageRange]);
+    return data.items.filter((row) => rowMatchesUsageRange(row, usageRange, todayKey));
+  }, [data.items, usageRange]);
 
   const summary = useMemo(() => {
     const input = displayRows.reduce((acc, row) => acc + toNumber(row.input_token), 0);
@@ -439,6 +451,14 @@ export default function TokenSpenditurePage() {
               Recent usage records ({usageRangeTableCaption(usageRange)})
             </h2>
           </div>
+          <PaginatedLayout
+            total={data.total}
+            page={data.page}
+            pages={data.pages}
+            page_size={data.page_size}
+            onPageChange={setPage}
+            paginationClassName="border-t border-border px-4 py-2"
+          >
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead className="bg-muted/30 text-muted-foreground">
@@ -473,8 +493,9 @@ export default function TokenSpenditurePage() {
               </tbody>
             </table>
           </div>
+          </PaginatedLayout>
           <div className="border-t border-border px-4 py-2 text-xs text-muted-foreground">
-            {displayRows.length} record{displayRows.length !== 1 ? 's' : ''} — times in India Standard Time.
+            times in India Standard Time.
           </div>
         </div>
       </div>

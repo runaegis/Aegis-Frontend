@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Layers, ChevronDown, ChevronRight, Clock, GitBranch } from 'lucide-react';
-import { api } from '@/lib/api';
-import { useAutoRefresh, useUser } from '@/lib/hooks';
-import { Session, SessionAction } from '@/lib/types';
+import { useUser } from '@/lib/hooks';
+import { useDashboardData } from '@/lib/dashboardDataContext';
+import { AggregatedSessionAction, PaginatedResponse, SessionAction } from '@/lib/types';
 import {
   cn,
   formatRelativeTime,
@@ -20,50 +20,98 @@ import AgentAvatar from '@/components/ui/AgentAvatar';
 import EmptyState from '@/components/ui/EmptyState';
 import ErrorBanner from '@/components/ui/ErrorBanner';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
+import PaginatedLayout from '@/components/ui/PaginatedLayout';
 import Link from 'next/link';
 import { ActionPointersDetail, decisionStripeClass } from '@/components/dashboard/ActionPointers';
 import { RunDetailViewModeToggle } from '@/components/dashboard/RunDetailViewModeToggle';
 import { CanonicalJsonViewer } from '@/components/ui/CanonicalJsonViewer';
 import { toSessionActionRawJsonView } from '@/lib/canonicalSessionAction';
 
+const PAGE_SIZE = 20;
+
+const EMPTY_PAGE: PaginatedResponse<AggregatedSessionAction> = {
+  items: [],
+  total: 0,
+  page: 1,
+  page_size: PAGE_SIZE,
+  pages: 0,
+};
+
 export default function SessionsPage() {
-  const [sessions, setSessions] = useState<Session[]>([]);
+  const [data, setData] = useState<PaginatedResponse<AggregatedSessionAction>>(EMPTY_PAGE);
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedSession, setExpandedSession] = useState<string | null>(null);
+  const pageRef = useRef(page);
+  useEffect(() => {
+    pageRef.current = page;
+  }, [page]);
+
   const { user, isLoading: userLoading } = useUser();
+  const { fetchAggregatedPage, globalDataEpoch, lastUpdated } = useDashboardData();
 
-  const fetchData = useCallback(async () => {
-    if (!user?.id) {
-      if (!userLoading) {
-        setSessions([]);
-        setLoading(false);
+  const fetchData = useCallback(
+    async (options?: { soft?: boolean }) => {
+      if (!user?.id) {
+        if (!userLoading) {
+          setData(EMPTY_PAGE);
+          setLoading(false);
+        }
+        return;
       }
-      return;
-    }
 
+      if (!options?.soft) setLoading(true);
+      try {
+        const result = await fetchAggregatedPage(page, { force: false });
+        setData(result);
+        setError(null);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load sessions');
+      } finally {
+        if (!options?.soft) setLoading(false);
+      }
+    },
+    [user?.id, userLoading, page, fetchAggregatedPage],
+  );
+
+  const refreshForce = useCallback(async () => {
+    if (!user?.id) return;
     setLoading(true);
     try {
-      const data = await api.getSessions(user?.id);
-      setSessions(data);
+      const result = await fetchAggregatedPage(page, { force: true });
+      setData(result);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load sessions');
     } finally {
       setLoading(false);
     }
-  }, [user?.id, userLoading]);
+  }, [user?.id, page, fetchAggregatedPage]);
 
   useEffect(() => {
-    if (user?.id) {
-      fetchData();
-    } else if (!userLoading) {
-      setSessions([]);
-      setLoading(false);
-    }
-  }, [user?.id, userLoading, fetchData]);
+    void fetchData({ soft: false });
+  }, [fetchData]);
 
-  const { lastUpdated } = useAutoRefresh(fetchData, 30000);
+  useEffect(() => {
+    if (globalDataEpoch === 0) return;
+    if (!user?.id || userLoading) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const result = await fetchAggregatedPage(pageRef.current, { force: false });
+        if (!cancelled) {
+          setData(result);
+          setError(null);
+        }
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load sessions');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [globalDataEpoch, user?.id, userLoading, fetchAggregatedPage]);
 
   if (userLoading || loading) {
     return (
@@ -84,16 +132,16 @@ export default function SessionsPage() {
           title="Sessions"
           subtitle="Agent working sessions"
           lastUpdated={lastUpdated}
-          onRefresh={fetchData}
+          onRefresh={refreshForce}
         />
         <div className="p-6">
           {error && (
             <div className="mb-4">
-              <ErrorBanner message={error} onDismiss={() => setError(null)} onRetry={fetchData} />
+              <ErrorBanner message={error} onDismiss={() => setError(null)} onRetry={refreshForce} />
             </div>
           )}
 
-          {sessions.length === 0 ? (
+          {data.items.length === 0 ? (
             <div className="rounded-2xl border border-white/10 bg-card/70 shadow-xl shadow-black/30 ring-1 ring-white/5 backdrop-blur-sm">
               <EmptyState
                 icon={<Layers className="h-6 w-6" />}
@@ -102,21 +150,28 @@ export default function SessionsPage() {
               />
             </div>
           ) : (
-            <div className="space-y-3">
-              {sessions.map((session) => (
-                <SessionCard
-                  key={session.session_id}
-                  session={session}
-                  userId={user?.id}
-                  isExpanded={expandedSession === session.session_id}
-                  onToggle={() =>
-                    setExpandedSession(
-                      expandedSession === session.session_id ? null : session.session_id
-                    )
-                  }
-                />
-              ))}
-            </div>
+            <PaginatedLayout
+              total={data.total}
+              page={data.page}
+              pages={data.pages}
+              page_size={data.page_size}
+              onPageChange={setPage}
+            >
+              <div className="space-y-3">
+                {data.items.map((session) => (
+                  <SessionCard
+                    key={session.session_id}
+                    session={session}
+                    isExpanded={expandedSession === session.session_id}
+                    onToggle={() =>
+                      setExpandedSession(
+                        expandedSession === session.session_id ? null : session.session_id,
+                      )
+                    }
+                  />
+                ))}
+              </div>
+            </PaginatedLayout>
           )}
         </div>
       </div>
@@ -124,22 +179,26 @@ export default function SessionsPage() {
   );
 }
 
-function SessionSummaryStats({ session }: { session: Session }) {
+function SessionSummaryStats({ sessions }: { sessions: SessionAction[] }) {
+  const allows = sessions.filter((a) => a.decision?.toUpperCase() === 'ALLOW').length;
+  const denies = sessions.filter((a) => a.decision?.toUpperCase() === 'DENY').length;
+  const rewrites = sessions.filter((a) => a.decision?.toUpperCase() === 'REWRITE').length;
+
   return (
     <div className="flex flex-wrap items-center gap-2">
-      {Number(session.allows) > 0 && (
+      {allows > 0 && (
         <span className="rounded-md bg-emerald-950/50 px-2 py-0.5 text-[10px] font-medium text-emerald-400/85">
-          {session.allows} allow
+          {allows} allow
         </span>
       )}
-      {Number(session.denies) > 0 && (
+      {denies > 0 && (
         <span className="rounded-md bg-red-950/45 px-2 py-0.5 text-[10px] font-medium text-red-400/80">
-          {session.denies} deny
+          {denies} deny
         </span>
       )}
-      {Number(session.rewrites) > 0 && (
+      {rewrites > 0 && (
         <span className="rounded-md bg-amber-950/40 px-2 py-0.5 text-[10px] font-medium text-amber-400/85">
-          {session.rewrites} rewrite
+          {rewrites} rewrite
         </span>
       )}
     </div>
@@ -148,53 +207,34 @@ function SessionSummaryStats({ session }: { session: Session }) {
 
 function SessionCard({
   session,
-  userId,
   isExpanded,
   onToggle,
 }: {
-  session: Session;
-  userId?: string;
+  session: AggregatedSessionAction;
   isExpanded: boolean;
   onToggle: () => void;
 }) {
-  const [actions, setActions] = useState<SessionAction[] | null>(null);
-  const [loadingActions, setLoadingActions] = useState(false);
-
-  const handleToggle = async () => {
-    onToggle();
-    if (!isExpanded && !actions) {
-      setLoadingActions(true);
-      try {
-        const data = await api.getSessionActions(session.session_id, userId);
-        setActions(data);
-      } catch {
-        setActions([]);
-      } finally {
-        setLoadingActions(false);
-      }
-    }
-  };
-
-  const repos = Array.isArray(session.repos) ? session.repos.filter(Boolean) : [];
+  const agentName = session.sessions[0]?.agent_name || 'Agent';
+  const repos = [...new Set(session.sessions.map((a) => a.target_repo).filter(Boolean))];
 
   return (
-    <div className=" overflow-hidden rounded-2xl border border-white/10 bg-card/80 shadow-lg shadow-black/25 ring-1 ring-inset ring-white/[0.04] backdrop-blur-sm">
+    <div className="overflow-hidden rounded-2xl border border-white/10 bg-card/80 shadow-lg shadow-black/25 ring-1 ring-inset ring-white/[0.04] backdrop-blur-sm">
       <button
         type="button"
-        onClick={handleToggle}
+        onClick={onToggle}
         className="w-full px-4 py-3.5 text-left transition-colors hover:bg-white/[0.03] cursor-pointer"
       >
-        <div className="hover:cursor-pointer flex items-center justify-between gap-3">
+        <div className="flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
             <span className="shrink-0 rounded-full ring-1 ring-zinc-700/80 ring-offset-2 ring-offset-zinc-950">
-              <AgentAvatar name={session.agent_name || ''} size="sm" />
+              <AgentAvatar name={agentName} size="sm" />
             </span>
             <div className="min-w-0">
-              <span className="block truncate text-sm font-medium text-zinc-100">{session.agent_name}</span>
+              <span className="block truncate text-sm font-medium text-zinc-100">{agentName}</span>
               <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-500">
                 <span className="inline-flex items-center gap-1">
                   <Clock className="h-3 w-3 shrink-0" />
-                  Last activity {formatRelativeTime(session.last_action_at)}
+                  Last activity {formatRelativeTime(session.ended_at)}
                 </span>
                 <span>{session.action_count} actions</span>
                 {repos.length > 0 && (
@@ -204,7 +244,7 @@ function SessionCard({
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            <SessionSummaryStats session={session} />
+            <SessionSummaryStats sessions={session.sessions} />
             {isExpanded ? (
               <ChevronDown className="h-4 w-4 text-zinc-500" />
             ) : (
@@ -216,19 +256,15 @@ function SessionCard({
 
       {isExpanded && (
         <div className="border-t border-white/[0.08] bg-zinc-950/35 px-4 py-4">
-          {loadingActions ? (
-            <div className="flex justify-center py-6">
-              <LoadingSpinner />
-            </div>
-          ) : actions && actions.length > 0 ? (
+          {session.sessions.length > 0 ? (
             <>
               <div className="space-y-3">
-                {actions.map((action) => (
+                {session.sessions.map((action) => (
                   <SessionActionCard key={action.id} action={action} />
                 ))}
               </div>
               <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-xs text-zinc-500">
-                <span>Duration: {formatDuration(session.started_at, session.last_action_at)}</span>
+                <span>Duration: {formatDuration(session.started_at, session.ended_at)}</span>
                 <Link
                   href="/dashboard"
                   className="font-medium text-zinc-400 transition-colors hover:text-zinc-200"
@@ -257,8 +293,8 @@ function SessionActionCard({ action }: { action: SessionAction }) {
   return (
     <div
       className={cn(
-        'rounded-lg border border-white/[0.06] border-l-[3px] bg-zinc-900/40 p-3 ',
-        decisionStripeClass(action.decision)
+        'rounded-lg border border-white/[0.06] border-l-[3px] bg-zinc-900/40 p-3',
+        decisionStripeClass(action.decision),
       )}
     >
       <RunDetailViewModeToggle mode={detailMode} onModeChange={setDetailMode} className="mb-3" />
@@ -300,9 +336,7 @@ function SessionActionCard({ action }: { action: SessionAction }) {
                   {toolHue != null ? (
                     <span
                       className="inline-block h-1 w-6 rounded-full"
-                      style={{
-                        backgroundColor: `hsla(${toolHue}, 38%, 46%, 0.55)`,
-                      }}
+                      style={{ backgroundColor: `hsla(${toolHue}, 38%, 46%, 0.55)` }}
                     />
                   ) : (
                     <span className="inline-block h-1 w-6 rounded-full bg-zinc-600/70" />
