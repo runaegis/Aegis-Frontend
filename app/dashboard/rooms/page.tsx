@@ -17,16 +17,21 @@ const getRoomId = (room: RoomSummary | RoomDetails): string =>
 const getInviteCode = (invite: RoomInvite): string =>
   String(invite.invite_code || invite.code || invite.id || '');
 
+const ROLE_LEVELS: Record<string, number> = {
+  DEVELOPER: 1,
+  ADMIN: 2,
+  OWNER: 3,
+};
+
 export default function RoomsPage() {
   const { user, isLoading: userLoading } = useUser();
-  const [authToken, setAuthToken] = useState<string | undefined>(undefined);
   const [rooms, setRooms] = useState<RoomSummary[]>([]);
   const [selectedRoomId, setSelectedRoomId] = useState<string>('');
   const [selectedRoom, setSelectedRoom] = useState<RoomDetails | null>(null);
   const [members, setMembers] = useState<RoomMember[]>([]);
   const [invites, setInvites] = useState<RoomInvite[]>([]);
 
-  const [newRepoId, setNewRepoId] = useState('');
+  const [newRepoName, setNewRepoName] = useState('');
   const [joinCode, setJoinCode] = useState('');
   const [inviteMaxUses, setInviteMaxUses] = useState('');
   const [inviteExpiresAt, setInviteExpiresAt] = useState('');
@@ -38,37 +43,58 @@ export default function RoomsPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [tools, setTools] = useState<Record<string, boolean>>({});
+  const [integrationConfig, setIntegrationConfig] = useState<any>(null);
   const [role, setRole] = useState<string>('DEVELOPER');
   const [viewingRole, setViewingRole] = useState<string>('DEVELOPER');
+
+  const visibleRoles = useMemo(() => {
+  if (role === 'OWNER') {
+    return ['OWNER', 'ADMIN', 'DEVELOPER'];
+  }
+
+  if (role === 'ADMIN') {
+    return ['ADMIN', 'DEVELOPER'];
+  }
+
+  return ['DEVELOPER'];
+}, [role]);
+
+const canEditViewedRole = useMemo(() => {
+  return ROLE_LEVELS[role] > ROLE_LEVELS[viewingRole];
+}, [role, viewingRole]);
+
+const canCreateInvites = useMemo(() => {
+  return role === 'OWNER' || role === 'ADMIN';
+}, [role]);
 
   useEffect(() => {
     console.log('loading:', loading);
   }, [loading])
 
-  const getAuthToken = useCallback(() => {
-    const token = localStorage.getItem('access_token');
-    console.log('[RoomsPage] getAuthToken:', token ? 'Token exists' : 'No token found');
-    if (token) {
-      setAuthToken(token)
-    }
-    return token;
-  }, []);
+  useEffect(() => {
+    if (!success) return;
+
+    const timer = setTimeout(() => {
+      setSuccess(null);
+    }, 3000);
+
+    return () => clearTimeout(timer);
+  }, [success]);
 
   const fetchRooms = useCallback(async () => {
-    console.log('[RoomsPage] fetchRooms called, authToken exists:', !!authToken);
 
-    if (!authToken) {
-      if (!userLoading) {
-        console.log('[RoomsPage] Clearing rooms - no auth token and not loading user');
+      if (userLoading) return;
+
+      if (!user) {
         setRooms([]);
         setSelectedRoomId('');
         setSelectedRoom(null);
         setMembers([]);
         setInvites([]);
         setLoading(false);
+        return;
       }
-      return;
-    }
+      
 
     setLoading(true);
     try {
@@ -100,12 +126,11 @@ export default function RoomsPage() {
     } finally {
       setLoading(false);
     }
-  }, [authToken, userLoading, selectedRoomId]);
+  }, [ userLoading, selectedRoomId]);
 
   const loadRoomData = useCallback(async () => {
-    console.log('[RoomsPage] loadRoomData called, selectedRoomId:', selectedRoomId, 'authToken exists:', !!authToken);
 
-    if (!authToken || !selectedRoomId) {
+    if ( !selectedRoomId) {
       console.log('[RoomsPage] loadRoomData skipped: missing auth token or room selection');
       setSelectedRoom(null);
       setMembers([]);
@@ -113,17 +138,22 @@ export default function RoomsPage() {
       setTools({});
       return;
     }
+    
 
     try {
       console.log('[RoomsPage] Loading room details for:', selectedRoomId);
-      const [roomData, memberData, inviteData] = await Promise.all([
+      const [roomData, memberData, inviteData, integrationData] = await Promise.all([
         api.getRoomDetails(selectedRoomId),
         api.getRoomMembers(selectedRoomId),
         api.getRoomInvites(selectedRoomId),
+        api.getRoomIntegrationConfig(selectedRoomId),
       ]);
 
+      setIntegrationConfig(integrationData);
       // Find current user's role first
-      const currentMember = memberData.find((m) => m.user_id === user?.id);
+      const currentMember = memberData.find(
+        (m) => m.username === user?.username
+      );
       const currentRole = currentMember?.role || 'DEVELOPER';
       setRole(currentRole);
 
@@ -143,7 +173,7 @@ export default function RoomsPage() {
       console.error('[RoomsPage] loadRoomData failed:', errorMsg);
       setError(`Failed to load room details: ${errorMsg}`);
     }
-  }, [selectedRoomId, getAuthToken, user?.id, viewingRole]);
+  }, [selectedRoomId, user?.id, viewingRole]);
 
   useEffect(() => {
     fetchRooms();
@@ -153,33 +183,38 @@ export default function RoomsPage() {
     loadRoomData();
   }, [loadRoomData]);
 
+  useEffect(() => {
+  setError(null);
+  setSuccess(null);
+}, [selectedRoomId]);
+
   // Effect: Reload tools when owner switches the viewed role
   useEffect(() => {
-    const authToken = getAuthToken();
-    if (!authToken || !selectedRoomId || role !== 'OWNER') return;
+    if (!selectedRoomId || role !== 'OWNER') return;
 
     console.log('[RoomsPage] Effect: Loading tools for viewing role:', viewingRole);
     api.getRoomTools(selectedRoomId, viewingRole)
       .then((toolsData) => setTools(toolsData || {}))
       .catch((err) => console.error('[RoomsPage] Failed to load tools:', err));
-  }, [viewingRole, selectedRoomId, role, getAuthToken]);
+  }, [viewingRole, selectedRoomId, role]);
 
   const { lastUpdated } = useAutoRefresh(fetchRooms, 30000);
 
   const selectedRoomLabel = useMemo(() => {
     if (!selectedRoom) return selectedRoomId || 'Room';
-    return selectedRoom.repo_id || getRoomId(selectedRoom);
+    return selectedRoom.repo_name || getRoomId(selectedRoom);
   }, [selectedRoom, selectedRoomId]);
 
-  const roomIntegrationUrl = useMemo(() => {
-    if (!user?.id || !selectedRoomId || !authToken) return '';
-    return `https://app.runaegis.co/sse?user_id=${user.id}/room_id=${selectedRoomId}/access_token=${authToken}`;
-  }, [user?.id, selectedRoomId, authToken]);
+const roomIntegrationUrl = useMemo(() => {
+  if (!selectedRoomId) return '';
+
+  return `https://app.runaegis.co/sse/room/${selectedRoomId}`;
+}, [selectedRoomId]);
 
   const handleCreateRoom = async (e: React.FormEvent) => {
     e.preventDefault();
-    const authToken = getAuthToken();
-    if (!newRepoId.trim() || !authToken) {
+    
+    if (!newRepoName.trim()) {
       console.warn('[RoomsPage] handleCreateRoom: missing repo ID or auth token');
       return;
     }
@@ -187,10 +222,10 @@ export default function RoomsPage() {
     setSubmittingCreate(true);
     setSuccess(null);
     try {
-      console.log('[RoomsPage] Creating room with repo ID:', newRepoId);
-      const created = await api.createRoom(newRepoId.trim());
+      console.log('[RoomsPage] Creating room with repo ID:', newRepoName);
+      const created = await api.createRoom(newRepoName.trim());
       console.log('[RoomsPage] Room created successfully:', created);
-      setNewRepoId('');
+      setNewRepoName('');
       setSuccess('Room created successfully');
       await fetchRooms();
       const roomId = getRoomId(created);
@@ -233,11 +268,6 @@ export default function RoomsPage() {
   };
 
   const toggleTool = async (tool: string, value: boolean) => {
-    const authToken = getAuthToken();
-    if (!authToken) {
-      console.warn('[RoomsPage] toggleTool: missing auth token');
-      return;
-    }
 
     const targetRole = viewingRole;
     const updated = { ...tools, [tool]: value };
@@ -251,7 +281,7 @@ export default function RoomsPage() {
       console.log('[RoomsPage] Updating tool policy for role:', targetRole, 'tool:', tool, 'value:', value);
       await api.updateRoomTools(selectedRoomId, targetRole, updated);
       console.log('[RoomsPage] Tool policy updated successfully');
-      setSuccess(`${tool} ${value ? 'allowed' : 'denied'}`);
+      // setSuccess(`${tool} ${value ? 'allowed' : 'denied'}`);
     } catch (err) {
       console.error('[RoomsPage] toggleTool failed:', err);
       // Rollback on failure
@@ -263,9 +293,8 @@ export default function RoomsPage() {
 
   const handleJoinRoom = async (e: React.FormEvent) => {
     e.preventDefault();
-    const authToken = getAuthToken();
-    if (!joinCode.trim() || !authToken) {
-      console.warn('[RoomsPage] handleJoinRoom: missing join code or auth token');
+    if (!joinCode.trim()) {
+      console.warn('[RoomsPage] handleJoinRoom: missing join code');
       return;
     }
 
@@ -289,9 +318,8 @@ export default function RoomsPage() {
 
   const handleCreateInvite = async (e: React.FormEvent) => {
     e.preventDefault();
-    const authToken = getAuthToken();
-    if (!selectedRoomId || !authToken) {
-      console.warn('[RoomsPage] handleCreateInvite: missing room ID or auth token');
+    if (!selectedRoomId) {
+      console.warn('[RoomsPage] handleCreateInvite: missing room ID');
       return;
     }
 
@@ -327,7 +355,7 @@ export default function RoomsPage() {
     try {
       console.log('[RoomsPage] Copying invite code to clipboard');
       await navigator.clipboard.writeText(code);
-      setSuccess('Invite code copied');
+      // setSuccess('Invite code copied');
     } catch (err) {
       console.error('[RoomsPage] Failed to copy invite code:', err);
       setError('Could not copy invite code');
@@ -339,7 +367,7 @@ export default function RoomsPage() {
 
     try {
       await navigator.clipboard.writeText(roomIntegrationUrl);
-      setSuccess('Integration URL copied');
+      // setSuccess('Integration URL copied');
     } catch {
       setError('Could not copy integration URL');
     }
@@ -379,16 +407,16 @@ export default function RoomsPage() {
               <Plus className="h-4 w-4" />
               Create Room
             </div>
-            <label className="mb-1 block text-xs text-muted-foreground">Repository ID</label>
+            <label className="mb-1 block text-xs text-muted-foreground">Repository Name</label>
             <input
-              value={newRepoId}
-              onChange={(e) => setNewRepoId(e.target.value)}
-              placeholder="repo_123 or org/repo"
+              value={newRepoName}
+              onChange={(e) => setNewRepoName(e.target.value)}
+              placeholder="org/repo"
               className="w-full rounded-md border border-border bg-muted px-3 py-2 text-sm text-foreground focus:border-foreground/40 focus:outline-none"
             />
             <button
               type="submit"
-              disabled={submittingCreate || !newRepoId.trim()}
+              disabled={submittingCreate || !newRepoName.trim()}
               className="mt-3 rounded-md bg-foreground px-3 py-1.5 text-sm font-medium text-background hover:bg-foreground/90 disabled:opacity-50"
             >
               {submittingCreate ? 'Creating...' : 'Create room'}
@@ -443,7 +471,7 @@ export default function RoomsPage() {
                           : 'border-border text-muted-foreground hover:bg-muted hover:text-foreground'
                       }`}
                     >
-                      <p className="font-medium">{room.repo_id || roomId}</p>
+                      <p className="font-medium">{room.repo_name || roomId}</p>
                       <p className="text-xs opacity-80">{roomId}</p>
                     </button>
                   );
@@ -464,7 +492,11 @@ export default function RoomsPage() {
                   <p className="mb-1 text-xs text-muted-foreground">Room Integration URL</p>
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                     <input
-                      value={roomIntegrationUrl}
+                      value={
+                        integrationConfig
+                          ? integrationConfig.url
+                          : 'https://app.runaegis.co/sse?user_id=<USER_ID>&room_id=<ROOM_ID>&access_token=<ACCESS_TOKEN>&role=<ROLE>'
+                      }
                       readOnly
                       className="w-full rounded-md border border-border bg-card px-3 py-2 font-mono text-xs text-foreground"
                     />
@@ -478,12 +510,12 @@ export default function RoomsPage() {
                     </button>
                   </div>
                 </div>
-
-                <form onSubmit={handleCreateInvite} className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                  <div>
-                    <label className="mb-1 block text-xs text-muted-foreground">Max Uses</label>
-                    <input
-                      type="number"
+                {canCreateInvites ? (
+                  <form  className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    <div>
+                      <label className="mb-1 block text-xs text-muted-foreground">Max Uses</label>
+                      <input
+                        type="number"
                       min={1}
                       value={inviteMaxUses}
                       onChange={(e) => setInviteMaxUses(e.target.value)}
@@ -510,6 +542,11 @@ export default function RoomsPage() {
                     </button>
                   </div>
                 </form>
+                 ) : (
+                  <div className="rounded-md border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
+                    Only admins and owners can create invite links.
+                  </div>
+                )}
               </div>
 
               {/* Tool Policies Section */}
@@ -523,10 +560,11 @@ export default function RoomsPage() {
                       onChange={(e) => setViewingRole(e.target.value)}
                       className="rounded-md border border-border bg-muted px-2 py-1 text-xs text-foreground focus:border-foreground/40 focus:outline-none"
                     >
-                      <option value="DEVELOPER">DEVELOPER</option>
-                      <option value="REVIEWER">REVIEWER</option>
-                      <option value="VIEWER">VIEWER</option>
-                      <option value="OWNER">OWNER</option>
+                      {visibleRoles.map((r) => (
+                        <option key={r} value={r}>
+                          {r}
+                        </option>
+                      ))}
                     </select>
                   </div>
                 </div>
@@ -546,10 +584,16 @@ export default function RoomsPage() {
                             className="flex items-center justify-between rounded-md border border-border px-3 py-2"
                           >
                             <span className="font-mono text-xs text-foreground">{tool}</span>
-                            <div className="flex gap-2">
+                            <div className="flex gap-2 items-center">
+                              {!canEditViewedRole && (
+                              <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                Read only
+                              </span>
+                            )}
                               <button
+                                disabled={!canEditViewedRole}
                                 onClick={() => toggleTool(tool, true)}
-                                className={`rounded px-2 py-1 text-xs transition-colors cursor-pointer ${
+                                className={`rounded px-2 py-1 text-xs transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 ${
                                   isAllowed
                                     ? 'bg-green-600 text-white'
                                     : 'border border-border text-muted-foreground hover:bg-muted hover:text-foreground'
@@ -558,8 +602,9 @@ export default function RoomsPage() {
                                 Allow
                               </button>
                               <button
+                                disabled={!canEditViewedRole}
                                 onClick={() => toggleTool(tool, false)}
-                                className={`rounded px-2 py-1 text-xs transition-colors cursor-pointer ${
+                                className={`rounded px-2 py-1 text-xs transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 ${
                                   isDenied
                                     ? 'bg-red-600 text-white'
                                     : 'border border-border text-muted-foreground hover:bg-muted hover:text-foreground'
@@ -589,11 +634,11 @@ export default function RoomsPage() {
                     <div className="space-y-2">
                       {members.map((member, idx) => (
                         <div
-                          key={`${member.user_id}-${idx}`}
+                          key={`${member.username}-${idx}`}
                           className="rounded-md border border-border bg-muted/30 px-3 py-2"
                         >
                           <p className="text-sm font-medium text-foreground">
-                            {member.username || member.user_id}
+                            {member.username}
                           </p>
                           <div className="flex items-center justify-between text-xs text-muted-foreground">
                             <span>{member.role || 'member'}</span>
@@ -625,6 +670,9 @@ export default function RoomsPage() {
                                 <p className="text-xs text-muted-foreground">
                                   Uses: {invite.used_count || 0}
                                   {typeof invite.max_uses === 'number' ? ` / ${invite.max_uses}` : ''}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  Created by: {invite.created_by_username}
                                 </p>
                                 {invite.expires_at && (
                                   <p className="text-xs text-muted-foreground">
