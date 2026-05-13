@@ -1,3 +1,11 @@
+export interface PaginatedResponse<T> {
+  items: T[];
+  total: number;
+  page: number;
+  page_size: number;
+  pages: number;
+}
+
 export interface SessionAction {
   id: string;
   session_id: string;
@@ -8,16 +16,27 @@ export interface SessionAction {
   action_pointers?: string[];
   action_summary: string;
   result: string;
-  decision: 'ALLOW' | 'DENY' | 'cd' | 'REQUIRE_APPROVAL' | string;
+  decision: "ALLOW" | "DENY" | "cd" | "REQUIRE_APPROVAL" | string;
   target_repo: string;
   target_branch: string | null;
   sequence_order: number;
   timestamp: string;
   user_id: string;
-  execution_time:number;
+  execution_time: number;
 }
 
-export type MCPApprovalStatus = 'pending' | 'approved' | 'rejected' | string;
+export interface AggregatedSessionAction {
+  session_id: string;
+  user_id: string;
+  action_count: number;
+  started_at: string;
+  ended_at: string;
+  total_execution_time: number;
+  tools_used: string[];
+  sessions: Array<SessionAction>;
+}
+
+export type MCPApprovalStatus = "pending" | "approved" | "rejected" | string;
 
 export interface MCPApproval {
   id: string;
