@@ -1,7 +1,7 @@
 'use client';
 
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
-import { Coins, Database, Sigma, Sparkles, Wallet } from 'lucide-react';
+import { Coins, Database, Sigma, Wallet } from 'lucide-react';
 import {
   Area,
   Bar,
@@ -306,9 +306,6 @@ export default function TokenSpenditurePage() {
               <p className="mt-2 text-sm text-violet-100/80">
                 {summary.count.toLocaleString()} actions across {summary.sessions.toLocaleString()} sessions
               </p>
-            </div>
-            <div className="hidden rounded-xl border border-white/20 bg-white/10 p-3 text-white md:flex">
-              <Sparkles className="h-5 w-5" />
             </div>
           </div>
         </div>
