@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Activity, GitBranch, Search, ChevronDown, ChevronRight, Sparkles } from 'lucide-react';
+import { Activity, GitBranch, Search, ChevronDown, ChevronRight } from 'lucide-react';
 import { useUser } from '@/lib/hooks';
 import { useDashboardData } from '@/lib/dashboardDataContext';
 import { SessionAction } from '@/lib/types';
@@ -28,7 +28,7 @@ import { CanonicalJsonViewer } from '@/components/ui/CanonicalJsonViewer';
 import { toSessionActionRawJsonView } from '@/lib/canonicalSessionAction';
 
 export default function DashboardPage() {
-  const { user, isLoading: userLoading } = useUser();
+  const { isLoading: userLoading } = useUser();
   const {
     sessionActions: runs,
     runsLoading,
@@ -358,15 +358,12 @@ function RunRow({
               </div>
             ) : (
               <div className="space-y-5">
-                <div className="relative rounded-xl bg-zinc-900/55 p-4">
-                  <div className="absolute right-3 top-3 text-zinc-600">
-                    <Sparkles className="h-5 w-5" aria-hidden />
-                  </div>
+                <div className="rounded-xl bg-zinc-900/55 p-4 ring-1 ring-inset ring-white/[0.04]">
                   <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
-                    Summary
+                    Overview
                   </p>
-                  <p className="whitespace-normal break-words pr-8 text-base font-medium leading-snug text-zinc-50 md:text-lg">
-                    {run.action_summary}
+                  <p className="whitespace-normal break-words text-base font-medium leading-relaxed text-zinc-50 md:text-lg">
+                    {run.action_summary || 'No summary for this action.'}
                   </p>
                 </div>
                 <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
@@ -391,7 +388,7 @@ function RunRow({
                 </div>
                 {(run.action_pointers?.length ||
                   (run.arguments && Object.keys(run.arguments).length > 0)) && (
-                  <div className="rounded-xl bg-zinc-900/40 p-4">
+                  <div className="rounded-xl border border-white/[0.06] bg-neutral-950 p-4 ring-1 ring-inset ring-black/50">
                     <p className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
                       {toolHue != null ? (
                         <span
@@ -403,7 +400,7 @@ function RunRow({
                       ) : (
                         <span className="inline-block h-1 w-7 rounded-full bg-zinc-600/70" />
                       )}
-                      Details
+                      Action breakdown
                     </p>
                     <ActionPointersDetail
                       pointers={run.action_pointers}

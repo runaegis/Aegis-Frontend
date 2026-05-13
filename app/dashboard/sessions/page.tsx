@@ -331,7 +331,7 @@ function SessionActionCard({ action }: { action: SessionAction }) {
               )}
             </div>
             {(hasPointers || hasArgs) && (
-              <div className="rounded-lg bg-zinc-950/50 p-3">
+              <div className="rounded-lg border border-white/[0.06] bg-neutral-950 p-3 ring-1 ring-inset ring-black/50">
                 <p className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
                   {toolHue != null ? (
                     <span
@@ -341,7 +341,7 @@ function SessionActionCard({ action }: { action: SessionAction }) {
                   ) : (
                     <span className="inline-block h-1 w-6 rounded-full bg-zinc-600/70" />
                   )}
-                  Details
+                  Action breakdown
                 </p>
                 <ActionPointersDetail
                   pointers={action.action_pointers}
