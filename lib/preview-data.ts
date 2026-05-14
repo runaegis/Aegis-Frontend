@@ -287,9 +287,9 @@ const TOKEN_METER: TokenMeterResponse[] = RUNS.slice(0, 60).map((r, i) => ({
 
 // Rooms
 const PREVIEW_ROOMS: RoomSummary[] = [
-  { id: 'room_dash',  room_id: 'room_dash',  repo_id: 'aegis/dashboard',  owner_id: 'preview-user', created_at: new Date(NOW - 12 * ONE_DAY).toISOString() },
-  { id: 'room_mcp',   room_id: 'room_mcp',   repo_id: 'aegis/mcp-server', owner_id: 'preview-user', created_at: new Date(NOW - 30 * ONE_DAY).toISOString() },
-  { id: 'room_api',   room_id: 'room_api',   repo_id: 'runaegis/api',     owner_id: 'preview-user', created_at: new Date(NOW -  5 * ONE_DAY).toISOString() },
+  { id: 'room_dash',  room_id: 'room_dash',  repo_name: 'aegis/dashboard',  owner_username: 'preview-user', created_at: new Date(NOW - 12 * ONE_DAY).toISOString() },
+  { id: 'room_mcp',   room_id: 'room_mcp',   repo_name: 'aegis/mcp-server', owner_username: 'preview-user', created_at: new Date(NOW - 30 * ONE_DAY).toISOString() },
+  { id: 'room_api',   room_id: 'room_api',   repo_name: 'runaegis/api',     owner_username: 'preview-user', created_at: new Date(NOW -  5 * ONE_DAY).toISOString() },
 ];
 
 const PREVIEW_ROOM_DETAILS: Record<string, RoomDetails> = Object.fromEntries(
@@ -408,7 +408,13 @@ export function installPreviewApi() {
   };
   api.getRecentActionCount = async () => [{ count: RUNS.slice(0, 3).length }];
 
-  api.getUserTokenUsage = async () => TOKEN_METER;
+  api.getUserTokenUsage = async () => ({
+    items: TOKEN_METER,
+    total: TOKEN_METER.length,
+    page: 1,
+    page_size: TOKEN_METER.length,
+    pages: 1,
+  });
 
   api.getRepos = async () => ({ repos: PREVIEW_REPOS });
   api.syncRepos = async () => ({ success: true, synced: PREVIEW_REPOS.length });
@@ -429,8 +435,8 @@ export function installPreviewApi() {
   api.createRoom = async (repoId: string) => ({
     id: `room_${Date.now()}`,
     room_id: `room_${Date.now()}`,
-    repo_id: repoId,
-    owner_id: 'preview-user',
+    repo_name: repoId,
+    owner_username: 'preview-user',
     created_at: new Date().toISOString(),
   });
   api.createRoomInvite = async (_roomId, payload) => ({

@@ -61,7 +61,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     const verifyAndLoad = async () => {
       const authToken = localStorage.getItem('access_token');
       if (!authToken){
-        router.push("/login");
+        router.push("/auth");
         return;
       }
       try {

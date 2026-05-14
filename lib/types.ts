@@ -1,21 +1,42 @@
+export interface PaginatedResponse<T> {
+  items: T[];
+  total: number;
+  page: number;
+  page_size: number;
+  pages: number;
+}
+
 export interface SessionAction {
   id: string;
   session_id: string;
   agent_name: string;
   tool_name: string;
   arguments: Record<string, any>;
+  /** Human-readable bullet points; preferred over raw `arguments` in the UI when present. */
+  action_pointers?: string[];
   action_summary: string;
   result: string;
-  decision: 'ALLOW' | 'DENY' | 'cd' | 'REQUIRE_APPROVAL' | string;
+  decision: "ALLOW" | "DENY" | "cd" | "REQUIRE_APPROVAL" | string;
   target_repo: string;
-  target_branch: string;
+  target_branch: string | null;
   sequence_order: number;
   timestamp: string;
   user_id: string;
-  execution_time:number;
+  execution_time: number;
 }
 
-export type MCPApprovalStatus = 'pending' | 'approved' | 'rejected' | string;
+export interface AggregatedSessionAction {
+  session_id: string;
+  user_id: string;
+  action_count: number;
+  started_at: string;
+  ended_at: string;
+  total_execution_time: number;
+  tools_used: string[];
+  sessions: Array<SessionAction>;
+}
+
+export type MCPApprovalStatus = "pending" | "approved" | "rejected" | string;
 
 export interface MCPApproval {
   id: string;
@@ -93,21 +114,24 @@ export interface TokenMeterResponse {
 export interface RoomSummary {
   id?: string;
   room_id?: string;
-  repo_id: string;
-  owner_id?: string;
+
+  repo_name: string;
+  owner_username?: string;
+
+  role?: string;
+  is_active?: boolean;
+
   created_at?: string;
 }
-
 export interface RoomDetails extends RoomSummary {
   [key: string]: any;
 }
 
 export interface RoomMember {
-  id?: string;
-  user_id: string;
-  username?: string;
+  username: string;
   role?: string;
   joined_at?: string;
+
   [key: string]: any;
 }
 
@@ -116,7 +140,7 @@ export interface RoomInvite {
   invite_code?: string;
   code?: string;
   room_id?: string;
-  created_by?: string;
+  created_by_username?: string;
   max_uses?: number | null;
   used_count?: number;
   expires_at?: string | null;

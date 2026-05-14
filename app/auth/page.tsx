@@ -45,6 +45,7 @@ import { AegisLogo } from '@/components/ui/AegisLogo';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { fadeUp, staggerContainer } from '@/lib/motion';
+import { apiFetch } from '@/lib/api';
 
 type AuthMode = 'signin' | 'signup' | 'forgot';
 
@@ -201,9 +202,10 @@ export default function AuthPage() {
     if (resendCooldown > 0) return;
     setResendCooldown(30);
     try {
-      const res = await fetch(`${BACKEND_URL}/auth/resend-verification`, {
+      const res = await apiFetch(`${BACKEND_URL}/auth/resend-verification`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ email: signupEmail }),
       });
       setResendMessage(res.ok ? 'Email resent' : 'Failed to resend');
@@ -217,28 +219,44 @@ export default function AuthPage() {
     setLoading(true);
     setErrors({});
     try {
-      const res = await fetch(`${BACKEND_URL}/auth/register`, {
+      const res = await apiFetch(`${BACKEND_URL}/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ name, email, password }),
       });
       if (!res.ok) {
         const data = await res.json();
         if (data.detail || data.message) {
-          throw new Error(data.detail || data.message);
+          throw data.detail || {
+            code: 'UNKNOWN_ERROR',
+            message: 'Signup failed',
+          };
         }
         throw new Error('Signup failed');
       }
       setSignupEmail(email);
       setSignupSuccess(true);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Something went wrong';
-      if (message.includes('already exists')) {
-        setErrors({ form: 'email_exists' });
-      } else {
-        setErrors({ form: message });
-      }
-    } finally {
+    } catch (err: any) {
+        const detail = err?.detail || err;
+
+        switch (detail.code) {
+          case 'ACCOUNT_EXISTS':
+            setErrors({ form: 'email_exists' });
+            break;
+
+          case 'SIGNUP_FAILED':
+            setErrors({
+              form: 'Could not create account. Please try again.',
+            });
+            break;
+
+          default:
+            setErrors({
+              form: detail.message || 'Something went wrong.',
+            });
+        }
+      } finally {
       setLoading(false);
     }
   };
@@ -248,16 +266,14 @@ export default function AuthPage() {
     setLoading(true);
     setErrors({});
     try {
-      const res = await fetch(`${BACKEND_URL}/auth/login`, {
+      const res = await apiFetch(`${BACKEND_URL}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
+        credentials: 'include',
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || 'Login failed');
-
-      localStorage.setItem('access_token', data.access_token);
-      localStorage.setItem('refresh_token', data.refresh_token);
       const userData: User = {
         email,
         github_user_id: data.github_user_id || 0,
@@ -266,15 +282,33 @@ export default function AuthPage() {
       };
       setUser(userData);
       setLoggingIn(true);
-      setTimeout(() => router.push('/auth-callback'), 1000);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Something went wrong';
-      if (message.includes('Invalid credentials')) {
-        setErrors({ form: 'Incorrect email or password.' });
-      } else {
-        setErrors({ form: 'Something went wrong. Please try again.' });
-      }
-    } finally {
+      setTimeout(() => router.push('/onboarding '), 1000);
+    } catch (err: any) {
+        const detail = err?.detail || err;
+
+        switch (detail.code) {
+          case 'ACCOUNT_NOT_FOUND':
+            setErrors({ form: 'not_found' });
+            break;
+
+          case 'INVALID_PASSWORD':
+            setErrors({
+              form: 'Incorrect password.',
+            });
+            break;
+
+          case 'EMAIL_NOT_VERIFIED':
+            setErrors({ form: 'unverified' });
+            break;
+
+          default:
+            setErrors({
+              form:
+                detail.message ||
+                'Something went wrong. Please try again.',
+            });
+        }
+      } finally {
       setLoading(false);
     }
   };
@@ -293,10 +327,11 @@ export default function AuthPage() {
     setLoading(true);
     setErrors({});
     try {
-      await fetch(`${BACKEND_URL}/auth/forgot-password`, {
+      await apiFetch(`${BACKEND_URL}/auth/forgot-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
+        credentials: 'include',
       });
       setForgotEmail(email);
       setForgotSuccess(true);
