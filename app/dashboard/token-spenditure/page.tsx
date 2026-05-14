@@ -422,9 +422,17 @@ export default function TokenSpenditurePage() {
                           fontFamily: 'var(--font-geist-sans)',
                           fontSize: 12,
                         }}
-                        formatter={(value: number | string | undefined) =>
-                          typeof value === 'number' ? value.toLocaleString() : String(value ?? '')
-                        }
+                        formatter={(value) => {
+                          if (typeof value === 'number') {
+                            return value.toLocaleString();
+                          }
+
+                          if (Array.isArray(value)) {
+                            return value.join(', ');
+                          }
+
+                          return String(value ?? '');
+                        }}
                         labelFormatter={(_, payload) => {
                           const row = payload?.[0]?.payload as SessionBucket | undefined;
                           return row?.session ?? '';
@@ -524,9 +532,17 @@ export default function TokenSpenditurePage() {
                           fontFamily: 'var(--font-geist-sans)',
                           fontSize: 12,
                         }}
-                        formatter={(value: number | string | undefined) =>
-                          typeof value === 'number' ? value.toLocaleString() : String(value ?? '')
-                        }
+                        formatter={(value) => {
+                          if (typeof value === 'number') {
+                            return value.toLocaleString();
+                          }
+
+                          if (Array.isArray(value)) {
+                            return value.join(', ');
+                          }
+
+                          return String(value ?? '');
+                        }}
                         labelFormatter={(_, payload) => {
                           const row = payload?.[0]?.payload as SessionAegisBucket | undefined;
                           return row?.session ?? '';

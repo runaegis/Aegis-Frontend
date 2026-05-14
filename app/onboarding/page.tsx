@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect , useCallback} from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Shield, RefreshCw, Check, ChevronRight, ChevronLeft, ExternalLink, Loader2, GitBranch, Key, Settings2, Plug, Rocket } from 'lucide-react';
+import { Shield, RefreshCw, Check, ChevronRight, ChevronLeft, ExternalLink, Loader2, GitBranch, Key, Plug, Rocket } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useUser, useOnboardingStep } from '@/lib/hooks';
 import { Repo } from '@/lib/types';
@@ -84,10 +84,9 @@ const { email } = useEmail();
 
   const [username, setUsername] = useState(user?.username || '');
   const [githubId, setGithubId] = useState(String(user?.github_user_id || ''));
-  const [token, setToken] = useState(user?.access_token || '');
+  const [token, setToken] = useState('');
   const [step1Loading, setStep1Loading] = useState(false);
   const [step1Error, setStep1Error] = useState('');
-  const [authToken, setAuthToken] = useState<string | undefined>(undefined);
 
   const [repos, setRepos] = useState<Repo[]>([]);
   const [syncing, setSyncing] = useState(false);
@@ -96,49 +95,99 @@ const { email } = useEmail();
   const [activeTab, setActiveTab] = useState('claude');
   const [verified, setVerified] = useState(false);
   const [checking, setChecking] = useState(false);
+  const [pageError, setPageError] = useState('');
+  const [transitionLoading, setTransitionLoading] = useState(false);
 
   const [actionCount, setActionCount] = useState(0);
-  useEffect(() => {
-    if (step >= 6) {
-      router.push('/dashboard');
-    }
-  }, [step, router]);
+  const moveToStep = async (nextStep: number) => {
+    try {
+      setTransitionLoading(true);
+      setPageError('');
 
-  const getAuthToken = useCallback(() => {
-    const authToken = localStorage.getItem('access_token');
-    if (authToken) {
-      setAuthToken(authToken);
+      await api.updateOnboardingStep(nextStep);
+
+      setStep(nextStep);
+
+      return true;
+    } catch {
+      setPageError(
+        'Failed to save onboarding progress. Please try again.'
+      );
+
+      return false;
+    } finally {
+      setTransitionLoading(false);
     }
-    return authToken;
-  }, []);
+  };
+
+  useEffect(() => {
+    const recoverUser = async () => {
+      // already hydrated
+      if (user) return;
+
+      try {
+        const freshUser = await api.getUserDetails();
+
+        setUser(freshUser);
+
+        // restore onboarding inputs
+        if (step > 1) {
+          setUsername(freshUser.username || '');
+          setGithubId(
+            String(freshUser.github_user_id || '')
+          );
+          setToken(freshUser.access_token || '');
+        }
+      } catch {
+        router.replace('/auth');
+      }
+    };
+
+    recoverUser();
+  }, [user, router, setUser, step]);
 
   useEffect(() => {
     const fetchInitialStep = async () => {
-      const authToken = getAuthToken();
-      if (!authToken) return; // Wait for token to be available
-
       try {
-        const response = await api.getOnboardingStep(authToken);
-        const currentStep = response.onboarding_step; 
-        if (currentStep > 6) {
-          router.push('/dashboard');
+        const userDetails = await api.getUserDetails();
+
+        setUser(userDetails);
+
+        const response = await api.getOnboardingStep();
+
+        const currentStep = response.onboarding_step;
+
+        // onboarding completed
+        if (currentStep > 5) {
+          router.replace('/dashboard');
           return;
         }
-        
-        if (currentStep) {
+
+        // restore onboarding progress
+        if (currentStep >= 1 && currentStep <= 4) {
           setStep(currentStep);
+
+          if (currentStep >= 3 && userDetails?.id) {
+            const reposResponse = await api.getRepos(userDetails.id);
+
+            if (reposResponse?.repos) {
+              setRepos(reposResponse.repos);
+              setSynced(true);
+            }
+          }
         }
-      } catch (error) {
-        console.error('Failed to fetch initial onboarding step:', error);
+      } catch {
+        setPageError(
+          'Failed to load onboarding progress.'
+        );
       }
     };
 
     fetchInitialStep();
-  }, [getAuthToken, setStep]);
+  }, [setStep]);
 
 
   const handleStep1 = async () => {
-    const authToken = getAuthToken();
     if (!username || !githubId || !token) { setStep1Error('All fields are required.'); return; }
     setStep1Loading(true);
     setStep1Error('');
@@ -147,8 +196,7 @@ const { email } = useEmail();
       if (isNaN(githubUserIdNum)) { setStep1Error('GitHub User ID must be a number.'); setStep1Loading(false); return; }
       const response = await api.saveUser({ github_user_id: githubUserIdNum, username, github_pat: token , email }); //<-email
       setUser(response);
-      await api.updateOnboardingStep(2, authToken || '');
-      setStep(2);
+      await moveToStep(2);
     } catch {
       setStep1Error('Failed to save. Please try again.');
     } finally {
@@ -159,14 +207,22 @@ const { email } = useEmail();
   const handleSync = async () => {
     setSyncing(true);
     try {
-      if (!user?.github_user_id || !user?.github_pat) throw new Error('User not initialized');
-      const syncResponse = await api.syncRepos(user.github_user_id, user.github_pat);
+      if (!githubId || !token) throw new Error('User not initialized');
+      const syncResponse = await api.syncRepos(Number(githubId), token);
       if (!syncResponse.success) throw new Error(syncResponse.message || 'Sync failed');
-      const reposResponse = await api.getRepos(user.id || '');
+      const userId = user?.id;
+
+      if (!userId) {
+        throw new Error('Missing user id');
+      }
+
+      const reposResponse = await api.getRepos(userId);
       if (reposResponse?.repos && Array.isArray(reposResponse.repos)) setRepos(reposResponse.repos);
       setSynced(true);
     } catch (error) {
-      console.error('Sync error:', error);
+      setPageError(
+        'Failed to sync repositories. Please check your GitHub token.'
+      );
     } finally {
       setSyncing(false);
     }
@@ -201,18 +257,24 @@ const { email } = useEmail();
 
   const handleSavePermissions = async () => {
     if (!user?.id) return;
+
     try {
-      const permissions = repos.map(({ github_repo_id, can_read, can_write }) => ({
-        github_repo_id, can_read: can_read || false, can_write: can_write || false,
-      }));
+
+      const permissions = repos.map(
+        ({ github_repo_id, can_read, can_write }) => ({
+          github_repo_id,
+          can_read: can_read || false,
+          can_write: can_write || false,
+        })
+      );
+
       await api.setPermissions(user.id, permissions);
-      const authToken = getAuthToken();
-      if (authToken) await api.updateOnboardingStep(4, authToken);
-      setStep(4);
+
+      await moveToStep(4);
     } catch {
-      const authToken = getAuthToken();
-      if (authToken) await api.updateOnboardingStep(4, authToken);
-      setStep(4);
+      setPageError(
+        'Failed to save repository permissions.'
+      );
     }
   };
 
@@ -234,18 +296,7 @@ const { email } = useEmail();
       }
     }, 5000);
     return () => clearInterval(interval);
-  }, [step, verified, user?.username, username]);
-
-  useEffect(() => {
-    if (step !== 5) return;
-    const fetchCount = async () => {
-      try {
-        const metrics = await api.getMetrics();
-        setActionCount(Number(metrics.total) || 0);
-      } catch { /* ignore */ }
-    };
-    fetchCount();
-  }, [step]);
+  }, [step, verified, user?.username, username, user?.id]);
 
   const mcpConfig = JSON.stringify({
     mcpServers: {
@@ -276,6 +327,11 @@ const { email } = useEmail();
   return (
     <div className="flex min-h-screen flex-col items-center bg-background px-4 py-10 sm:py-14">
       <StepIndicator current={step} />
+      {pageError && (
+        <div className="mb-4 w-full max-w-lg rounded-md border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {pageError}
+        </div>
+      )}
 
       <div className="w-full max-w-lg">
 
@@ -352,17 +408,13 @@ const { email } = useEmail();
                   </div>
                   <div className="mt-5 flex gap-2">
                     <button onClick={async() => {
-                      const authToken = getAuthToken();
-                      if (authToken) await api.updateOnboardingStep(1, authToken);
-                      setStep(1);
-                    }} className={ghostBtn}>
+                     await moveToStep(1);
+                    }} className={ghostBtn} disabled={transitionLoading}>
                       <ChevronLeft className="h-4 w-4" /> Back
                     </button>
                     <button onClick={async() => {
-                      const authToken = getAuthToken();
-                      if (authToken) await api.updateOnboardingStep(2, authToken);
-                      setStep(3);
-                    }} className={`${primaryBtn} flex-1`}>
+                      await moveToStep(3);
+                    }} className={`${primaryBtn} flex-1`} disabled={transitionLoading}>
                       Continue <ChevronRight className="h-4 w-4" />
                     </button>
                   </div>
@@ -422,17 +474,14 @@ const { email } = useEmail();
               </div>
               <div className="mt-5 flex gap-2">
                 <button onClick={async () => {
-                  const authToken = getAuthToken();
-                  if (authToken) await api.updateOnboardingStep(2, authToken);
-                  setStep(2);
-                }} className={ghostBtn}>
+                 
+                  await moveToStep(2);
+                }} className={ghostBtn} disabled={transitionLoading}>
                   <ChevronLeft className="h-4 w-4" /> Back
                 </button>
                 <button onClick={async () => {
-                  const authToken = getAuthToken();
-                  if (authToken) await api.updateOnboardingStep(2, authToken);
-                  handleSavePermissions();
-                }} className={`${primaryBtn} flex-1`}>
+                  await handleSavePermissions();
+                }} className={`${primaryBtn} flex-1`} disabled={transitionLoading}>
                   Continue <ChevronRight className="h-4 w-4" />
                 </button>
               </div>
@@ -490,26 +539,20 @@ const { email } = useEmail();
 
               <div className="mt-5 flex gap-2">
                 <button onClick={async () => {
-                  const authToken = getAuthToken();
-                  if (authToken) await api.updateOnboardingStep(3, authToken);
-                  setStep(3);
-                }} className={ghostBtn}>
+                  await moveToStep(3);
+                }} className={ghostBtn} disabled={transitionLoading}>
                   <ChevronLeft className="h-4 w-4" /> Back
                 </button>
                 <button onClick={async () => {
-                  const authToken = getAuthToken();
-                  if (authToken) await api.updateOnboardingStep(5, authToken);
-                  setStep(5);
-                }} className={`${primaryBtn} flex-1`}>
+                   await moveToStep(5);
+                }} className={`${primaryBtn} flex-1`} disabled={transitionLoading}>
                   Continue <ChevronRight className="h-4 w-4" />
                 </button>
               </div>
               {!verified && (
                 <button onClick={async () => {
-                  const authToken = getAuthToken();
-                  if (authToken) await api.updateOnboardingStep(5, authToken);
-                  setStep(5);
-                }} className="mt-2 w-full text-center text-xs text-muted-foreground hover:text-foreground transition-colors">
+                  await moveToStep(5);
+                }} className="mt-2 w-full text-center text-xs text-muted-foreground hover:text-foreground transition-colors" disabled={transitionLoading}>
                   Skip for now
                 </button>
               )}
@@ -542,10 +585,7 @@ const { email } = useEmail();
 
               <button
                 onClick={async () => {
-                  const authToken = getAuthToken();
-                  if (authToken) await api.updateOnboardingStep(6, authToken);
-                  setStep(6);
-                  router.push('/dashboard');
+                  router.replace('/dashboard');
                 }}
                 className={`${primaryBtn} mx-auto mt-7`}
               >
