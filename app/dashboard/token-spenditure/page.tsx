@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
 import {
+  Area,
   Bar,
   CartesianGrid,
   Cell,
@@ -164,6 +165,16 @@ function rangeTableCaption(range: UsageRange): string {
   }
 }
 
+const PAGE_SIZE = 20;
+
+const EMPTY_PAGE: PaginatedResponse<TokenMeterResponse> = {
+  items: [],
+  total: 0,
+  page: 1,
+  page_size: PAGE_SIZE,
+  pages: 0,
+};
+
 export default function TokenSpenditurePage() {
   const { user, isLoading: userLoading } = useUser();
   const reduce = useReducedMotion();
@@ -175,7 +186,7 @@ export default function TokenSpenditurePage() {
   const fetchData = useCallback(async () => {
     if (!user?.id) {
       if (!userLoading) {
-        setRows([]);
+        setData(EMPTY_PAGE);
         setLoading(false);
       }
       return;
@@ -190,7 +201,7 @@ export default function TokenSpenditurePage() {
     } finally {
       setLoading(false);
     }
-  }, [user?.id, userLoading]);
+  }, [user?.id, userLoading, page]);
 
   useEffect(() => {
     if (user?.id) fetchData();

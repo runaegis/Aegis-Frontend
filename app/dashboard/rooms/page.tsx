@@ -72,7 +72,7 @@ export default function RoomsPage() {
   const [members, setMembers] = useState<RoomMember[]>([]);
   const [invites, setInvites] = useState<RoomInvite[]>([]);
 
-  const [newRepoId, setNewRepoId] = useState('');
+  const [newRepoName, setNewRepoName] = useState('');
   const [joinCode, setJoinCode] = useState('');
   const [inviteMaxUses, setInviteMaxUses] = useState('');
   const [inviteExpiresAt, setInviteExpiresAt] = useState('');

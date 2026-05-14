@@ -96,11 +96,14 @@ export default function AuditPage() {
         `${startDate}T00:00:00Z`,
         `${endDate}T23:59:59Z`,
       );
+      const sorted = [...allEvents].sort(sortSessionActionsDesc);
       const exportData = {
+        schema: 'aegis.audit_export.v1',
         exported_at: new Date().toISOString(),
-        exported_by: user?.username || 'unknown',
-        total_records: allEvents.length,
-        events: allEvents,
+        exported_by: user?.username ?? null,
+        date_range: { start: `${startDate}T00:00:00.000Z`, end: `${endDate}T23:59:59.999Z` },
+        total_records: sorted.length,
+        events: sorted.map(toCanonicalSessionAction),
       };
       const blob = new Blob([JSON.stringify(exportData, null, 2)], {
         type: 'application/json',
@@ -113,6 +116,35 @@ export default function AuditPage() {
       URL.revokeObjectURL(url);
     } catch {
       setError('Failed to export audit trail');
+    }
+  };
+
+  const exportPdf = async () => {
+    if (!user?.id) {
+      setError('No authenticated user found for export');
+      return;
+    }
+    try {
+      const allEvents = await api.getAuditTrailByDateRange(
+        user.id,
+        `${startDate}T00:00:00Z`,
+        `${endDate}T23:59:59Z`
+      );
+      const sorted = [...allEvents].sort(sortSessionActionsDesc);
+      const exportData = {
+        schema: 'aegis.audit_export.v1',
+        exported_at: new Date().toISOString(),
+        exported_by: user?.username ?? null,
+        date_range: { start: `${startDate}T00:00:00.000Z`, end: `${endDate}T23:59:59.999Z` },
+        total_records: sorted.length,
+        events: sorted.map(toCanonicalSessionAction),
+      };
+      await downloadAuditPdf(
+        exportData,
+        `aegis-audit-${new Date().toISOString().split('T')[0]}.pdf`
+      );
+    } catch {
+      setError('Failed to export PDF audit trail');
     }
   };
 

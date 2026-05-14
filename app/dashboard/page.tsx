@@ -207,6 +207,13 @@ export default function DashboardHomePage() {
         onRefresh={fetchData}
         unreadCount={stats.pendingApprovals}
       />
+      <div className="relative">
+        <Topbar
+          title="Runs"
+          subtitle="Real-time agent activity"
+          lastUpdated={lastUpdated}
+          onRefresh={refreshRuns}
+        />
 
       <div className="mx-auto max-w-[1320px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
         {error && (
@@ -569,6 +576,7 @@ function StatCell({
             aria-hidden
           />
         )}
+        </div>
       </div>
       <p
         className="mt-1.5 text-[26px] font-semibold leading-none tracking-[-0.04em] tabular-nums"
@@ -725,6 +733,10 @@ function ChipLabel_DEPRECATED({
   label: string;
   children: React.ReactNode;
 }) {
+  const [detailMode, setDetailMode] = useState<'details' | 'raw_json'>('details');
+  const toolDisplay = formatMcpAegisToolDisplayName(run.tool_name || '');
+  const toolChipStyle = getToolChipStyle(run.tool_name || '');
+  const toolHue: number | null = getToolAccentHue(run.tool_name || '');
   return (
     <div className="flex items-center gap-1.5">
       <span className="text-[10px] font-semibold uppercase tracking-[0.05em] text-[var(--neutral-soft-400)]">

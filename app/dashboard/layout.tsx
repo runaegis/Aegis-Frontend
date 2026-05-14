@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { api, AuthError } from '@/lib/api';
 import { useRouter } from 'next/navigation';
 import { useUser } from '@/lib/hooks';
+import { DashboardDataProvider } from '@/lib/dashboardDataContext';
 import Layout from '@/components/layout/Layout';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { installPreviewApi } from '@/lib/preview-data';
@@ -78,10 +79,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         console.error(error);
         router.replace('/auth');
       }
-    };
+  };
 
-    verifyAndLoad();
-  }, [router, setUser, user?.id]);
+  verifyAndLoad();
+}, [router, setUser, user?.id]);
 
   if (!isReady) {
     return (

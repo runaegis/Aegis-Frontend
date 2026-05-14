@@ -78,11 +78,9 @@ export default function Sidebar() {
     return pathname === href || pathname.startsWith(`${href}/`);
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
-    window.location.href = '/auth';
-  };
+  const handleLogout = async () => {
+    await api.logOut();
+  };  
 
   const renderNavLink = (item: NavItem) => {
     const active = isActive(item.href);

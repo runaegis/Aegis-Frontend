@@ -46,6 +46,11 @@ export default function SessionsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedSession, setExpandedSession] = useState<string | null>(null);
+  const pageRef = useRef(page);
+  useEffect(() => {
+    pageRef.current = page;
+  }, [page]);
+
   const { user, isLoading: userLoading } = useUser();
   const reduce = useReducedMotion();
   const { fetchAggregatedPage, globalDataEpoch, lastUpdated } =
@@ -64,8 +69,6 @@ export default function SessionsPage() {
         });
         setLoading(false);
       }
-      return;
-    }
 
     if (!options?.soft) setLoading(true);
 
@@ -213,7 +216,6 @@ export default function SessionsPage() {
 
 function SessionRow({
   session,
-  userId,
   isExpanded,
   onToggle,
 }: {
