@@ -45,18 +45,6 @@ function mergeById(prev: SessionAction[], incoming: SessionAction[]): SessionAct
   return sortActions(Array.from(map.values()));
 }
 
-function computeMetrics(runs: SessionAction[], totalFromApi: number): Metrics {
-  return {
-    total: totalFromApi,
-    allows: runs.filter((r) => r.result?.toUpperCase() === 'ALLOW').length,
-    denies: runs.filter((r) => r.result?.toUpperCase() === 'DENY').length,
-    rewrites: runs.filter((r) => r.result?.toUpperCase() === 'REWRITE').length,
-    approvals: runs.filter((r) =>
-      r.result?.toUpperCase().includes('APPROVAL'),
-    ).length,
-  };
-}
-
 type ActionsMeta = { total: number; pages: number; page_size: number };
 
 export type DashboardDataContextValue = {
@@ -71,7 +59,6 @@ export type DashboardDataContextValue = {
   /** Full refresh: reset runs to page 1, bust server cache, clear aggregated cache. */
   refreshRuns: () => Promise<void>;
   metrics: Metrics;
-  metricsPartial: boolean;
   lastUpdated: Date;
   /** Bumps when a timed refresh runs so /sessions can refetch. */
   globalDataEpoch: number;
@@ -100,6 +87,13 @@ export function DashboardDataProvider({ children }: { children: ReactNode }) {
   const aggregatedCacheRef = useRef<
     Map<number, { at: number; data: PaginatedResponse<AggregatedSessionAction> }>
   >(new Map());
+  const [metrics, setMetrics] = useState<Metrics>({
+    total: 0,
+    allows: 0,
+    denies: 0,
+    rewrites: 0,
+    approvals: 0,
+  });
 
   useEffect(() => {
     sessionActionsRef.current = sessionActions;
@@ -140,7 +134,13 @@ export function DashboardDataProvider({ children }: { children: ReactNode }) {
       setRunsError(null);
       try {
         if (options.bustHttpCache) invalidateCache(user.id);
-        const res = await api.getSessionActionsPage(user.id, 1, PAGE_SIZE);
+        const [res, metricsRes] = await Promise.all([
+          api.getSessionActionsPage(user.id, 1, PAGE_SIZE),
+          api.getMetrics(user.id),
+        ]);
+
+        setSessionActions(sortActions(res.items));
+        setMetrics(metricsRes);
         setSessionActions(sortActions(res.items));
         const nextLoaded = new Set([1]);
         setLoadedPages(nextLoaded);
@@ -165,8 +165,13 @@ export function DashboardDataProvider({ children }: { children: ReactNode }) {
     invalidateCache(user.id);
     aggregatedCacheRef.current.clear();
     try {
-      const res = await api.getSessionActionsPage(user.id, 1, PAGE_SIZE);
+      const [res, metricsRes] = await Promise.all([
+        api.getSessionActionsPage(user.id, 1, PAGE_SIZE),
+        api.getMetrics(user.id),
+      ]);
+
       setSessionActions(sortActions(res.items));
+      setMetrics(metricsRes);
       const nextLoaded = new Set([1]);
       setLoadedPages(nextLoaded);
       loadedPagesRef.current = nextLoaded;
@@ -242,14 +247,6 @@ export function DashboardDataProvider({ children }: { children: ReactNode }) {
     [user?.id],
   );
 
-  const metrics = useMemo(() => {
-    const total = actionsMeta?.total ?? sessionActions.length;
-    return computeMetrics(sessionActions, total);
-  }, [sessionActions, actionsMeta]);
-
-  const metricsPartial =
-    !!actionsMeta && sessionActions.length < actionsMeta.total;
-
   const hasMoreRuns =
     !!actionsMeta && sessionActions.length < actionsMeta.total;
 
@@ -267,7 +264,6 @@ export function DashboardDataProvider({ children }: { children: ReactNode }) {
       loadMoreRuns,
       refreshRuns: syncRunsFromServer,
       metrics,
-      metricsPartial,
       lastUpdated,
       globalDataEpoch,
       fetchAggregatedPage,
@@ -283,7 +279,6 @@ export function DashboardDataProvider({ children }: { children: ReactNode }) {
       loadMoreRuns,
       syncRunsFromServer,
       metrics,
-      metricsPartial,
       lastUpdated,
       globalDataEpoch,
       fetchAggregatedPage,

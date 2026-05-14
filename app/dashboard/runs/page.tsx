@@ -52,7 +52,6 @@ export default function RunsPage() {
   loadMoreRuns,
   refreshRuns,
   metrics,
-  metricsPartial,
   lastUpdated,
 } = useDashboardData();
 
@@ -150,14 +149,6 @@ export default function RunsPage() {
             <MetricStripCell label="Approvals"  value={metrics.approvals} dot="var(--primary-base)" />
           </motion.div>
         </motion.section>
-
-          {metricsPartial && (
-            <p className="mb-4 text-xs text-[var(--neutral-soft-400)]">
-              Allow / deny / rewrite / approval counts reflect loaded actions only (
-              {runs.length.toLocaleString()} of {metrics.total.toLocaleString()}).
-              Load more runs to see additional data.
-            </p>
-          )}
 
         {runs.length === 0 ? (
           <div className="rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
@@ -317,8 +308,8 @@ function RunRow({
           <DecisionBadge decision={run.decision} />
         </TD>
         <TD className="text-right tabular-nums">
-          <div className="flex items-center justify-end gap-2">
-            <span className="text-[12px] text-[var(--neutral-soft-400)]">
+          <div className="flex items-center justify-end gap-2 whitespace-nowrap">
+            <span className="whitespace-nowrap text-[12px] text-[var(--neutral-soft-400)]">
               {formatRelativeTime(run.timestamp)}
             </span>
             {run.execution_time !== undefined && run.execution_time !== null && (

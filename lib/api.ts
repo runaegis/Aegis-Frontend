@@ -447,22 +447,17 @@ export const api = {
     ) as SessionAction[];
   },
 
-  getMetrics: async (userId?: string): Promise<Metrics> => {
-    if (!userId)
-      return { total: 0, allows: 0, denies: 0, rewrites: 0, approvals: 0 };
-    const { items: runs } = await getUserActions(userId);
-    return {
-      total: runs.length,
-      allows: runs.filter((r) => r.result?.toUpperCase() === "ALLOW").length,
-      denies: runs.filter((r) => r.result?.toUpperCase() === "DENY").length,
-      rewrites: runs.filter((r) => r.result?.toUpperCase() === "REWRITE")
-        .length,
-      approvals: runs.filter((r) =>
-        r.result?.toUpperCase().includes("APPROVAL"),
-      ).length,
-    };
-  },
+  getMetrics: async (userId: string): Promise<Metrics> => {
+    const res = await apiFetch(
+      `${API_BASE}/metrics`
+    );
 
+    if (!res.ok) {
+      throw new Error(`Failed to fetch metrics`);
+    }
+
+    return res.json();
+  },
   getApprovals: async (userId?: string): Promise<SessionAction[]> => {
     if (!userId) return [];
     const { items: rows } = await getUserActions(userId);
