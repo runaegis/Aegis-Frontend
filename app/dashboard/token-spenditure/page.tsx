@@ -14,7 +14,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { Coins } from 'lucide-react';
+import { Coins, TrendingUp } from 'lucide-react';
 import Topbar from '@/components/layout/Topbar';
 import EmptyState from '@/components/ui/EmptyState';
 import ErrorBanner from '@/components/ui/ErrorBanner';
@@ -366,6 +366,18 @@ export default function TokenSpenditurePage() {
           </div>
         </motion.section>
 
+        {/* ─── Monetary savings tile ──────────────────────────────────────
+             Slim attraction-tile sitting between the spend stat strip and
+             the per-session detail grid. Derives dollar savings from the
+             same sessionAegisComparison data the Aegis Comparison chart
+             uses below — sum(without_aegis − with_aegis) × cost-per-token.
+             Single-line headline, no sparkline / breakdown (those would
+             duplicate the existing Aegis Comparison chart). */}
+        <MonetarySavingsTile
+          buckets={sessionAegisComparison}
+          reduce={!!reduce}
+        />
+
         {displayRows.length === 0 ? (
           <div className="overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
             <EmptyState
@@ -685,5 +697,140 @@ function Legend({ label, color }: { label: string; color: string }) {
       />
       <span className="text-[var(--neutral-sub-600)]">{label}</span>
     </span>
+  );
+}
+
+// ─── Monetary savings tile ─────────────────────────────────────────────────
+//
+// Slim attraction-tile that turns the engineer's modeled tokens-saved figure
+// into a dollar number. Sits above the Aegis Comparison chart and gives
+// reviewers a sales-friendly headline ("$X saved this period") at a glance.
+//
+// Cost model — uses a blended per-token cost a finance team would recognise
+// for typical Claude/GPT-4-class usage. Swap for a real per-model figure
+// when one is available from the backend.
+//
+// Important: this tile DOES NOT duplicate the Aegis Comparison chart below.
+// That chart shows per-session "without Aegis vs with Aegis" tokens; this
+// tile shows the single roll-up dollar number derived from the same data.
+const COST_PER_TOKEN_USD = 0.000_005; // $5 per 1M tokens — conservative blended estimate.
+
+function MonetarySavingsTile({
+  buckets,
+  reduce,
+}: {
+  buckets: SessionAegisBucket[];
+  reduce: boolean;
+}) {
+  // Total tokens Aegis prevented from being charged for (modeled).
+  const tokensSaved = buckets.reduce(
+    (sum, b) => sum + Math.max(0, b.without_aegis - b.with_aegis),
+    0,
+  );
+  const dollarsSaved = tokensSaved * COST_PER_TOKEN_USD;
+
+  // Savings rate vs the modeled "without Aegis" total — what percentage of
+  // the would-be spend did Aegis prevent?
+  const withoutAegisTotal = buckets.reduce((s, b) => s + b.without_aegis, 0);
+  const savingsRate =
+    withoutAegisTotal > 0 ? Math.round((tokensSaved / withoutAegisTotal) * 100) : 0;
+
+  const formatUSD = (n: number) => {
+    if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
+    if (n >= 10_000) return `$${(n / 1000).toFixed(1)}k`;
+    if (n >= 100) return `$${Math.round(n).toLocaleString()}`;
+    return `$${n.toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
+  };
+
+  const formatTokens = (n: number) => {
+    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+    if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
+    return Math.round(n).toLocaleString();
+  };
+
+  return (
+    <motion.section
+      className="relative mb-6 overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]"
+      initial={reduce ? false : { opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: DUR.slow, ease: EASE.out, delay: 0.22 }}
+    >
+      {/* Inset warm gradient — matches the dashboard's "premium card" pattern */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-1 rounded-[8px]"
+        style={{
+          background:
+            'linear-gradient(180deg, rgba(250, 115, 25, 0.07) 0%, rgba(250, 115, 25, 0.02) 45%, rgba(255, 255, 255, 0) 75%)',
+        }}
+      />
+
+      <div className="relative flex flex-col gap-3 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
+        {/* Left: eyebrow + headline + caption */}
+        <div className="flex items-center gap-3">
+          {/* Brand-tile coin icon */}
+          <span
+            aria-hidden
+            className="relative inline-flex h-11 w-11 shrink-0 items-center justify-center"
+          >
+            <span
+              className="absolute inset-0 rounded-full"
+              style={{ backgroundColor: 'rgba(250, 115, 25, 0.18)' }}
+            />
+            <span
+              className="relative inline-flex h-8 w-8 items-center justify-center rounded-full"
+              style={{
+                background:
+                  'linear-gradient(180deg, #fb8939 0%, #fa7319 55%, #ed6a14 100%)',
+                border: '1px solid #ed6a14',
+                boxShadow:
+                  'inset 0 1px 0 0 rgba(255,255,255,0.22), 0 1px 2px rgba(206, 94, 18, 0.30)',
+              }}
+            >
+              <Coins className="h-4 w-4 text-white" strokeWidth={2.25} />
+            </span>
+          </span>
+
+          <div>
+            <p className="text-[10.5px] font-semibold uppercase tracking-[0.1em] text-[var(--neutral-soft-400)]">
+              Money saved with Aegis
+            </p>
+            <div className="mt-1 flex items-baseline gap-2.5">
+              <span className="text-[28px] font-semibold leading-none tracking-[-0.04em] tabular-nums text-[var(--neutral-strong-950)] sm:text-[32px]">
+                {formatUSD(dollarsSaved)}
+              </span>
+              <span className="text-[12.5px] text-[var(--neutral-sub-600)]">
+                this period
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Right: tokens-saved chip + savings-rate pill */}
+        <div className="flex items-center gap-2.5">
+          <div className="text-right">
+            <p className="text-[10.5px] font-semibold uppercase tracking-[0.07em] text-[var(--neutral-soft-400)]">
+              Tokens saved
+            </p>
+            <p className="mt-0.5 text-[15px] font-semibold tabular-nums tracking-[-0.01em] text-[var(--neutral-strong-950)]">
+              {formatTokens(tokensSaved)}
+            </p>
+          </div>
+          {savingsRate > 0 && (
+            <span
+              className="inline-flex h-[22px] items-center gap-1 rounded-[6px] px-2 text-[11px] font-bold uppercase tracking-[0.05em]"
+              style={{
+                backgroundColor: 'rgba(31, 193, 107, 0.16)',
+                color: 'var(--success-dark)',
+              }}
+              title="Share of modeled spend prevented by Aegis"
+            >
+              <TrendingUp className="h-2.5 w-2.5" strokeWidth={2.75} />
+              {savingsRate}%
+            </span>
+          )}
+        </div>
+      </div>
+    </motion.section>
   );
 }
