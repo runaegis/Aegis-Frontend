@@ -5,10 +5,12 @@ import Sidebar from './Sidebar';
 
 export default function Layout({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-[var(--bg-app)]">
       <Sidebar />
-      {/* offset for mobile top bar (h-12) and desktop sidebar (w-56) */}
-      <main className="min-h-screen pt-12 lg:ml-56 lg:pt-0">{children}</main>
+      {/* mobile top bar = 48px; desktop sidebar = 220px */}
+      <main className="min-h-screen pt-12 lg:ml-[220px] lg:pt-0">
+        {children}
+      </main>
     </div>
   );
 }

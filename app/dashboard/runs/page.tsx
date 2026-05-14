@@ -1,0 +1,433 @@
+'use client';
+
+import { useCallback, useEffect, useState } from 'react';
+import { Activity, ChevronRight, Search } from 'lucide-react';
+import Link from 'next/link';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
+import { DUR, EASE, fadeUp, staggerContainer } from '@/lib/motion';
+import { api } from '@/lib/api';
+import { useAutoRefresh, useUser } from '@/lib/hooks';
+import { Metrics, SessionAction } from '@/lib/types';
+import {
+  formatExecutionTimeMs,
+  formatFullTimestamp,
+  formatRelativeTime,
+  truncate,
+} from '@/lib/utils';
+import Topbar from '@/components/layout/Topbar';
+import AgentAvatar from '@/components/ui/AgentAvatar';
+import DecisionBadge, { decisionColor } from '@/components/ui/DecisionBadge';
+import EmptyState from '@/components/ui/EmptyState';
+import ErrorBanner from '@/components/ui/ErrorBanner';
+import JsonViewer from '@/components/ui/JsonViewer';
+import LoadingSpinner from '@/components/ui/LoadingSpinner';
+import { Button } from '@/components/ui/Button';
+import { CodeChip } from '@/components/ui/CodeChip';
+import { Input } from '@/components/ui/Input';
+import { SelectMenu } from '@/components/ui/SelectMenu';
+import {
+  Table,
+  TBody,
+  TD,
+  TH,
+  THead,
+  TR,
+  TRExpanded,
+} from '@/components/ui/Table';
+
+export default function RunsPage() {
+  const { user, isLoading: userLoading } = useUser();
+  const reduce = useReducedMotion();
+  const [runs, setRuns] = useState<SessionAction[]>([]);
+  const [metrics, setMetrics] = useState<Metrics>({
+    total: 0,
+    allows: 0,
+    denies: 0,
+    rewrites: 0,
+    approvals: 0,
+  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [decisionFilter, setDecisionFilter] = useState('all');
+  const [expandedRow, setExpandedRow] = useState<string | null>(null);
+
+  const fetchData = useCallback(async () => {
+    if (!user?.id) return;
+    setLoading(true);
+    try {
+      const [runsData, metricsData] = await Promise.all([
+        api.getRuns(user.id),
+        api.getMetrics(user.id),
+      ]);
+      setRuns(runsData);
+      setMetrics(metricsData);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not connect to backend');
+    } finally {
+      setLoading(false);
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (user?.id) fetchData();
+    else if (!userLoading) setLoading(false);
+  }, [user?.id, userLoading, fetchData]);
+
+  const { lastUpdated } = useAutoRefresh(fetchData, 30000);
+
+  const filteredRuns = runs.filter((run) => {
+    const matchesSearch =
+      !search ||
+      run.agent_name?.toLowerCase().includes(search.toLowerCase()) ||
+      run.tool_name?.toLowerCase().includes(search.toLowerCase()) ||
+      run.target_repo?.toLowerCase().includes(search.toLowerCase()) ||
+      run.action_summary?.toLowerCase().includes(search.toLowerCase());
+
+    const matchesDecision =
+      decisionFilter === 'all' ||
+      (decisionFilter === 'approval'
+        ? run.decision?.toUpperCase().includes('APPROVAL')
+        : run.decision?.toUpperCase() === decisionFilter.toUpperCase());
+
+    return matchesSearch && matchesDecision;
+  });
+
+  if (userLoading || loading) {
+    return (
+      <>
+        <Topbar title="Runs" subtitle="Real-time agent activity" />
+        <div className="flex h-[60vh] items-center justify-center">
+          <LoadingSpinner size="lg" />
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <Topbar
+        title="Runs"
+        subtitle="Real-time agent activity"
+        lastUpdated={lastUpdated}
+        onRefresh={fetchData}
+      />
+      <div className="mx-auto max-w-[1320px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
+        {error && (
+          <div className="mb-6">
+            <ErrorBanner
+              message={error}
+              onDismiss={() => setError(null)}
+              onRetry={fetchData}
+            />
+          </div>
+        )}
+
+        {/* Eyebrow + page title */}
+        <motion.header
+          className="mb-6"
+          variants={staggerContainer(0.05, 0.04)}
+          initial={reduce ? false : 'hidden'}
+          animate="show"
+        >
+          <motion.p
+            variants={fadeUp}
+            className="mb-2 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-[var(--neutral-soft-400)]"
+          >
+            Agent activity
+          </motion.p>
+          <motion.h1
+            variants={fadeUp}
+            className="text-[26px] font-semibold leading-[1.1] tracking-[-0.03em] text-[var(--neutral-strong-950)]"
+          >
+            Every action your agents took
+          </motion.h1>
+          <motion.p
+            variants={fadeUp}
+            className="mt-2 text-[13.5px] text-[var(--neutral-sub-600)]"
+          >
+            {metrics.total.toLocaleString()} {metrics.total === 1 ? 'decision' : 'decisions'} evaluated · auto-refresh every 30s
+          </motion.p>
+        </motion.header>
+
+        {/* Metric strip — single card, 5 divided cells (matches Dashboard stat strip) */}
+        <motion.section
+          className="mb-6 overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]"
+          initial={reduce ? false : { opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: DUR.slow, ease: EASE.out, delay: 0.16 }}
+        >
+          <motion.div
+            className="grid grid-cols-2 divide-y divide-[var(--stroke-soft-200)] sm:grid-cols-3 sm:divide-y-0 lg:grid-cols-5 lg:divide-x lg:divide-y-0"
+            variants={staggerContainer(0.04, 0.28)}
+            initial={reduce ? false : 'hidden'}
+            animate="show"
+          >
+            <MetricStripCell label="Total Runs" value={metrics.total} />
+            <MetricStripCell label="Allowed"    value={metrics.allows}    dot="var(--success)" />
+            <MetricStripCell label="Denied"     value={metrics.denies}    dot="var(--error)" />
+            <MetricStripCell label="Rewritten"  value={metrics.rewrites}  dot="var(--feature)" />
+            <MetricStripCell label="Approvals"  value={metrics.approvals} dot="var(--primary-base)" />
+          </motion.div>
+        </motion.section>
+
+        {runs.length === 0 ? (
+          <div className="rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
+            <EmptyState
+              icon={<Activity className="h-5 w-5" />}
+              title="No agent actions yet"
+              description="Connect your agent to start monitoring actions."
+              action={
+                <Link href="/onboarding">
+                  <Button variant="primary">Set up agent</Button>
+                </Link>
+              }
+            />
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {/* Filters */}
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="min-w-[260px] flex-1">
+                <Input
+                  type="text"
+                  placeholder="Search by agent, tool, repo, summary…"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  leadingIcon={<Search className="h-3.5 w-3.5" strokeWidth={2} />}
+                />
+              </div>
+              <SelectMenu
+                value={decisionFilter}
+                onChange={setDecisionFilter}
+                ariaLabel="Filter by decision"
+                minWidth={180}
+                align="end"
+                options={[
+                  { value: 'all',      label: 'All decisions', leading: <Swatch color="var(--neutral-soft-400)" /> },
+                  { value: 'ALLOW',    label: 'Allow',         leading: <Swatch color="var(--success)" /> },
+                  { value: 'DENY',     label: 'Deny',          leading: <Swatch color="var(--error)" /> },
+                  { value: 'REWRITE',  label: 'Rewrite',       leading: <Swatch color="var(--feature)" /> },
+                  { value: 'approval', label: 'Approval',      leading: <Swatch color="var(--warning)" /> },
+                ]}
+              />
+            </div>
+
+            {/* Table */}
+            <Table>
+              <THead>
+                <tr>
+                  <TH>Agent</TH>
+                  <TH>Tool</TH>
+                  <TH>Repository</TH>
+                  <TH>Branch</TH>
+                  <TH>Decision</TH>
+                  <TH className="text-right">Time</TH>
+                  <TH aria-label="Expand" className="w-8" />
+                </tr>
+              </THead>
+              <TBody>
+                {filteredRuns.map((run) => (
+                  <RunRow
+                    key={run.id}
+                    run={run}
+                    isExpanded={expandedRow === run.id}
+                    onToggle={() =>
+                      setExpandedRow(expandedRow === run.id ? null : run.id)
+                    }
+                  />
+                ))}
+              </TBody>
+            </Table>
+
+            {filteredRuns.length === 0 && search && (
+              <div className="rounded-[12px] border border-[var(--stroke-soft-200)] bg-white py-10 text-center text-[13px] text-[var(--neutral-soft-400)]">
+                No runs match your search.
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+function RunRow({
+  run,
+  isExpanded,
+  onToggle,
+}: {
+  run: SessionAction;
+  isExpanded: boolean;
+  onToggle: () => void;
+}) {
+  // Delayed visual-expanded state — keeps the trigger row in its expanded
+  // visual treatment (gradient, no row-divider) until the panel below
+  // has finished its exit animation. Prevents the trigger row from
+  // "snapping back" with a 1px border re-appearing while the panel is
+  // still collapsing — which the user perceived as a layout shift.
+  const [stillExpanded, setStillExpanded] = useState(isExpanded);
+  useEffect(() => {
+    if (isExpanded) setStillExpanded(true);
+    // collapse → false happens via AnimatePresence onExitComplete below
+  }, [isExpanded]);
+
+  return (
+    <>
+      <TR clickable isExpanded={stillExpanded} onClick={onToggle}>
+        <TD>
+          <div className="flex items-center gap-2.5">
+            <span
+              className="inline-block h-1.5 w-1.5 shrink-0 rounded-full"
+              style={{ backgroundColor: decisionColor(run.decision) }}
+              aria-hidden
+            />
+            <AgentAvatar name={run.agent_name || ''} size="xs" />
+            <span className="truncate text-[13.5px] font-semibold text-[var(--neutral-strong-950)]">
+              {run.agent_name || 'Unknown'}
+            </span>
+          </div>
+        </TD>
+        <TD>
+          <CodeChip>{run.tool_name}</CodeChip>
+        </TD>
+        <TD className="text-[12.5px] font-normal text-[var(--neutral-sub-600)]">
+          {run.target_repo}
+        </TD>
+        <TD>
+          {run.target_branch ? (
+            <CodeChip>{run.target_branch}</CodeChip>
+          ) : (
+            <span className="text-[var(--neutral-soft-400)]">—</span>
+          )}
+        </TD>
+        <TD>
+          <DecisionBadge decision={run.decision} />
+        </TD>
+        <TD className="text-right tabular-nums">
+          <div className="flex items-center justify-end gap-2">
+            <span className="text-[12px] text-[var(--neutral-soft-400)]">
+              {formatRelativeTime(run.timestamp)}
+            </span>
+            {run.execution_time !== undefined && run.execution_time !== null && (
+              <CodeChip>{formatExecutionTimeMs(run.execution_time)}</CodeChip>
+            )}
+          </div>
+        </TD>
+        <TD className="w-8 text-right">
+          <ChevronRight
+            className={`ml-auto h-3.5 w-3.5 text-[var(--neutral-soft-400)] transition-transform duration-150 group-hover:translate-x-0.5 group-hover:text-[var(--neutral-strong-950)] ${
+              isExpanded ? 'rotate-90' : ''
+            }`}
+            strokeWidth={2}
+          />
+        </TD>
+      </TR>
+      <AnimatePresence
+        initial={false}
+        onExitComplete={() => setStillExpanded(false)}
+      >
+      {isExpanded && (
+        <TRExpanded key="expanded" colSpan={7}>
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+            <div>
+              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.05em] text-[var(--neutral-soft-400)]">
+                Full Summary
+              </p>
+              <p className="text-[13px] text-[var(--neutral-strong-950)]">
+                {run.action_summary || '—'}
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-3 text-[12px] md:grid-cols-4">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.05em] text-[var(--neutral-soft-400)]">
+                  Sequence
+                </p>
+                <p className="mt-0.5 text-[var(--neutral-strong-950)]">
+                  #{run.sequence_order}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.05em] text-[var(--neutral-soft-400)]">
+                  Session
+                </p>
+                <Link
+                  href={`/dashboard/sessions?id=${run.session_id}`}
+                  className="mt-0.5 block text-[var(--primary-base)] hover:underline [font-family:var(--font-geist-mono),ui-monospace,monospace]"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {run.session_id?.substring(0, 8)}…
+                </Link>
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.05em] text-[var(--neutral-soft-400)]">
+                  Timestamp
+                </p>
+                <p className="mt-0.5 text-[var(--neutral-strong-950)]">
+                  {formatFullTimestamp(run.timestamp)}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.05em] text-[var(--neutral-soft-400)]">
+                  Execution
+                </p>
+                <p className="mt-0.5 text-[var(--neutral-strong-950)]">
+                  {formatExecutionTimeMs(run.execution_time)}
+                </p>
+              </div>
+            </div>
+          </div>
+          {run.arguments && (
+            <div className="mt-4">
+              <JsonViewer data={run.arguments} collapsed={false} label="Arguments" />
+            </div>
+          )}
+        </TRExpanded>
+      )}
+      </AnimatePresence>
+    </>
+  );
+}
+
+// ── Decision color swatch for the SelectMenu options ───────────────────────
+function Swatch({ color }: { color: string }) {
+  return (
+    <span
+      className="inline-block h-2 w-2 shrink-0 rounded-full"
+      style={{ backgroundColor: color }}
+      aria-hidden
+    />
+  );
+}
+
+// ── Metric strip cell — divided cells inside one card (no gaps) ─────────────
+function MetricStripCell({
+  label,
+  value,
+  dot,
+}: {
+  label: string;
+  value: number;
+  dot?: string;
+}) {
+  return (
+    <motion.div variants={fadeUp} className="px-6 py-4">
+      <div className="flex items-center gap-2">
+        {dot && (
+          <span
+            className="inline-block h-[7px] w-[7px] shrink-0 rounded-full"
+            style={{ backgroundColor: dot }}
+            aria-hidden
+          />
+        )}
+        <p className="text-[10.5px] font-semibold uppercase tracking-[0.07em] text-[var(--neutral-soft-400)]">
+          {label}
+        </p>
+      </div>
+      <p className="mt-1.5 text-[26px] font-semibold leading-none tracking-[-0.04em] tabular-nums text-[var(--neutral-strong-950)]">
+        {value.toLocaleString()}
+      </p>
+    </motion.div>
+  );
+}

@@ -1,14 +1,26 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
-import { Clock, Plus, Trash2, Edit2, ChevronDown, ChevronRight } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
+import {
+  Calendar,
+  ChevronDown,
+  ChevronRight,
+  Clock,
+  Edit2,
+  Plus,
+  Trash2,
+} from 'lucide-react';
 import { api } from '@/lib/api';
 import { useUser } from '@/lib/hooks';
 import { formatFullTimestamp } from '@/lib/utils';
 import Topbar from '@/components/layout/Topbar';
+import EmptyState from '@/components/ui/EmptyState';
 import ErrorBanner from '@/components/ui/ErrorBanner';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
-import EmptyState from '@/components/ui/EmptyState';
+import { useToast } from '@/components/ui/Toast';
+import { Button } from '@/components/ui/Button';
+import { DUR, EASE, fadeUp, fadeUpSm, staggerContainer } from '@/lib/motion';
 
 interface FreezeWindow {
   id: string;
@@ -27,26 +39,29 @@ interface FreezeWindowFormData {
   window_end: string;
 }
 
+function getDayLabels(days: number[]): string {
+  if (days.length === 0) return 'No days selected';
+  if (days.length === 7) return 'Every day';
+  if (days.length === 5 && days.join(',') === '0,1,2,3,4') return 'Weekdays';
+  return days.map((d) => DAYS_OF_WEEK[d].label).join(', ');
+}
+
 const DAYS_OF_WEEK = [
-  { label: 'Monday', value: 0 },
-  { label: 'Tuesday', value: 1 },
-  { label: 'Wednesday', value: 2 },
-  { label: 'Thursday', value: 3 },
-  { label: 'Friday', value: 4 },
-  { label: 'Saturday', value: 5 },
-  { label: 'Sunday', value: 6 },
+  { label: 'Mon', full: 'Monday',   value: 0 },
+  { label: 'Tue', full: 'Tuesday',  value: 1 },
+  { label: 'Wed', full: 'Wednesday', value: 2 },
+  { label: 'Thu', full: 'Thursday',  value: 3 },
+  { label: 'Fri', full: 'Friday',    value: 4 },
+  { label: 'Sat', full: 'Saturday',  value: 5 },
+  { label: 'Sun', full: 'Sunday',    value: 6 },
 ];
 
-const TIMEZONES = [
-  'UTC',
-  'America/New_York',
-  'America/Chicago',
-  'Asia/Kolkata',
-  'Australia/Sydney',
-];
+const TIMEZONES = ['UTC', 'America/New_York', 'America/Chicago', 'Asia/Kolkata', 'Australia/Sydney'];
 
 export default function FreezeWindowPage() {
   const { user, isLoading: userLoading } = useUser();
+  const reduce = useReducedMotion();
+  const toast = useToast();
   const [windows, setWindows] = useState<FreezeWindow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -62,7 +77,6 @@ export default function FreezeWindowPage() {
 
   const fetchWindows = useCallback(async () => {
     if (!user?.id) return;
-
     setLoading(true);
     try {
       const data = await api.getFreezeWindows();
@@ -76,17 +90,13 @@ export default function FreezeWindowPage() {
   }, [user?.id]);
 
   useEffect(() => {
-    if (user?.id) {
-      fetchWindows();
-    } else if (!userLoading) {
-      setLoading(false);
-    }
+    if (user?.id) fetchWindows();
+    else if (!userLoading) setLoading(false);
   }, [user?.id, userLoading, fetchWindows]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user?.id) return;
-
     try {
       const payload = {
         timezone: formData.timezone,
@@ -94,30 +104,40 @@ export default function FreezeWindowPage() {
         window_start: `${formData.window_start}:00`,
         window_end: `${formData.window_end}:00`,
       };
-
       if (editingWindowId) {
         await api.updateFreezeWindow(editingWindowId, payload);
+        toast.success('Freeze window updated', {
+          description: 'Your schedule is now live.',
+        });
       } else {
         await api.createFreezeWindow(payload);
+        toast.success('Freeze window created', {
+          description: `${formData.window_start}–${formData.window_end} · ${formData.timezone}`,
+        });
       }
-
       await fetchWindows();
       resetForm();
       setShowForm(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save freeze window');
+      const msg =
+        err instanceof Error ? err.message : 'Failed to save freeze window';
+      setError(msg);
+      toast.error("Couldn't save freeze window", { description: msg });
     }
   };
 
   const handleDelete = async (windowId: string) => {
     if (!user?.id) return;
-
     try {
       await api.deleteFreezeWindow(windowId);
       await fetchWindows();
       setError(null);
+      toast.success('Freeze window deleted');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete freeze window');
+      const msg =
+        err instanceof Error ? err.message : 'Failed to delete freeze window';
+      setError(msg);
+      toast.error("Couldn't delete freeze window", { description: msg });
     }
   };
 
@@ -143,59 +163,103 @@ export default function FreezeWindowPage() {
     setEditingWindowId(null);
   };
 
-  const toggleWorkDay = (day: number) => {
+  const toggleWorkDay = (day: number) =>
     setFormData((prev) => ({
       ...prev,
       work_days: prev.work_days.includes(day)
         ? prev.work_days.filter((d) => d !== day)
         : [...prev.work_days, day].sort(),
     }));
-  };
 
-  const getDayLabels = (days: number[]): string => {
-    if (days.length === 0) return 'No days selected';
-    if (days.length === 7) return 'Every day';
-    if (days.length === 5 && days.join(',') === '0,1,2,3,4') return 'Weekdays';
-    return days.map((d) => DAYS_OF_WEEK[d].label.slice(0, 3)).join(', ');
-  };
 
   if (userLoading || loading) {
     return (
-      <div className="flex h-[60vh] items-center justify-center">
-        <LoadingSpinner size="lg" />
-      </div>
+      <>
+        <Topbar title="Freeze Windows" subtitle="When agents should stand down" />
+        <div className="flex h-[60vh] items-center justify-center">
+          <LoadingSpinner size="lg" />
+        </div>
+      </>
     );
   }
 
   return (
-    <div className="min-h-screen">
-      <Topbar
-        title="Deployment Freeze Windows"
-        subtitle="Manage time windows when deployments are restricted"
-      />
-
-      <div className="p-6">
+    <>
+      <Topbar title="Freeze Windows" subtitle="When agents should stand down" />
+      <div className="mx-auto max-w-[1320px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
         {error && (
-          <div className="mb-4">
-            <ErrorBanner message={error} onDismiss={() => setError(null)} onRetry={fetchWindows} />
+          <div className="mb-6">
+            <ErrorBanner
+              message={error}
+              onDismiss={() => setError(null)}
+              onRetry={fetchWindows}
+            />
           </div>
         )}
 
-        {/* Create/Edit Form */}
-        {showForm && (
-          <div className="mb-6 rounded-md border border-border bg-card p-6">
-            <h2 className="mb-4 text-lg font-semibold text-foreground">
-              {editingWindowId ? 'Edit Freeze Window' : 'Create Freeze Window'}
-            </h2>
+        <motion.header
+          className="mb-6 flex flex-wrap items-end justify-between gap-4"
+          variants={staggerContainer(0.05, 0.04)}
+          initial={reduce ? false : 'hidden'}
+          animate="show"
+        >
+          <div>
+            <motion.p
+              variants={fadeUp}
+              className="mb-2 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-[var(--neutral-soft-400)]"
+            >
+              Deployment freeze
+            </motion.p>
+            <motion.h1
+              variants={fadeUp}
+              className="text-[26px] font-semibold leading-[1.1] tracking-[-0.03em] text-[var(--neutral-strong-950)]"
+            >
+              Windows when agents shouldn&apos;t ship
+            </motion.h1>
+            <motion.p
+              variants={fadeUp}
+              className="mt-2 text-[13.5px] text-[var(--neutral-sub-600)]"
+            >
+              Block write actions during scheduled windows — releases, on-call hours, weekends.
+            </motion.p>
+          </div>
+          <motion.div variants={fadeUp}>
+            <Button
+              variant="primary"
+              onClick={() => {
+                setShowForm((s) => !s);
+                if (showForm) resetForm();
+              }}
+              leadingIcon={<Plus className="h-3.5 w-3.5" strokeWidth={2.25} />}
+            >
+              {showForm ? 'Cancel' : 'New Window'}
+            </Button>
+          </motion.div>
+        </motion.header>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Timezone */}
+        {showForm && (
+          <motion.div
+            className="mb-6 overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]"
+            initial={reduce ? false : { opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: DUR.default, ease: EASE.out }}
+          >
+            <div className="border-b border-[var(--stroke-soft-200)] p-4">
+              <h2 className="text-[14px] font-semibold tracking-[-0.01em] text-[var(--neutral-strong-950)]">
+                {editingWindowId ? 'Edit freeze window' : 'Create freeze window'}
+              </h2>
+            </div>
+            <form onSubmit={handleSubmit} className="p-6 space-y-5">
               <div>
-                <label className="mb-2 block text-sm font-medium text-foreground">Timezone</label>
+                <label className="mb-1.5 block text-[12px] font-medium text-[var(--neutral-sub-600)]">
+                  Timezone
+                </label>
                 <select
                   value={formData.timezone}
-                  onChange={(e) => setFormData({ ...formData, timezone: e.target.value })}
-                  className="w-full rounded-md border border-border bg-muted px-3 py-2 text-sm focus:border-foreground/40 focus:outline-none"
+                  onChange={(e) =>
+                    setFormData({ ...formData, timezone: e.target.value })
+                  }
+                  className="h-9 w-full rounded-[8px] border border-[var(--stroke-sub-300)] bg-white px-3 text-[13px] text-[var(--neutral-strong-950)] focus:border-[var(--primary-base)] focus:outline-none focus:ring-[3px] focus:ring-[var(--primary-alpha-16)]"
                 >
                   {TIMEZONES.map((tz) => (
                     <option key={tz} value={tz}>
@@ -205,189 +269,272 @@ export default function FreezeWindowPage() {
                 </select>
               </div>
 
-              {/* Work Days */}
               <div>
-                <label className="mb-3 block text-sm font-medium text-foreground">Work Days</label>
+                <label className="mb-2 block text-[12px] font-medium text-[var(--neutral-sub-600)]">
+                  Work days (when freeze is in effect)
+                </label>
                 <div className="flex flex-wrap gap-2">
-                  {DAYS_OF_WEEK.map((day) => (
-                    <button
-                      key={day.value}
-                      type="button"
-                      onClick={() => toggleWorkDay(day.value)}
-                      className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-                        formData.work_days.includes(day.value)
-                          ? 'bg-foreground text-background'
-                          : 'border border-border bg-muted text-foreground hover:border-foreground/40'
-                      }`}
-                    >
-                      {day.label.slice(0, 3)}
-                    </button>
-                  ))}
+                  {DAYS_OF_WEEK.map((day) => {
+                    const selected = formData.work_days.includes(day.value);
+                    return (
+                      <button
+                        key={day.value}
+                        type="button"
+                        onClick={() => toggleWorkDay(day.value)}
+                        className={[
+                          'h-8 rounded-[8px] px-3 text-[12.5px] font-medium transition-colors',
+                          selected
+                            ? 'border border-[var(--primary-base)] bg-[var(--primary-alpha-10)] text-[var(--primary-base)]'
+                            : 'border border-[var(--stroke-sub-300)] bg-white text-[var(--neutral-sub-600)] hover:bg-[var(--neutral-weak-50)]',
+                        ].join(' ')}
+                      >
+                        {day.label}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
-              {/* Time Range */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-foreground">Start Time</label>
+                  <label className="mb-1.5 block text-[12px] font-medium text-[var(--neutral-sub-600)]">
+                    Start time
+                  </label>
                   <input
                     type="time"
                     value={formData.window_start}
-                    onChange={(e) => setFormData({ ...formData, window_start: e.target.value })}
-                    className="w-full rounded-md border border-border bg-muted px-3 py-2 text-sm focus:border-foreground/40 focus:outline-none"
+                    onChange={(e) =>
+                      setFormData({ ...formData, window_start: e.target.value })
+                    }
+                    className="h-9 w-full rounded-[8px] border border-[var(--stroke-sub-300)] bg-white px-3 text-[13px] text-[var(--neutral-strong-950)] focus:border-[var(--primary-base)] focus:outline-none focus:ring-[3px] focus:ring-[var(--primary-alpha-16)]"
                   />
                 </div>
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-foreground">End Time</label>
+                  <label className="mb-1.5 block text-[12px] font-medium text-[var(--neutral-sub-600)]">
+                    End time
+                  </label>
                   <input
                     type="time"
                     value={formData.window_end}
-                    onChange={(e) => setFormData({ ...formData, window_end: e.target.value })}
-                    className="w-full rounded-md border border-border bg-muted px-3 py-2 text-sm focus:border-foreground/40 focus:outline-none"
+                    onChange={(e) =>
+                      setFormData({ ...formData, window_end: e.target.value })
+                    }
+                    className="h-9 w-full rounded-[8px] border border-[var(--stroke-sub-300)] bg-white px-3 text-[13px] text-[var(--neutral-strong-950)] focus:border-[var(--primary-base)] focus:outline-none focus:ring-[3px] focus:ring-[var(--primary-alpha-16)]"
                   />
                 </div>
               </div>
 
-              {/* Actions */}
-              <div className="flex gap-2 pt-4">
-                <button
-                  type="submit"
-                  className="flex-1 rounded-md bg-foreground px-4 py-2 text-sm font-medium text-background hover:bg-foreground/90"
-                >
-                  {editingWindowId ? 'Update' : 'Create'} Freeze Window
-                </button>
-                <button
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <Button
                   type="button"
+                  variant="secondary"
                   onClick={() => {
                     setShowForm(false);
                     resetForm();
                   }}
-                  className="rounded-md border border-border bg-muted px-4 py-2 text-sm font-medium text-foreground hover:bg-muted/80"
                 >
                   Cancel
-                </button>
+                </Button>
+                <Button type="submit" variant="primary">
+                  {editingWindowId ? 'Update window' : 'Create window'}
+                </Button>
               </div>
             </form>
-          </div>
+          </motion.div>
         )}
 
-        {/* Freeze Windows List */}
         {windows.length === 0 ? (
-          <div className="rounded-md border border-border bg-card">
+          <div className="overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
             <EmptyState
-              icon={<Clock className="h-6 w-6" />}
-              title="No freeze windows configured"
-              description="Create a freeze window to restrict deployments during specific times."
+              icon={<Clock className="h-5 w-5" />}
+              title="No freeze windows yet"
+              description="Create a window to block deployments during specific times."
               action={
-                <button
+                <Button
+                  variant="primary"
                   onClick={() => {
                     setShowForm(true);
                     resetForm();
                   }}
-                  className="inline-flex items-center gap-1.5 rounded-md bg-foreground px-3 py-1.5 text-sm font-medium text-background hover:bg-foreground/90"
+                  leadingIcon={<Plus className="h-3.5 w-3.5" strokeWidth={2.25} />}
                 >
-                  <Plus className="h-4 w-4" />
-                  Create Freeze Window
-                </button>
+                  Create freeze window
+                </Button>
               }
             />
           </div>
         ) : (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-foreground">Active Freeze Windows</h3>
-              <button
-                onClick={() => {
-                  setShowForm(true);
-                  resetForm();
-                }}
-                className="inline-flex items-center gap-1.5 rounded-md bg-foreground px-3 py-1.5 text-sm font-medium text-background hover:bg-foreground/90"
-              >
-                <Plus className="h-4 w-4" />
-                Add Window
-              </button>
+          <motion.div
+            className="overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]"
+            initial={reduce ? false : { opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: DUR.slow, ease: EASE.out, delay: 0.18 }}
+          >
+            <div className="flex items-center justify-between p-4">
+              <h2 className="text-[14px] font-semibold tracking-[-0.01em] text-[var(--neutral-strong-950)]">
+                Active freeze windows
+              </h2>
+              <span className="inline-flex h-[18px] items-center justify-center rounded-[5px] bg-[var(--neutral-weak-50)] px-[6px] text-[10.5px] font-bold tabular-nums text-[var(--neutral-sub-600)]">
+                {windows.length.toLocaleString()}
+              </span>
             </div>
-
-            {windows.map((window) => (
-              <div
-                key={window.id}
-                className="rounded-md border border-border bg-card overflow-hidden"
-              >
-                <div
-                    onClick={() => setExpandedWindow(expandedWindow === window.id ? null : window.id)}
-                    className="w-full px-4 py-3 flex items-center justify-between hover:bg-muted/50 transition-colors cursor-pointer"
-                  >
-                  <div className="flex-1 text-left">
-                    <div className="flex items-center gap-2">
-                      <h4 className="font-medium text-foreground">
-                        {getDayLabels(window.work_days)}
-                      </h4>
-                      <span className="text-xs bg-muted px-2 py-1 rounded text-muted-foreground">
-                        {window.window_start} - {window.window_end}
-                      </span>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-1">{window.timezone}</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleEdit(window);
-                      }}
-                      className="p-1.5 hover:bg-muted rounded-md transition-colors"
-                      title="Edit"
-                    >
-                      <Edit2 className="h-4 w-4 text-muted-foreground hover:text-foreground" />
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (confirm('Delete this freeze window?')) {
-                          handleDelete(window.id);
-                        }
-                      }}
-                      className="p-1.5 hover:bg-muted rounded-md transition-colors"
-                      title="Delete"
-                    >
-                      <Trash2 className="h-4 w-4 text-muted-foreground hover:text-red-500" />
-                    </button>
-                    {expandedWindow === window.id ? (
-                      <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                    ) : (
-                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                    )}
-                  </div>
-                </div>
-
-                {expandedWindow === window.id && (
-                  <div className="border-t border-border px-4 py-3 bg-muted/30 text-sm">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <p className="text-xs text-muted-foreground mb-1">Days</p>
-                        <p className="text-foreground">
-                          {window.work_days.map((d) => DAYS_OF_WEEK[d].label).join(', ')}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground mb-1">Time Window</p>
-                        <p className="text-foreground font-mono">
-                          {window.window_start} → {window.window_end}
-                        </p>
-                      </div>
-                      {window.created_at && (
-                        <div className="col-span-2">
-                          <p className="text-xs text-muted-foreground mb-1">Created</p>
-                          <p className="text-foreground">{formatFullTimestamp(window.created_at)}</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
+            <motion.ul
+              className="divide-y divide-[var(--stroke-soft-200)] border-t border-[var(--stroke-soft-200)]"
+              variants={staggerContainer(0.03, 0.22)}
+              initial={reduce ? false : 'hidden'}
+              animate="show"
+            >
+              {windows.map((w) => (
+                <FreezeWindowRow
+                  key={w.id}
+                  window={w}
+                  isExpanded={expandedWindow === w.id}
+                  onToggle={() =>
+                    setExpandedWindow(expandedWindow === w.id ? null : w.id)
+                  }
+                  onEdit={handleEdit}
+                  onDelete={handleDelete}
+                />
+              ))}
+            </motion.ul>
+          </motion.div>
         )}
       </div>
-    </div>
+    </>
+  );
+}
+
+// ─── Single freeze-window row ────────────────────────────────────────────────
+function FreezeWindowRow({
+  window: w,
+  isExpanded,
+  onToggle,
+  onEdit,
+  onDelete,
+}: {
+  window: FreezeWindow;
+  isExpanded: boolean;
+  onToggle: () => void;
+  onEdit: (w: FreezeWindow) => void;
+  onDelete: (id: string) => void;
+}) {
+  // Delayed visual-expanded state — keeps the trigger row's gradient on
+  // screen until the panel below has finished its exit animation,
+  // preventing a perceived "snap back" during collapse.
+  const [stillExpanded, setStillExpanded] = useState(isExpanded);
+  useEffect(() => {
+    if (isExpanded) setStillExpanded(true);
+  }, [isExpanded]);
+
+  return (
+    <motion.li variants={fadeUpSm} className="bg-white">
+      <div
+        className={
+          stillExpanded
+            ? 'flex items-center gap-2 bg-gradient-to-b from-[var(--primary-lighter)]/55 to-[var(--primary-lighter)]/45 px-4 py-4 transition-colors sm:gap-3 sm:px-6'
+            : 'flex items-center gap-2 px-4 py-4 transition-colors sm:gap-3 sm:px-6'
+        }
+      >
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] border border-[var(--stroke-soft-200)] bg-white">
+          <Calendar className="h-4 w-4 text-[var(--neutral-sub-600)]" strokeWidth={2} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <p className="text-[13.5px] font-semibold text-[var(--neutral-strong-950)]">
+              {getDayLabels(w.work_days)}
+            </p>
+            <span className="inline-flex items-center rounded-[6px] border border-[var(--stroke-soft-200)] bg-[var(--neutral-weak-50)] px-2 py-0.5 text-[11px] text-[var(--neutral-sub-600)]">
+              {w.window_start.slice(0, 5)} → {w.window_end.slice(0, 5)}
+            </span>
+          </div>
+          <p className="mt-0.5 text-[11.5px] text-[var(--neutral-soft-400)]">
+            {w.timezone}
+          </p>
+        </div>
+        {/* Edit / Delete — icon-only on mobile, label appears at sm+ */}
+        <button
+          type="button"
+          onClick={() => onEdit(w)}
+          aria-label="Edit"
+          className="inline-flex h-8 items-center justify-center gap-1.5 rounded-[8px] border border-[var(--stroke-sub-300)] bg-white px-2 text-[12.5px] font-medium text-[var(--neutral-sub-600)] transition-colors hover:bg-[var(--neutral-weak-50)] sm:px-3"
+        >
+          <Edit2 className="h-3.5 w-3.5" strokeWidth={2} />
+          <span className="hidden sm:inline">Edit</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            if (confirm('Delete this freeze window?')) onDelete(w.id);
+          }}
+          aria-label="Delete"
+          className="inline-flex h-8 items-center justify-center gap-1.5 rounded-[8px] border border-[var(--stroke-sub-300)] bg-white px-2 text-[12.5px] font-medium text-[var(--neutral-sub-600)] transition-colors hover:bg-[var(--neutral-weak-50)] sm:px-3"
+        >
+          <Trash2 className="h-3.5 w-3.5" strokeWidth={2} />
+          <span className="hidden sm:inline">Delete</span>
+        </button>
+        <button
+          onClick={onToggle}
+          className="rounded-md p-1 text-[var(--neutral-soft-400)] hover:bg-[var(--neutral-weak-50)] hover:text-[var(--neutral-strong-950)]"
+          aria-label="Toggle details"
+        >
+          <ChevronDown
+            className={`h-4 w-4 transition-transform duration-200 ${
+              isExpanded ? 'rotate-0' : '-rotate-90'
+            }`}
+            strokeWidth={2}
+          />
+        </button>
+      </div>
+
+      <AnimatePresence
+        initial={false}
+        onExitComplete={() => setStillExpanded(false)}
+      >
+        {isExpanded && (
+          <motion.div
+            key="expanded"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.24, ease: [0.2, 0.8, 0.2, 1] }}
+            style={{ overflow: 'hidden', willChange: 'height' }}
+            className="bg-gradient-to-b from-[var(--primary-lighter)]/45 to-white"
+          >
+            <div className="px-6 pb-5 pt-1">
+              <div className="overflow-hidden rounded-[10px] border border-[var(--stroke-soft-200)] bg-white p-4 shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.05em] text-[var(--neutral-soft-400)]">
+                      Days
+                    </p>
+                    <p className="mt-1 text-[12.5px] text-[var(--neutral-strong-950)]">
+                      {w.work_days.map((d) => DAYS_OF_WEEK[d].full).join(', ')}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.05em] text-[var(--neutral-soft-400)]">
+                      Window
+                    </p>
+                    <p className="mt-1 text-[12.5px] text-[var(--neutral-strong-950)]">
+                      {w.window_start} → {w.window_end}
+                    </p>
+                  </div>
+                  {w.created_at && (
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.05em] text-[var(--neutral-soft-400)]">
+                        Created
+                      </p>
+                      <p className="mt-1 text-[12.5px] text-[var(--neutral-strong-950)]">
+                        {formatFullTimestamp(w.created_at)}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.li>
   );
 }

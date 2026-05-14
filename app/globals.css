@@ -1,94 +1,407 @@
 @import "tailwindcss";
 
+/* ─────────────────────────────────────────────────────────────────
+   AlignUI Design System — Orange theme, Light mode only
+   Tokens sourced from Figma-verified AlignUI specification.
+   ───────────────────────────────────────────────────────────────── */
+
 :root {
-  /* Background & Foreground */
-  --background: #09090b;
-  --foreground: #fafafa;
+  /* Neutral scale */
+  --white-0:           #ffffff;
+  --neutral-weak-50:   #f7f7f7;
+  --neutral-soft-200:  #ebebeb;
+  --neutral-sub-300:   #d1d1d1;
+  --neutral-soft-400:  #a3a3a3;
+  --neutral-sub-600:   #5c5c5c;
+  --neutral-strong-950:#171717;
 
-  /* Card/Surface */
-  --card: #0f0f11;
-  --card-foreground: #fafafa;
+  /* Orange theme — primary */
+  --primary-base:      #fa7319;
+  --primary-dark:      #ce5e12;
+  --primary-lighter:   #fff3eb;
+  --primary-alpha-10:  rgba(250, 115, 25, 0.10);
+  --primary-alpha-16:  rgba(250, 115, 25, 0.16);
+  --primary-alpha-24:  rgba(250, 115, 25, 0.24);
 
-  /* Muted */
-  --muted: #18181b;
-  --muted-foreground: #71717a;
+  /* Semantic */
+  --success:           #1fc16b;
+  --success-lighter:   #e3f7ec;
+  --success-dark:      #0b4627;
 
-  /* Border */
-  --border: #27272a;
+  --error:             #fb3748;
+  --error-lighter:     #ffebec;
+  --error-dark:        #681219;
 
-  /* Primary — white CTA */
-  --primary: #ffffff;
-  --primary-foreground: #09090b;
+  --warning:           #f6b51e;
+  --warning-lighter:   #fffaeb;
+  --warning-dark:      #624c18;
 
-  /* Secondary */
-  --secondary: #27272a;
-  --secondary-foreground: #fafafa;
+  --feature:           #7d52f4;
+  --feature-lighter:   #efebff;
+  --feature-dark:      #351a75;
 
-  /* Status */
-  --success: #22c55e;
-  --destructive: #ef4444;
+  --information:       #335cff;
+  --info-lighter:      #ebefff;
+  --info-dark:         #162060;
 
-  /* Radius */
-  --radius: 0.5rem;
+  /* Strokes */
+  --stroke-soft-200:   #ebebeb;
+  --stroke-sub-300:    #d1d1d1;
+
+  /* Shadow */
+  --shadow-regular-xs: 0 1px 2px rgba(23, 23, 23, 0.04);
+
+  /* Surfaces (semantic aliases) */
+  --bg-app:            var(--neutral-weak-50);
+  --bg-surface:        var(--white-0);
+  --bg-surface-alt:    var(--neutral-weak-50);
+  --text-strong:       var(--neutral-strong-950);
+  --text-sub:          var(--neutral-sub-600);
+  --text-soft:         var(--neutral-soft-400);
+  --border-soft:       var(--stroke-soft-200);
+  --border-sub:        var(--stroke-sub-300);
 }
 
+/* Theme inline — exposes tokens as Tailwind utilities via arbitrary values */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-border: var(--border);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-success: var(--success);
-  --color-destructive: var(--destructive);
+  --color-white-0: var(--white-0);
+  --color-weak-50: var(--neutral-weak-50);
+  --color-soft-200: var(--neutral-soft-200);
+  --color-sub-300: var(--neutral-sub-300);
+  --color-soft-400: var(--neutral-soft-400);
+  --color-sub-600: var(--neutral-sub-600);
+  --color-strong-950: var(--neutral-strong-950);
 
-  --font-sans: 'Inter', 'Inter Fallback', -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-mono: 'JetBrains Mono', 'JetBrains Mono Fallback', 'SF Mono', monospace;
+  --color-primary-base: var(--primary-base);
+  --color-primary-dark: var(--primary-dark);
+  --color-primary-lighter: var(--primary-lighter);
+
+  --color-success-base: var(--success);
+  --color-success-lighter: var(--success-lighter);
+  --color-success-dark: var(--success-dark);
+
+  --color-error-base: var(--error);
+  --color-error-lighter: var(--error-lighter);
+  --color-error-dark: var(--error-dark);
+
+  --color-warning-base: var(--warning);
+  --color-warning-lighter: var(--warning-lighter);
+  --color-warning-dark: var(--warning-dark);
+
+  --color-feature-base: var(--feature);
+  --color-feature-lighter: var(--feature-lighter);
+  --color-feature-dark: var(--feature-dark);
+
+  --color-info-base: var(--information);
+  --color-info-lighter: var(--info-lighter);
+  --color-info-dark: var(--info-dark);
+
+  /* Back-compat aliases so existing class refs keep working */
+  --color-background: var(--bg-app);
+  --color-foreground: var(--text-strong);
+  --color-card: var(--bg-surface);
+  --color-card-foreground: var(--text-strong);
+  --color-muted: var(--neutral-weak-50);
+  --color-muted-foreground: var(--text-soft);
+  --color-border: var(--border-soft);
+  --color-primary: var(--primary-base);
+  --color-primary-foreground: var(--white-0);
+  --color-secondary: var(--neutral-soft-200);
+  --color-secondary-foreground: var(--text-strong);
+  --color-success: var(--success);
+  --color-destructive: var(--error);
+
+  /* Font family — numbers across the dashboard render in the default sans
+     (Geist) for a softer, less devtool-y feel. CodeChip overrides locally
+     via [font-family:var(--font-geist-mono),…] so true monospace stays
+     where it semantically belongs (tool names, branches, IDs, JSON). */
+  --font-sans: var(--font-geist-sans), -apple-system, BlinkMacSystemFont,
+    'Segoe UI', Roboto, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, 'SF Mono', Menlo, monospace;
 }
 
+/* Base */
+html,
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-sans);
+  background: var(--bg-app);
+  color: var(--text-strong);
+  font-family: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, sans-serif;
+  font-feature-settings: 'cv11', 'ss01';
+  letter-spacing: -0.01em;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Scrollbar */
-::-webkit-scrollbar { width: 5px; height: 5px; }
+/* Scrollbar — thin, neutral */
+::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 3px; }
+::-webkit-scrollbar-thumb { background: var(--neutral-soft-200); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--neutral-sub-300); }
 
-/* Focus ring — white at 20% opacity */
+/* Focus ring — orange at 24% */
 :focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.2);
+  box-shadow: 0 0 0 3px var(--primary-alpha-24);
+  border-radius: 8px;
 }
 
-/* Transitions */
-button, a, input, select, textarea {
-  transition: all 150ms ease;
+/* ─── Interactive cursors ────────────────────────────────────────────
+   Buttons and select elements don't get `cursor: pointer` by default in
+   most browsers. Add it for every element that's clearly clickable —
+   covers native buttons, anchors with hrefs, switches, tabs, labels,
+   checkboxes, radios, and any element flagged as a button/link/tab via
+   ARIA. Disabled elements get `not-allowed`. */
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]),
+[role="link"]:not([aria-disabled="true"]),
+[role="switch"]:not([aria-disabled="true"]),
+[role="tab"]:not([aria-disabled="true"]),
+[role="menuitem"]:not([aria-disabled="true"]),
+[role="checkbox"]:not([aria-disabled="true"]),
+[role="radio"]:not([aria-disabled="true"]),
+a[href],
+label[for],
+select:not(:disabled),
+summary,
+input[type="checkbox"]:not(:disabled),
+input[type="radio"]:not(:disabled),
+input[type="submit"]:not(:disabled),
+input[type="button"]:not(:disabled),
+input[type="reset"]:not(:disabled) {
+  cursor: pointer;
 }
 
-/* Input base */
+button:disabled,
+[aria-disabled="true"],
+[disabled],
+.cursor-not-allowed {
+  cursor: not-allowed;
+}
+
+/* ─── Transitions — explicit properties, ease-out for snappy hover feel
+   (never `transition: all` — that triggers layout thrash on every change).
+   Refero anti-slop guide §8: explicit-only. */
+button,
+a,
+input,
+select,
+textarea,
+[role="button"],
+[role="link"],
+[role="tab"],
+[role="switch"] {
+  transition-property: background-color, border-color, color, box-shadow,
+    transform, opacity, filter;
+  transition-duration: 120ms;
+  transition-timing-function: cubic-bezier(0, 0, 0.2, 1); /* --ease-out */
+}
+
+/* Slightly longer for shadow/lift on cards so the hover-lift feels intentional */
+[data-card-hover] {
+  transition-property: transform, box-shadow, border-color;
+  transition-duration: 160ms;
+  transition-timing-function: cubic-bezier(0, 0, 0.2, 1);
+}
+
+/* Reduced motion override */
+@media (prefers-reduced-motion: reduce) {
+  button, a, input, select, textarea,
+  [role="button"], [role="link"], [role="tab"], [role="switch"],
+  [data-card-hover] {
+    transition-duration: 0ms !important;
+  }
+}
+
+/* Input base — light style.
+   Wrapped inputs ([data-input-shell] > input) opt out of the default
+   border and background so the wrapper owns the chrome and the inner
+   input doesn't paint a second border on top of it. */
 input, select, textarea {
-  background: var(--muted);
-  border: 1px solid var(--border);
-  color: var(--foreground);
+  background: var(--white-0);
+  border: 1px solid var(--border-sub);
+  color: var(--text-strong);
+}
+[data-input-shell] input,
+[data-input-shell] select,
+[data-input-shell] textarea {
+  border: 0;
+  background: transparent;
 }
 
-/* Input focus — white border + white glow at 20% */
-input:focus, select:focus, textarea:focus {
-  border-color: rgba(255, 255, 255, 0.5);
+/* Default focus ring for bare inputs only. Wrapped inputs (those inside
+   a [data-input-shell] wrapper) opt out so the wrapper's own ring is the
+   only one that shows — no double-ring conflict. */
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--primary-base);
   outline: none;
-  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.12);
+  box-shadow: 0 0 0 3px var(--primary-alpha-16);
+}
+[data-input-shell] input:focus,
+[data-input-shell] select:focus,
+[data-input-shell] textarea:focus {
+  border-color: transparent;
+  box-shadow: none;
 }
 
 input::placeholder, textarea::placeholder {
-  color: var(--muted-foreground);
+  color: var(--text-soft);
+}
+
+/* Reset auto-fill background on inputs */
+input:-webkit-autofill {
+  -webkit-box-shadow: 0 0 0 30px var(--white-0) inset;
+  -webkit-text-fill-color: var(--text-strong);
+}
+
+/* Selection */
+::selection {
+  background: var(--primary-alpha-24);
+  color: var(--text-strong);
+}
+
+/* ─── react-day-picker → Aegis / AlignUI theme ────────────────────────
+   Light surface, Geist Sans numbers, orange-tinted range. All blue
+   defaults from react-day-picker (accent, focus outlines, nav buttons)
+   are explicitly overridden to brand orange or neutral. */
+.aegis-daypicker {
+  --rdp-cell-size: 34px;
+  --rdp-accent-color: var(--primary-base);
+  --rdp-accent-background-color: var(--primary-alpha-10);
+  --rdp-background-color: transparent;
+  --rdp-day_button-border-radius: 7px;
+  --rdp-day_button-height: 30px;
+  --rdp-day_button-width: 30px;
+  --rdp-day-height: 34px;
+  --rdp-day-width: 34px;
+  --rdp-selected-border: none;
+  --rdp-outline: 2px solid var(--primary-alpha-24);
+  --rdp-outline-selected: 2px solid var(--primary-alpha-24);
+  --rdp-range_middle-background-color: var(--primary-alpha-10);
+  --rdp-range_middle-color: var(--neutral-strong-950);
+  --rdp-range_start-background: var(--primary-base);
+  --rdp-range_start-color: #fff;
+  --rdp-range_end-background: var(--primary-base);
+  --rdp-range_end-color: #fff;
+  --rdp-today-color: var(--primary-base);
+
+  /* OS / browser accent-color overrides any residual blue */
+  accent-color: var(--primary-base);
+
+  font-family: var(--font-geist-sans), sans-serif;
+  color: var(--neutral-strong-950);
+}
+.aegis-daypicker .rdp-months {
+  gap: 16px;
+  width: auto;
+}
+.aegis-daypicker .rdp-month_caption {
+  padding: 0 4px 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--neutral-strong-950);
+}
+.aegis-daypicker .rdp-nav button,
+.aegis-daypicker .rdp-button_previous,
+.aegis-daypicker .rdp-button_next {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  color: var(--neutral-sub-600);
+  background: transparent;
+}
+.aegis-daypicker .rdp-nav button:hover,
+.aegis-daypicker .rdp-button_previous:hover,
+.aegis-daypicker .rdp-button_next:hover {
+  background: var(--neutral-weak-50);
+  color: var(--neutral-strong-950);
+}
+.aegis-daypicker .rdp-button_previous svg,
+.aegis-daypicker .rdp-button_next svg,
+.aegis-daypicker .rdp-chevron {
+  fill: currentColor;
+  color: currentColor;
+}
+/* Kill any residual focus-ring blue on day buttons / nav buttons */
+.aegis-daypicker .rdp-day_button:focus-visible,
+.aegis-daypicker .rdp-button_previous:focus-visible,
+.aegis-daypicker .rdp-button_next:focus-visible {
+  outline: 2px solid var(--primary-alpha-24);
+  outline-offset: 1px;
+}
+/* No outline on selected days — the orange fill is enough */
+.aegis-daypicker .rdp-selected .rdp-day_button,
+.aegis-daypicker .rdp-range_start .rdp-day_button,
+.aegis-daypicker .rdp-range_end .rdp-day_button {
+  outline: none;
+  border: none;
+  box-shadow: none;
+}
+.aegis-daypicker .rdp-weekdays {
+  color: var(--neutral-soft-400);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.aegis-daypicker .rdp-day {
+  font-family: var(--font-geist-sans), sans-serif;
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--neutral-strong-950);
+}
+.aegis-daypicker .rdp-day_button {
+  border-radius: 7px;
+}
+.aegis-daypicker .rdp-day_button:hover {
+  background: var(--neutral-weak-50);
+}
+.aegis-daypicker .rdp-outside .rdp-day_button {
+  color: var(--neutral-soft-400);
+}
+.aegis-daypicker .rdp-today .rdp-day_button {
+  color: var(--primary-base);
+  font-weight: 700;
+}
+.aegis-daypicker .rdp-selected .rdp-day_button {
+  background: var(--primary-base);
+  color: #fff;
+}
+.aegis-daypicker .rdp-range_middle .rdp-day_button {
+  background: var(--primary-alpha-10);
+  color: var(--neutral-strong-950);
+  border-radius: 0;
+}
+.aegis-daypicker .rdp-range_start .rdp-day_button {
+  background: var(--primary-base);
+  color: #fff;
+  border-radius: 7px 0 0 7px;
+}
+.aegis-daypicker .rdp-range_end .rdp-day_button {
+  background: var(--primary-base);
+  color: #fff;
+  border-radius: 0 7px 7px 0;
+}
+.aegis-daypicker .rdp-range_start.rdp-range_end .rdp-day_button {
+  border-radius: 7px;
+}
+
+/* Live status dot — slow pulse halo */
+@keyframes aegis-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 currentColor; opacity: 0.55; }
+  50%      { box-shadow: 0 0 0 4px transparent; opacity: 0.0; }
+}
+.aegis-live-dot {
+  position: relative;
+}
+.aegis-live-dot::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: currentColor;
+  animation: aegis-pulse 1.8s ease-out infinite;
 }
