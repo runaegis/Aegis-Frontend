@@ -21,7 +21,7 @@ import { Badge } from '@/components/ui/Badge';
 import { useToast } from '@/components/ui/Toast';
 import { api } from '@/lib/api';
 import { useAutoRefresh, useUser } from '@/lib/hooks';
-import { RoomSummary, RoomDetails, RoomInvite, RoomMember } from '@/lib/types';
+import { RoomSummary, RoomDetails, RoomInvite, RoomMember } from '@/lib/types'; 
 import { formatRelativeTime } from '@/lib/utils';
 import { DUR, EASE, fadeUp, fadeUpSm, staggerContainer } from '@/lib/motion';
 
@@ -56,11 +56,16 @@ const TOOL_GROUPS: Record<string, string[]> = {
   Git: ['get_latest_commit', 'list_branches', 'create_branch'],
 };
 
+const ROLE_LEVELS: Record<string, number> = {
+  DEVELOPER: 1,
+  ADMIN: 2,
+  OWNER: 3,
+};
+
 export default function RoomsPage() {
   const { user, isLoading: userLoading } = useUser();
   const reduce = useReducedMotion();
   const toast = useToast();
-  const [authToken, setAuthToken] = useState<string | undefined>(undefined);
   const [rooms, setRooms] = useState<RoomSummary[]>([]);
   const [selectedRoomId, setSelectedRoomId] = useState<string>('');
   const [selectedRoom, setSelectedRoom] = useState<RoomDetails | null>(null);
@@ -81,30 +86,46 @@ export default function RoomsPage() {
   // inline "success" state. Errors still surface in the inline banner
   // because some failures need persistent visibility on this page.
   const [tools, setTools] = useState<Record<string, boolean>>({});
+  const [integrationConfig, setIntegrationConfig] = useState<any>(null);
   const [role, setRole] = useState<string>('DEVELOPER');
   const [viewingRole, setViewingRole] = useState<string>('DEVELOPER');
 
-  const getAuthToken = useCallback(() => {
-    const token = localStorage.getItem('access_token');
-    if (token) setAuthToken(token);
-    return token;
-  }, []);
+  const visibleRoles = useMemo(() => {
+    if (role === 'OWNER') {
+      return ['OWNER', 'ADMIN', 'DEVELOPER'];
+    }
+
+    if (role === 'ADMIN') {
+      return ['ADMIN', 'DEVELOPER'];
+    }
+
+    return ['DEVELOPER'];
+  }, [role]);
+
+  const canEditViewedRole = useMemo(() => {
+    return ROLE_LEVELS[role] >= ROLE_LEVELS[viewingRole];
+  }, [role, viewingRole]);
+
+  const canCreateInvites = useMemo(() => {
+    return role === 'OWNER' || role === 'ADMIN';
+  }, [role]);
+
 
   const fetchRooms = useCallback(async () => {
-    if (!authToken) {
-      if (!userLoading) {
-        setRooms([]);
-        setSelectedRoomId('');
-        setSelectedRoom(null);
-        setMembers([]);
-        setInvites([]);
-        setLoading(false);
-      }
+    if (userLoading) return;
+
+    if (!user) {
+      setRooms([]);
+      setSelectedRoomId('');
+      setSelectedRoom(null);
+      setMembers([]);
+      setInvites([]);
+      setLoading(false);
       return;
     }
     setLoading(true);
     try {
-      const data = await api.getMyRooms(authToken);
+      const data = await api.getMyRooms();
       setRooms(data);
       if (data.length === 0) {
         setSelectedRoomId('');
@@ -123,71 +144,114 @@ export default function RoomsPage() {
     } finally {
       setLoading(false);
     }
-  }, [authToken, userLoading, selectedRoomId]);
+  }, [ userLoading, user, selectedRoomId ]);
 
-  const loadRoomData = useCallback(async () => {
-    if (!authToken || !selectedRoomId) {
-      setSelectedRoom(null);
-      setMembers([]);
-      setInvites([]);
-      setTools({});
-      return;
-    }
-    try {
-      const [roomData, memberData, inviteData] = await Promise.all([
-        api.getRoomDetails(selectedRoomId, authToken),
-        api.getRoomMembers(selectedRoomId, authToken),
-        api.getRoomInvites(selectedRoomId, authToken),
-      ]);
-      const currentMember = memberData.find((m) => m.user_id === user?.id);
-      const currentRole = currentMember?.role || 'DEVELOPER';
-      setRole(currentRole);
-      const toolsData = await api.getRoomTools(selectedRoomId, viewingRole, authToken);
-      setTools(toolsData || {});
-      setSelectedRoom(roomData);
-      setMembers(memberData);
-      setInvites(inviteData);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    }
-  }, [selectedRoomId, authToken, user?.id, viewingRole]);
-
+  
   useEffect(() => {
     fetchRooms();
   }, [fetchRooms]);
 
   useEffect(() => {
-    loadRoomData();
-  }, [loadRoomData]);
+    let cancelled = false;
+
+    const run = async () => {
+      if (!selectedRoomId) {
+        setIntegrationConfig(null);
+        setSelectedRoom(null);
+        setMembers([]);
+        setInvites([]);
+        return;
+      }
+
+      try {
+        const [roomData, memberData, inviteData, integrationData] =
+          await Promise.all([
+            api.getRoomDetails(selectedRoomId),
+            api.getRoomMembers(selectedRoomId),
+            api.getRoomInvites(selectedRoomId),
+            api.getRoomIntegrationConfig(selectedRoomId),
+          ]);
+
+        if (cancelled) return;
+
+        setIntegrationConfig(integrationData);
+
+        const currentMember = memberData.find(
+          (m) => m.username === user?.username
+        );
+
+        const currentRole = currentMember?.role || 'DEVELOPER';
+
+        setRole(currentRole);
+
+        setSelectedRoom(roomData);
+        setMembers(memberData);
+        setInvites(inviteData);
+        setError(null);
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : String(err));
+        }
+      }
+    };
+
+    run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedRoomId, user?.username]);
 
   useEffect(() => {
-    const tok = getAuthToken();
-    if (!tok || !selectedRoomId || role !== 'OWNER') return;
-    api.getRoomTools(selectedRoomId, viewingRole, tok)
-      .then((data) => setTools(data || {}))
-      .catch(() => undefined);
-  }, [viewingRole, selectedRoomId, role, getAuthToken]);
+  setError(null);
+  setTools({});
+}, [selectedRoomId]);
+
+  useEffect(() => {
+    if (!selectedRoomId || !role) return;
+
+    setViewingRole(role);
+  }, [selectedRoomId]);
+
+useEffect(() => {
+  if (!selectedRoomId || !viewingRole) {
+    setTools({});
+    return;
+  }
+
+  let cancelled = false;
+
+  api.getRoomTools(selectedRoomId, viewingRole)
+    .then((toolsData) => {
+      if (!cancelled) {
+        setTools(toolsData || {});
+      }
+    })
+    .catch((err) => {
+      console.error('[RoomsPage] Failed to load tools:', err);
+    });
+
+  return () => {
+    cancelled = true;
+  };
+}, [selectedRoomId, viewingRole]);
+
 
   const { lastUpdated } = useAutoRefresh(fetchRooms, 30000);
 
   const selectedRoomLabel = useMemo(() => {
     if (!selectedRoom) return selectedRoomId || 'Room';
-    return selectedRoom.repo_id || getRoomId(selectedRoom);
+    return selectedRoom.repo_name || getRoomId(selectedRoom);
   }, [selectedRoom, selectedRoomId]);
 
-  const roomIntegrationUrl = useMemo(() => {
-    if (!user?.id || !selectedRoomId || !authToken) return '';
-    return `https://app.runaegis.co/sse?user_id=${user.id}/room_id=${selectedRoomId}/access_token=${authToken}`;
-  }, [user?.id, selectedRoomId, authToken]);
+  const roomIntegrationUrl = integrationConfig?.url || '';
 
   const handleCreateRoom = async (e: React.FormEvent) => {
     e.preventDefault();
-    const tok = getAuthToken();
-    if (!newRepoId.trim() || !tok) return;
+    if (!newRepoId.trim()) return;
     setSubmittingCreate(true);
         try {
-      const created = await api.createRoom(newRepoId.trim(), tok);
+      const created = await api.createRoom(newRepoId.trim());
       setNewRepoId('');
       toast.success('Room created');
       await fetchRooms();
@@ -202,11 +266,10 @@ export default function RoomsPage() {
 
   const handleJoinRoom = async (e: React.FormEvent) => {
     e.preventDefault();
-    const tok = getAuthToken();
-    if (!joinCode.trim() || !tok) return;
+    if (!joinCode.trim()) return;
     setSubmittingJoin(true);
         try {
-      await api.joinRoom(joinCode.trim(), tok);
+      await api.joinRoom(joinCode.trim());
       setJoinCode('');
       toast.success('Joined room');
       await fetchRooms();
@@ -219,19 +282,19 @@ export default function RoomsPage() {
 
   const handleCreateInvite = async (e: React.FormEvent) => {
     e.preventDefault();
-    const tok = getAuthToken();
-    if (!selectedRoomId || !tok) return;
+    if (!selectedRoomId) return;
     setSubmittingInvite(true);
         try {
       const payload: { max_uses?: number; expires_at?: string } = {};
       if (inviteMaxUses.trim()) payload.max_uses = Number(inviteMaxUses);
       if (inviteExpiresAt.trim())
         payload.expires_at = new Date(inviteExpiresAt).toISOString();
-      await api.createRoomInvite(selectedRoomId, payload, tok);
+      await api.createRoomInvite(selectedRoomId, payload);
+      const inviteData = await api.getRoomInvites(selectedRoomId);
+      setInvites(inviteData);
       setInviteMaxUses('');
       setInviteExpiresAt('');
       toast.success('Invite created');
-      await loadRoomData();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -239,19 +302,20 @@ export default function RoomsPage() {
     }
   };
 
-  const toggleTool = async (tool: string, value: boolean) => {
-    const tok = getAuthToken();
-    if (!tok) return;
+  const toggleTool = (tool: string, value: boolean) => {
+    const previousTools = tools;
     const updated = { ...tools, [tool]: value };
-    const previous = tools;
+
     setTools(updated);
-    try {
-      await api.updateRoomTools(selectedRoomId, viewingRole, updated, tok);
-      toast.success(`${tool} ${value ? 'allowed' : 'denied'}`);
-    } catch (err) {
-      setTools(previous);
-      setError(err instanceof Error ? err.message : String(err));
-    }
+
+    api.updateRoomTools(selectedRoomId, viewingRole, updated)
+      .then(() => {
+        toast.success(`${tool} ${value ? 'allowed' : 'denied'}`);
+      })
+      .catch((err) => {
+        setTools(previousTools);
+        setError(err instanceof Error ? err.message : String(err));
+      });
   };
 
   const copyToClipboard = async (text: string, label: string) => {
@@ -342,11 +406,11 @@ export default function RoomsPage() {
               </h2>
             </div>
             <div className="space-y-3 p-5">
-              <Field label="Repository ID">
+              <Field label="Repository Name">
                 <Input
                   value={newRepoId}
                   onChange={(e) => setNewRepoId(e.target.value)}
-                  placeholder="repo_123 or org/repo"
+                  placeholder="repo_name"
                 />
               </Field>
               <div className="flex justify-end">
@@ -445,7 +509,7 @@ export default function RoomsPage() {
                                 : 'var(--neutral-strong-950)',
                             }}
                           >
-                            {room.repo_id || id}
+                            {room.repo_name || id}
                           </p>
                           <p className="truncate text-[10.5px] text-[var(--neutral-soft-400)]">
                             {id}
@@ -499,7 +563,8 @@ export default function RoomsPage() {
                       </Button>
                     </div>
                   </div>
-
+                
+                {canCreateInvites ? (
                   <form
                     onSubmit={handleCreateInvite}
                     className="grid grid-cols-1 gap-3 sm:grid-cols-3"
@@ -531,7 +596,12 @@ export default function RoomsPage() {
                         {submittingInvite ? 'Generating…' : 'Generate invite'}
                       </Button>
                     </div>
-                  </form>
+                  </form> 
+                ) : ( 
+                  <div className="rounded-[10px] border border-[var(--stroke-soft-200)] bg-[var(--neutral-weak-50)] p-4 text-sm text-[var(--neutral-soft-400)]">
+                    Only admins and owners can generate invite links.
+                  </div>
+                )}
                 </div>
               </div>
 
@@ -549,10 +619,11 @@ export default function RoomsPage() {
                       value={viewingRole}
                       onChange={(e) => setViewingRole(e.target.value)}
                     >
-                      <option value="DEVELOPER">DEVELOPER</option>
-                      <option value="REVIEWER">REVIEWER</option>
-                      <option value="VIEWER">VIEWER</option>
-                      <option value="OWNER">OWNER</option>
+                      {visibleRoles.map((r) => (
+                        <option key={r} value={r}>
+                          {r}
+                        </option>
+                      ))}
                     </Select>
                   </div>
                 </div>
@@ -576,8 +647,15 @@ export default function RoomsPage() {
                                 <span className="text-[11.5px] text-[var(--neutral-strong-950)]">
                                   {tool}
                                 </span>
-                                <div className="flex items-center gap-1">
+                                <div className="flex items-center gap-2">
+                                  {!canEditViewedRole && (
+                                    <span className="text-[10px] uppercase tracking-[0.07em] text-[var(--neutral-soft-400)]">
+                                      Read only
+                                    </span>
+                                  )}
                                   <button
+                                   type='button'
+                                    disabled={!canEditViewedRole}
                                     onClick={() => toggleTool(tool, true)}
                                     className={[
                                       'inline-flex h-6 items-center rounded-[6px] px-2 text-[11px] font-semibold',
@@ -601,6 +679,8 @@ export default function RoomsPage() {
                                     Allow
                                   </button>
                                   <button
+                                  type = 'button'
+                                   disabled={!canEditViewedRole}
                                     onClick={() => toggleTool(tool, false)}
                                     className={[
                                       'inline-flex h-6 items-center rounded-[6px] px-2 text-[11px] font-semibold',

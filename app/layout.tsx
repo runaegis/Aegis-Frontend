@@ -61,9 +61,6 @@ export default function RootLayout({
     >
       <body className="min-h-full bg-[var(--bg-app)] text-[var(--text-strong)] antialiased">
         <ToastProvider>{children}</ToastProvider>
-        {process.env.NODE_ENV === "development" && (
-          <Agentation endpoint="http://localhost:8000" />
-        )}
       </body>
     </html>
   );
