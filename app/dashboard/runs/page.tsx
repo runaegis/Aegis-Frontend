@@ -5,9 +5,9 @@ import { Activity, ChevronRight, Search } from 'lucide-react';
 import Link from 'next/link';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { DUR, EASE, fadeUp, staggerContainer } from '@/lib/motion';
-import { api } from '@/lib/api';
-import { useAutoRefresh, useUser } from '@/lib/hooks';
+import { useUser } from '@/lib/hooks';
 import { Metrics, SessionAction } from '@/lib/types';
+import { useDashboardData } from '@/lib/dashboardDataContext';
 import {
   formatExecutionTimeMs,
   formatFullTimestamp,
@@ -38,44 +38,23 @@ import {
 export default function RunsPage() {
   const { user, isLoading: userLoading } = useUser();
   const reduce = useReducedMotion();
-  const [runs, setRuns] = useState<SessionAction[]>([]);
-  const [metrics, setMetrics] = useState<Metrics>({
-    total: 0,
-    allows: 0,
-    denies: 0,
-    rewrites: 0,
-    approvals: 0,
-  });
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [decisionFilter, setDecisionFilter] = useState('all');
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
-  const fetchData = useCallback(async () => {
-    if (!user?.id) return;
-    setLoading(true);
-    try {
-      const [runsData, metricsData] = await Promise.all([
-        api.getRuns(user.id),
-        api.getMetrics(user.id),
-      ]);
-      setRuns(runsData);
-      setMetrics(metricsData);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not connect to backend');
-    } finally {
-      setLoading(false);
-    }
-  }, [user?.id]);
-
-  useEffect(() => {
-    if (user?.id) fetchData();
-    else if (!userLoading) setLoading(false);
-  }, [user?.id, userLoading, fetchData]);
-
-  const { lastUpdated } = useAutoRefresh(fetchData, 30000);
+  const {
+  sessionActions: runs,
+  runsLoading,
+  runsLoadingMore,
+  runsError,
+  dismissRunsError,
+  hasMoreRuns,
+  loadMoreRuns,
+  refreshRuns,
+  metrics,
+  metricsPartial,
+  lastUpdated,
+} = useDashboardData();
 
   const filteredRuns = runs.filter((run) => {
     const matchesSearch =
@@ -94,7 +73,7 @@ export default function RunsPage() {
     return matchesSearch && matchesDecision;
   });
 
-  if (userLoading || loading) {
+  if (userLoading || (runsLoading && runs.length === 0)) {
     return (
       <>
         <Topbar title="Runs" subtitle="Real-time agent activity" />
@@ -111,15 +90,15 @@ export default function RunsPage() {
         title="Runs"
         subtitle="Real-time agent activity"
         lastUpdated={lastUpdated}
-        onRefresh={fetchData}
+        onRefresh={refreshRuns}
       />
       <div className="mx-auto max-w-[1320px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
-        {error && (
+        {runsError && (
           <div className="mb-6">
             <ErrorBanner
-              message={error}
-              onDismiss={() => setError(null)}
-              onRetry={fetchData}
+              message={runsError}
+              onDismiss={() => dismissRunsError()}
+              onRetry={refreshRuns}
             />
           </div>
         )}
@@ -171,6 +150,14 @@ export default function RunsPage() {
             <MetricStripCell label="Approvals"  value={metrics.approvals} dot="var(--primary-base)" />
           </motion.div>
         </motion.section>
+
+          {metricsPartial && (
+            <p className="mb-4 text-xs text-[var(--neutral-soft-400)]">
+              Allow / deny / rewrite / approval counts reflect loaded actions only (
+              {runs.length.toLocaleString()} of {metrics.total.toLocaleString()}).
+              Load more runs to see additional data.
+            </p>
+          )}
 
         {runs.length === 0 ? (
           <div className="rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
@@ -240,13 +227,37 @@ export default function RunsPage() {
                 ))}
               </TBody>
             </Table>
-
             {filteredRuns.length === 0 && search && (
               <div className="rounded-[12px] border border-[var(--stroke-soft-200)] bg-white py-10 text-center text-[13px] text-[var(--neutral-soft-400)]">
                 No runs match your search.
               </div>
             )}
-          </div>
+
+            {hasMoreRuns && (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-[12px] border border-[var(--stroke-soft-200)] bg-white px-4 py-3 shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
+                <p className="text-xs text-[var(--neutral-soft-400)]">
+                  Showing{' '}
+                  <span className="font-medium text-[var(--neutral-strong-950)]">
+                    {runs.length.toLocaleString()}
+                  </span>{' '}
+                  of{' '}
+                  <span className="font-medium text-[var(--neutral-strong-950)]">
+                    {metrics.total.toLocaleString()}
+                  </span>{' '}
+                  actions loaded.
+                </p>
+
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={runsLoadingMore}
+                  onClick={() => void loadMoreRuns()}
+                >
+                  {runsLoadingMore ? 'Loading…' : 'Load more'}
+                </Button>
+              </div>
+            )}
+            </div>
         )}
       </div>
     </>

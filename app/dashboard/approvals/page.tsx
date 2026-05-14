@@ -18,6 +18,8 @@ import { Button } from '@/components/ui/Button';
 import { CodeChip } from '@/components/ui/CodeChip';
 import { useToast } from '@/components/ui/Toast';
 import { DUR, EASE, fadeUp, fadeUpSm, staggerContainer } from '@/lib/motion';
+import { AuthError } from '@/lib/api';
+import { useRouter } from 'next/navigation';
 
 type ApprovalFilter = 'all' | 'pending' | 'approved' | 'rejected';
 
@@ -37,6 +39,7 @@ const FILTER_TABS: { value: ApprovalFilter; label: string }[] = [
 export default function ApprovalsPage() {
   const { user, isLoading: userLoading } = useUser();
   const reduce = useReducedMotion();
+  const router = useRouter();
   const toast = useToast();
   const [approvals, setApprovals] = useState<MCPApproval[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,7 +62,16 @@ export default function ApprovalsPage() {
       setApprovals(data);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load approvals');
+      if (err instanceof AuthError) {
+        router.push('/auth');
+        return;
+      }
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Failed to load approvals'
+      );
     } finally {
       setLoading(false);
     }

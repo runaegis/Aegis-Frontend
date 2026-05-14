@@ -1,12 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { api } from '@/lib/api';
+import { api, AuthError } from '@/lib/api';
 import { useRouter } from 'next/navigation';
 import { useUser } from '@/lib/hooks';
 import Layout from '@/components/layout/Layout';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { installPreviewApi } from '@/lib/preview-data';
+import { DashboardDataProvider } from '@/lib/dashboardDataContext';
 
 // ⚠️ DEV-ONLY preview escape hatch.
 //
@@ -59,29 +60,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
 
     const verifyAndLoad = async () => {
-      const authToken = localStorage.getItem('access_token');
-      if (!authToken){
-        router.push("/auth");
-        return;
-      }
       try {
-        const [userResponse, stepResponse] = await Promise.all([
-          !user?.id ? api.getUserDetails(authToken) : Promise.resolve(user),
-          api.getOnboardingStep(authToken)
-        ]);
+        const userResponse = !user?.id
+          ? await api.getUserDetails()
+          : user;
 
-        if (!user?.id) {
+        if (!user?.id && userResponse) {
           setUser(userResponse);
         }
-        const realStep = stepResponse.onboarding_step;
-
-        if (realStep < 6) {
-          router.replace('/onboarding');
-        } else {
-          setIsReady(true);
-        }
+        setIsReady(true);
       } catch (error) {
-        console.error("Failed to verify dashboard access:", error);
+        if (error instanceof AuthError) {
+          router.replace('/auth');
+          return;
+        }
+
+        console.error(error);
+        router.replace('/auth');
       }
     };
 
@@ -96,5 +91,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     );
   }
 
-  return <Layout>{children}</Layout>;
+  return (
+  <DashboardDataProvider>
+    <Layout>{children}</Layout>
+  </DashboardDataProvider>
+);
 }

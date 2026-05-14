@@ -4,11 +4,14 @@ import { useState, useEffect, Suspense } from "react";
 import { Eye, EyeOff, CheckCircle, AlertCircle, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { apiFetch } from "@/lib/api"; 
+import { useRouter } from "next/navigation";
 
 function ResetPasswordPage() {
   const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
   const searchParams = useSearchParams();
   const token = searchParams.get("token");
+  const router = useRouter();
 
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -30,7 +33,7 @@ function ResetPasswordPage() {
       }
 
       try {
-        const res = await fetch(
+        const res = await apiFetch(
           `${BACKEND_URL}/auth/validate-reset-token?token=${encodeURIComponent(token)}`,
           {
             method: "GET",
@@ -97,7 +100,7 @@ function ResetPasswordPage() {
     setLoading(true);
 
     try {
-      const res = await fetch(`${BACKEND_URL}/auth/reset-password`, {
+      const res = await apiFetch(`${BACKEND_URL}/auth/reset-password`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -110,7 +113,10 @@ function ResetPasswordPage() {
 
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.detail || "Failed to reset password");
+        throw data.detail || {
+          code: 'RESET_FAILED',
+          message: 'Failed to reset password',
+        };
       }
 
       setSuccess(true);
@@ -119,10 +125,26 @@ function ResetPasswordPage() {
 
       // Redirect to login after 2 seconds
       setTimeout(() => {
-        window.location.href = "/auth";
+        router.push("/auth");
       }, 2000);
     } catch (err: any) {
-      setError(err.message || "Failed to reset password. Please try again.");
+      const detail = err?.detail || err;
+
+      switch (detail.code) {
+        case 'INVALID_RESET_TOKEN':
+          setError('This reset link is invalid or has expired.');
+          break;
+
+        case 'WEAK_PASSWORD':
+          setError('Password does not meet security requirements.');
+          break;
+
+        default:
+          setError(
+            detail.message ||
+            'Failed to reset password. Please try again.'
+          );
+      }
     } finally {
       setLoading(false);
     }
