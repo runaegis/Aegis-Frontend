@@ -416,6 +416,8 @@ export function installPreviewApi() {
     pages: 1,
   });
 
+  api.getUserTokenUsageAll = async () => [...TOKEN_METER];
+
   api.getRepos = async () => ({ repos: PREVIEW_REPOS });
   api.syncRepos = async () => ({ success: true, synced: PREVIEW_REPOS.length });
   api.setPermission = async () => ({ success: true });

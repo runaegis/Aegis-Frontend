@@ -269,6 +269,32 @@ function aggregateSessions(actions: SessionAction[]): Session[] {
   );
 }
 
+/** Token meter pagination rejects large page_size (422). Use modest pages and merge client-side. */
+async function fetchUserTokenMeterPage(
+  userId: string,
+  page: number,
+  page_size: number,
+): Promise<PaginatedResponse<TokenMeterResponse>> {
+  const url = new URL(
+    `${API_BASE}/token-meter/user/${encodeURIComponent(userId)}`,
+  );
+  url.searchParams.set("page", String(page));
+  url.searchParams.set("page_size", String(page_size));
+  const res = await fetch(url.toString());
+  if (!res.ok)
+    throw new Error(`Failed to fetch token usage: ${res.statusText}`);
+  const payload = await res.json();
+  return {
+    items: (payload.items ?? []).map(
+      (row: unknown) => parseRow(row) as TokenMeterResponse,
+    ),
+    total: payload.total ?? 0,
+    page: payload.page ?? page,
+    page_size: payload.page_size ?? page_size,
+    pages: payload.pages ?? 1,
+  };
+}
+
 export const api = {
   healthCheck: () => fetch(`${API_BASE}/health`).then((r) => r.json()),
 
@@ -541,24 +567,30 @@ export const api = {
   ): Promise<PaginatedResponse<TokenMeterResponse>> => {
     if (!userId)
       return { items: [], total: 0, page: 1, page_size: 20, pages: 0 };
-    const url = new URL(
-      `${API_BASE}/token-meter/user/${encodeURIComponent(userId)}`,
-    );
-    url.searchParams.set("page", String(page));
-    url.searchParams.set("page_size", String(page_size));
-    const res = await fetch(url.toString());
-    if (!res.ok)
-      throw new Error(`Failed to fetch token usage: ${res.statusText}`);
-    const payload = await res.json();
-    return {
-      items: (payload.items ?? []).map(
-        (row: unknown) => parseRow(row) as TokenMeterResponse,
-      ),
-      total: payload.total ?? 0,
-      page: payload.page ?? page,
-      page_size: payload.page_size ?? page_size,
-      pages: payload.pages ?? 1,
-    };
+    return fetchUserTokenMeterPage(userId, page, page_size);
+  },
+
+  /** Loads every page (page_size 20) for dashboards that need full history. */
+  getUserTokenUsageAll: async (userId?: string): Promise<TokenMeterResponse[]> => {
+    if (!userId) return [];
+    const page_size = 20;
+    const out: TokenMeterResponse[] = [];
+    let page = 1;
+    for (;;) {
+      const batch = await fetchUserTokenMeterPage(userId, page, page_size);
+      out.push(...batch.items);
+      const pagesFromApi =
+        typeof batch.pages === "number" && batch.pages >= 1 ? batch.pages : null;
+      const pagesFromTotal =
+        batch.total > 0
+          ? Math.max(1, Math.ceil(batch.total / page_size))
+          : null;
+      const totalPages = pagesFromApi ?? pagesFromTotal ?? page;
+      if (page >= totalPages || batch.items.length < page_size) break;
+      page += 1;
+      if (page > 5000) break;
+    }
+    return out;
   },
 
   saveUser: async (user: SaveUserPayload) => {
