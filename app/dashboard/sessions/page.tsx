@@ -12,9 +12,11 @@ import {
   Layers,
   Timer,
 } from 'lucide-react';
-import { api } from '@/lib/api';
-import { useAutoRefresh, useUser } from '@/lib/hooks';
-import { Session, SessionAction } from '@/lib/types';
+import { useUser } from '@/lib/hooks';
+import { useDashboardData } from '@/lib/dashboardDataContext';
+import { AggregatedSessionAction, PaginatedResponse } from '@/lib/types';
+import PaginatedLayout from '@/components/ui/PaginatedLayout';
+import { SessionAction } from '@/lib/types';
 import {
   formatDuration,
   formatExecutionTimeMs,
@@ -31,42 +33,75 @@ import { CodeChip } from '@/components/ui/CodeChip';
 import { DUR, EASE, fadeUp, fadeUpSm, staggerContainer } from '@/lib/motion';
 
 export default function SessionsPage() {
-  const [sessions, setSessions] = useState<Session[]>([]);
+  const [data, setData] = useState<
+    PaginatedResponse<AggregatedSessionAction>
+  >({
+    items: [],
+    total: 0,
+    page: 1,
+    page_size: 20,
+    pages: 0,
+  });
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedSession, setExpandedSession] = useState<string | null>(null);
   const { user, isLoading: userLoading } = useUser();
   const reduce = useReducedMotion();
+  const { fetchAggregatedPage, globalDataEpoch, lastUpdated } =
+  useDashboardData();
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(
+  async (options?: { soft?: boolean }) => {
     if (!user?.id) {
       if (!userLoading) {
-        setSessions([]);
+        setData({
+          items: [],
+          total: 0,
+          page: 1,
+          page_size: 20,
+          pages: 0,
+        });
         setLoading(false);
       }
       return;
     }
-    setLoading(true);
+
+    if (!options?.soft) setLoading(true);
+
     try {
-      const data = await api.getSessions(user?.id);
-      setSessions(data);
+      const result = await fetchAggregatedPage(page, {
+        force: false,
+      });
+
+      setData(result);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load sessions');
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Failed to load data.items'
+      );
     } finally {
-      setLoading(false);
+      if (!options?.soft) setLoading(false);
     }
-  }, [user?.id, userLoading]);
+  },
+  [user?.id, userLoading, page, fetchAggregatedPage]
+);
 
   useEffect(() => {
     if (user?.id) fetchData();
     else if (!userLoading) {
-      setSessions([]);
+      setData({
+        items: [],
+        total: 0,
+        page: 1,
+        page_size: 20,
+        pages: 0,
+      });
       setLoading(false);
     }
   }, [user?.id, userLoading, fetchData]);
-
-  const { lastUpdated } = useAutoRefresh(fetchData, 30000);
 
   if (userLoading || loading) {
     return (
@@ -121,13 +156,13 @@ export default function SessionsPage() {
             className="mt-2 text-[13.5px] text-[var(--neutral-sub-600)]"
           >
             <span className="font-semibold text-[var(--neutral-strong-950)]">
-              {sessions.length.toLocaleString()}
+              {data.items.length.toLocaleString()}
             </span>{' '}
-            {sessions.length === 1 ? 'session' : 'sessions'} · click any row to inspect its actions.
+            {data.items.length === 1 ? 'session' : 'sessions'} · click any row to inspect its actions.
           </motion.p>
         </motion.header>
 
-        {sessions.length === 0 ? (
+        {data.items.length === 0 ? (
           <div className="overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
             <EmptyState
               icon={<Layers className="h-5 w-5" />}
@@ -136,6 +171,13 @@ export default function SessionsPage() {
             />
           </div>
         ) : (
+        <PaginatedLayout
+            total={data.total}
+            page={data.page}
+            pages={data.pages}
+            page_size={data.page_size}
+            onPageChange={setPage}
+          >
           <motion.div
             className="overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]"
             initial={reduce ? false : { opacity: 0, y: 8 }}
@@ -148,7 +190,7 @@ export default function SessionsPage() {
               initial={reduce ? false : 'hidden'}
               animate="show"
             >
-              {sessions.map((session) => (
+              {data.items.map((session) => (
                 <SessionRow
                   key={session.session_id}
                   session={session}
@@ -163,7 +205,7 @@ export default function SessionsPage() {
               ))}
             </motion.ul>
           </motion.div>
-        )}
+        </PaginatedLayout>)}
       </div>
     </>
   );
@@ -175,35 +217,39 @@ function SessionRow({
   isExpanded,
   onToggle,
 }: {
-  session: Session;
+  session: AggregatedSessionAction;
   userId?: string;
   isExpanded: boolean;
   onToggle: () => void;
 }) {
-  const [actions, setActions] = useState<SessionAction[] | null>(null);
-  const [loadingActions, setLoadingActions] = useState(false);
 
-  const handleToggle = async () => {
-    onToggle();
-    if (!isExpanded && !actions) {
-      setLoadingActions(true);
-      try {
-        const data = await api.getSessionActions(session.session_id, userId);
-        setActions(data);
-      } catch {
-        setActions([]);
-      } finally {
-        setLoadingActions(false);
-      }
-    }
-  };
+  const agentName =
+    session.sessions[0]?.agent_name || 'Agent';
 
-  const repos = Array.isArray(session.repos) ? session.repos.filter(Boolean) : [];
-  const totalDecisions =
-    Number(session.allows) +
-    Number(session.rewrites) +
-    Number(session.approvals) +
-    Number(session.denies);
+  const repos = [
+    ...new Set(
+      session.sessions
+        .map((a) => a.target_repo)
+        .filter(Boolean)
+    ),
+  ];
+
+  const totalDecisions = session.sessions.length;
+  const allows = session.sessions.filter(
+    (a) => a.decision?.toUpperCase() === 'ALLOW'
+  ).length;
+
+  const denies = session.sessions.filter(
+    (a) => a.decision?.toUpperCase() === 'DENY'
+  ).length;
+
+  const rewrites = session.sessions.filter(
+    (a) => a.decision?.toUpperCase() === 'REWRITE'
+  ).length;
+
+  const approvals = session.sessions.filter(
+    (a) => a.decision?.toUpperCase() === 'APPROVE'
+  ).length;
 
   // Delayed visual-expanded state — keeps the trigger button's gradient
   // styling on screen until the panel's exit animation completes, so the
@@ -217,7 +263,7 @@ function SessionRow({
   return (
     <motion.li variants={fadeUpSm} className="bg-white">
       <button
-        onClick={handleToggle}
+        onClick={onToggle}
         className={
           stillExpanded
             ? // Top half of the continuous orange → white wash. End-stop
@@ -228,12 +274,12 @@ function SessionRow({
               'flex w-full items-center gap-3 px-4 py-[14px] text-left transition-colors hover:bg-[var(--primary-lighter)]/60 sm:gap-4 sm:px-6'
         }
       >
-        <AgentAvatar name={session.agent_name || ''} size="sm" />
+        <AgentAvatar name={agentName} size="sm" />
 
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2.5">
             <span className="truncate text-[13.5px] font-semibold tracking-[-0.005em] text-[var(--neutral-strong-950)]">
-              {session.agent_name || 'Unknown'}
+              {agentName}
             </span>
             {/* Session-id chip — hidden on tiny screens to save space */}
             <span className="hidden sm:inline-flex">
@@ -270,10 +316,10 @@ function SessionRow({
         <div className="hidden w-[220px] shrink-0 justify-end md:flex">
           {totalDecisions > 0 ? (
             <div className="flex items-center gap-1.5">
-              <DecisionStat value={Number(session.allows)} color="var(--success)" label="allow" />
-              <DecisionStat value={Number(session.rewrites)} color="var(--feature)" label="rewrite" />
-              <DecisionStat value={Number(session.approvals)} color="var(--warning)" label="approve" />
-              <DecisionStat value={Number(session.denies)} color="var(--error)" label="deny" />
+              <DecisionStat value={allows} color="var(--success)" label="allow" />
+              <DecisionStat value={rewrites} color="var(--feature)" label="rewrite" />
+              <DecisionStat value={approvals} color="var(--warning)" label="approve" />
+              <DecisionStat value={denies} color="var(--error)" label="deny" />
             </div>
           ) : (
             <span className="text-[11.5px] text-[var(--neutral-soft-400)]">—</span>
@@ -313,27 +359,23 @@ function SessionRow({
               <div className="flex items-center gap-2 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[var(--neutral-soft-400)]">
                 <Hash className="h-3 w-3" strokeWidth={2.25} />
                 <span>Action timeline</span>
-                {actions && (
+                {session.sessions && (
                   <span className="text-[var(--neutral-sub-600)]">
-                    · {actions.length}
+                    · {session.sessions.length}
                   </span>
                 )}
               </div>
               <div className="flex items-center gap-1.5 text-[11px] text-[var(--neutral-soft-400)]">
                 <Timer className="h-3 w-3" strokeWidth={2} />
                 <span className="tabular-nums">
-                  {formatDuration(session.started_at, session.last_action_at)}
+                  {formatDuration(session.started_at, session.ended_at)}
                 </span>
               </div>
             </div>
 
-            {loadingActions ? (
-              <div className="flex justify-center py-8">
-                <LoadingSpinner />
-              </div>
-            ) : actions && actions.length > 0 ? (
+            {session.sessions && session.sessions.length > 0 ? (
               <ol className="px-4 py-3">
-                {actions.map((action, idx) => (
+                {session.sessions.map((action, idx) => (
                   <li
                     key={action.id}
                     className="relative flex gap-3 pb-3 last:pb-0"
@@ -343,7 +385,7 @@ function SessionRow({
                         sits visually on the rail with the line tucking
                         under both sides. */}
                     <div className="relative flex w-[14px] shrink-0 justify-center pt-[8px]">
-                      {idx < actions.length - 1 && (
+                      {idx < session.sessions.length - 1 && (
                         <span
                           aria-hidden
                           className="absolute left-1/2 top-0 h-full w-px -translate-x-1/2 bg-[var(--stroke-soft-200)]"
@@ -409,7 +451,7 @@ function SessionRow({
               </p>
             )}
 
-            {actions && actions.length > 0 && (
+            {session.sessions && session.sessions.length > 0 && (
               <div className="flex items-center justify-end gap-2 border-t border-[var(--stroke-soft-200)] bg-[var(--neutral-weak-50)] px-4 py-2.5">
                 <Link
                   href={`/dashboard/runs?session=${session.session_id}`}
