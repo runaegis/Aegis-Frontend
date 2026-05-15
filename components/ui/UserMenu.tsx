@@ -16,6 +16,8 @@ import {
 import { useUser } from '@/lib/hooks';
 import { getInitials } from '@/lib/utils';
 import { Badge } from '@/components/ui/Badge';
+import { api } from '@/lib/api';
+import { useRouter } from 'next/navigation';
 
 // Emphasized-decel easing — matches DateRangePicker / homepage rhythm.
 const EASE_EMPH: [number, number, number, number] = [0.2, 0.8, 0.2, 1];
@@ -32,6 +34,7 @@ export function UserMenu({ pendingApprovals = 0, className }: UserMenuProps) {
   const [open, setOpen] = useState(false);
   const popoverRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const router = useRouter();
 
   useEffect(() => {
     if (!open) return;
@@ -56,12 +59,13 @@ export function UserMenu({ pendingApprovals = 0, className }: UserMenuProps) {
     };
   }, [open]);
 
-  const handleSignOut = () => {
+  const handleSignOut = async () => {
     clearUser();
     localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
     localStorage.removeItem('aegis_preview');
-    window.location.href = '/auth';
+    await api.logOut();
+    router.replace('/auth');
   };
 
   const username = user?.username || 'Not connected';
