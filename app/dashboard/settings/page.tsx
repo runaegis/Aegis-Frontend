@@ -26,6 +26,7 @@ import {
   User as UserIcon,
   Webhook,
   type LucideIcon,
+  Router,
 } from 'lucide-react';
 import Topbar from '@/components/layout/Topbar';
 import { api } from '@/lib/api';
@@ -41,6 +42,7 @@ import { Switch } from '@/components/ui/Switch';
 import { useToast } from '@/components/ui/Toast';
 import { CodeChip } from '@/components/ui/CodeChip';
 import { DUR, EASE, fadeUp, staggerContainer } from '@/lib/motion';
+import { useRouter } from 'next/navigation';
 
 // ── Section catalog ─────────────────────────────────────────────────────────
 type SectionId =
@@ -115,6 +117,7 @@ export default function SettingsPage() {
   const { setStep } = useOnboardingStep();
   const reduce = useReducedMotion();
   const toast = useToast();
+  const router = useRouter();
 
   // Section routing via URL hash so settings are deep-linkable
   const [active, setActive] = useState<SectionId>('profile');
@@ -260,9 +263,8 @@ export default function SettingsPage() {
                 }}
                 onLogout={() => {
                   clearUser();
-                  localStorage.removeItem('access_token');
-                  localStorage.removeItem('refresh_token');
-                  window.location.href = '/auth';
+                  api.logOut()
+                  router.replace('/auth');
                 }}
                 reduce={!!reduce}
               />

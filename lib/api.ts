@@ -309,8 +309,6 @@ export const api = {
     } finally {
       localStorage.removeItem("aegis_user");
       localStorage.removeItem("aegis_onboarding_step");
-
-      window.location.href = "/auth";
     }
   },
 

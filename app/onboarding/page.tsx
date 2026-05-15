@@ -317,9 +317,10 @@ export default function OnboardingPage() {
     return () => clearInterval(interval);
   }, [step, verified, user?.username, user?.id, username]);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     // HTTPonly cookies — server clears via /auth/logout if needed.
     // For now, just route to /auth which will re-auth.
+    await api.logOut();
     router.replace('/auth');
   };
 

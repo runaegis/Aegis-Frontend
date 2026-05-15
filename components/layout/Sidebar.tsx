@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import {api} from '@/lib/api';
 import {
   LayoutDashboard,
   Activity,
@@ -23,6 +24,7 @@ import {
 import { useUser } from '@/lib/hooks';
 import { getInitials } from '@/lib/utils';
 import { AegisLogo } from '@/components/ui/AegisLogo';
+import { useRouter } from 'next/navigation';
 
 type NavItem = {
   name: string;
@@ -72,17 +74,17 @@ export default function Sidebar() {
   const pathname = usePathname();
   const { user } = useUser();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const router = useRouter();
 
   const isActive = (href: string) => {
     if (href === '/dashboard') return pathname === '/dashboard';
     return pathname === href || pathname.startsWith(`${href}/`);
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
-    window.location.href = '/auth';
-  };
+  const handleLogout = async () => {
+    await api.logOut();
+    router.replace('/auth');
+  }; 
 
   const renderNavLink = (item: NavItem) => {
     const active = isActive(item.href);
