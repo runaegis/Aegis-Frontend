@@ -256,11 +256,11 @@ export function DateRangePicker({
                   type="button"
                   onClick={handleApply}
                   disabled={!draft?.from}
-                  className="inline-flex h-7 items-center rounded-[7px] px-3 text-[12px] font-semibold text-white shadow-[inset_0_1px_0_0_rgba(255,255,255,0.18),0_1px_2px_rgba(206,94,18,0.30)] disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex h-7 items-center rounded-[7px] px-3 text-[12px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
                   style={{
-                    background:
-                      'linear-gradient(180deg, #fb8939 0%, #fa7319 55%, #ed6a14 100%)',
-                    border: '1px solid var(--primary-dark)',
+                    background: 'var(--btn-primary-bg)',
+                    boxShadow: 'var(--btn-primary-shadow)',
+                    border: '1px solid var(--btn-primary-border)',
                   }}
                 >
                   Apply

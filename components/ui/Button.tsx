@@ -22,8 +22,12 @@ const sizeStyles: Record<Size, string> = {
 const variantStyles: Record<Variant, string> = {
   // Primary uses a subtle vertical gradient + 1px lighter top inset to create
   // the soft 3D feel of premium product buttons (Stripe / Linear style).
+  //
+  // Gradient/border/shadow are sourced from CSS vars so dark themes can
+  // mute them — see [data-theme="dark"] / [data-theme="dark-pro"] in
+  // globals.css. Light mode defaults reproduce the original orange.
   primary:
-    'text-white shadow-[inset_0_1px_0_0_rgba(255,255,255,0.18),0_1px_2px_rgba(206,94,18,0.30),0_1px_0_0_rgba(0,0,0,0.04)] [background:linear-gradient(180deg,#fb8939_0%,#fa7319_55%,#ed6a14_100%)] border border-[var(--primary-dark)] hover:[background:linear-gradient(180deg,#fa7d27_0%,#ed6a14_55%,#d75e10_100%)] active:[background:linear-gradient(180deg,#ed6a14_0%,#d75e10_100%)] disabled:opacity-60',
+    'text-white [background:var(--btn-primary-bg)] [box-shadow:var(--btn-primary-shadow)] border border-[var(--btn-primary-border)] hover:[background:var(--btn-primary-bg-hover)] active:[background:var(--btn-primary-bg-active)] disabled:opacity-60',
   secondary:
     'border border-[var(--stroke-sub-300)] bg-white text-[var(--neutral-sub-600)] shadow-[0_1px_2px_rgba(23,23,23,0.04)] hover:bg-[var(--neutral-weak-50)] hover:text-[var(--neutral-strong-950)] active:bg-[var(--neutral-soft-200)]',
   ghost:

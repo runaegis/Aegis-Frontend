@@ -35,7 +35,7 @@ export function Table({
   // horizontal scroll container so it stays usable without forcing
   // the entire page to scroll horizontally.
   return (
-    <div className="rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)] [overflow:clip]">
+    <div className="rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)] [clip-path:inset(0_round_12px)] [overflow:clip]">
       {/* Below lg: enable horizontal scroll so wide tables stay usable on
           mobile/tablet. At lg+: clear the scroll container so the thead's
           page-level sticky positioning works again (sticky anchors against
@@ -44,7 +44,13 @@ export function Table({
       <div className="overflow-x-auto lg:overflow-x-visible">
         <table
           className={cn(
-            'w-full min-w-[760px] border-collapse text-[13px] [border-spacing:0] lg:min-w-0',
+            // `border-separate` instead of collapse so the table's outer
+            // cell borders don't merge with the wrapper's border at the
+            // rounded corners (caused a visible "border cut off" artifact
+            // where the table's straight edge fought the curved wrapper).
+            // `[border-spacing:0]` keeps cells visually adjacent so this
+            // is purely a corner-rendering fix, no row-gap change.
+            'w-full min-w-[760px] border-separate text-[13px] [border-spacing:0] lg:min-w-0',
             className,
           )}
           {...props}
@@ -69,7 +75,14 @@ export function THead({
         // Below lg: the wrapper is a horizontal scroll container, so
         // sticky anchors within it; top-0 keeps the header flush with
         // the wrapper edge instead of leaving a 56px gap.
-        'sticky top-0 z-10 bg-[var(--neutral-weak-50)] backdrop-blur-sm lg:top-[56px]',
+        //
+        // NOTE: no bg on the thead itself — it's applied per-cell via
+        // `<TH>` so the first/last cells can carry rounded top corners
+        // matching the wrapper's `rounded-[12px]` curve. A thead-level
+        // bg was leaking past the wrapper's clip and hiding the curved
+        // border at the top corners in some browsers (sticky + clip
+        // interaction).
+        'sticky top-0 z-10 backdrop-blur-sm lg:top-[56px]',
         // Subtle bottom border matching the table's outer stroke — just
         // enough to anchor the header without competing with the card edge.
         '[&_tr]:shadow-[inset_0_-1px_0_0_var(--stroke-soft-200)]',
@@ -83,23 +96,122 @@ export function THead({
   );
 }
 
+export type SortDirection = 'asc' | 'desc' | null;
+
+interface SortableTHProps {
+  /** Make this header click-to-sort. Adds chevron indicator + cursor + onClick wiring. */
+  sortable?: boolean;
+  /** Current sort direction. `null` = not the active sort column. */
+  sortDirection?: SortDirection;
+  /** Fired on click when `sortable`. Page owns the cycling (asc → desc → null). */
+  onSort?: () => void;
+}
+
 export function TH({
   className,
   children,
+  sortable,
+  sortDirection = null,
+  onSort,
   ...props
-}: ThHTMLAttributes<HTMLTableCellElement>) {
+}: ThHTMLAttributes<HTMLTableCellElement> & SortableTHProps) {
+  const isActive = sortable && sortDirection !== null;
+
   return (
     <th
       className={cn(
-        'whitespace-nowrap px-[18px] py-[10px] text-left text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[var(--neutral-soft-400)]',
-        // First / last cells get a touch more breathing room from the card edge
-        'first:pl-5 last:pr-5',
+        'whitespace-nowrap bg-[var(--table-header-bg)] px-[18px] py-[10px] text-left text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[var(--neutral-soft-400)]',
+        // First / last cells get a touch more breathing room from the
+        // card edge + rounded outer corners that match the wrapper's
+        // 12px curve (minus 1px for the wrapper's border). This makes
+        // the header bg respect the wrapper's rounded corners cleanly,
+        // instead of relying on overflow:clip which sticky thead seems
+        // to defeat in some browsers.
+        'first:rounded-tl-[11px] first:pl-5 last:rounded-tr-[11px] last:pr-5',
+        sortable &&
+          'cursor-pointer select-none transition-colors hover:text-[var(--neutral-strong-950)]',
+        isActive && 'text-[var(--neutral-strong-950)]',
         className,
       )}
+      onClick={sortable ? onSort : props.onClick}
+      aria-sort={
+        sortable
+          ? sortDirection === 'asc'
+            ? 'ascending'
+            : sortDirection === 'desc'
+              ? 'descending'
+              : 'none'
+          : undefined
+      }
       {...props}
     >
-      {children}
+      <span className="inline-flex items-center gap-1">
+        {children}
+        {sortable && (
+          <SortChevron direction={sortDirection} />
+        )}
+      </span>
     </th>
+  );
+}
+
+/** Tiny chevron indicator for sortable column headers. Shows up/down
+ *  arrows when active; faded neutral icon when inactive (signals
+ *  "this column is sortable" without competing visually with active). */
+function SortChevron({ direction }: { direction: SortDirection }) {
+  const active = direction !== null;
+  return (
+    <svg
+      viewBox="0 0 12 12"
+      width="10"
+      height="10"
+      fill="none"
+      aria-hidden
+      className={cn(
+        'shrink-0 transition-opacity',
+        active
+          ? 'text-[var(--neutral-strong-950)] opacity-100'
+          : 'text-[var(--neutral-soft-400)] opacity-50',
+      )}
+    >
+      {direction === 'desc' ? (
+        // Down arrow only
+        <path
+          d="M3.5 5L6 7.5L8.5 5"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      ) : direction === 'asc' ? (
+        // Up arrow only
+        <path
+          d="M3.5 7L6 4.5L8.5 7"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      ) : (
+        // Idle state — up + down arrows stacked (signals "sortable")
+        <>
+          <path
+            d="M3.5 5L6 2.5L8.5 5"
+            stroke="currentColor"
+            strokeWidth="1.4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <path
+            d="M3.5 7L6 9.5L8.5 7"
+            stroke="currentColor"
+            strokeWidth="1.4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </>
+      )}
+    </svg>
   );
 }
 
@@ -127,15 +239,20 @@ export function TR({ className, clickable, isExpanded, children, ...props }: TRP
     <tr
       className={cn(
         'group border-b border-[var(--stroke-soft-200)] transition-colors last:border-b-0',
-        // Hover-orange ONLY when not expanded — once the row is open, the
-        // gradient owns the bg and we don't want a second tint to fight it.
-        clickable && !isExpanded && 'cursor-pointer hover:bg-[var(--primary-lighter)]/60',
+        // Hover: solid `--primary-lighter`/50 (≈ average of the gradient
+        // stops on the expanded state). Solid instead of gradient so
+        // the bg can SMOOTHLY transition with the global 180ms curve —
+        // CSS can't tween between `background-image` states cleanly
+        // (gradients snap, not fade). Applied per-cell because
+        // border-separate can swallow <tr> bg in tables. Visually
+        // ≈ the same as the gradient since the row is short.
+        clickable && !isExpanded &&
+          'cursor-pointer hover:[&>td]:bg-[var(--primary-lighter)]/50',
         clickable && isExpanded && 'cursor-pointer',
-        // When expanded: suppress the row-divider AND apply a top-to-bottom
-        // warm gradient that hands off into TRExpanded's panel below.
-        // Stops are tuned so this row's end-color matches TRExpanded's
-        // start-color (/45), producing one continuous orange→white wash.
-        // Applied per-cell because border-collapse can swallow <tr> bg.
+        // When expanded: suppress the row-divider AND apply the
+        // top-to-bottom warm gradient that hands off into TRExpanded's
+        // panel below. Stops are tuned so this row's end-color matches
+        // TRExpanded's start-color, producing one continuous wash.
         isExpanded &&
           '!border-b-0 [&>td]:bg-gradient-to-b [&>td]:from-[var(--primary-lighter)]/55 [&>td]:to-[var(--primary-lighter)]/45',
         className,
@@ -197,7 +314,7 @@ export function TRExpanded({
     >
       <td
         colSpan={colSpan}
-        className="border-b border-[var(--stroke-soft-200)] bg-gradient-to-b from-[var(--primary-lighter)]/45 to-white p-0"
+        className="border-b border-[var(--stroke-soft-200)] bg-gradient-to-b from-[var(--primary-lighter)]/45 to-[var(--white-0)] p-0"
       >
         <motion.div
           initial={{ height: 0 }}

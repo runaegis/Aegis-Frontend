@@ -4,13 +4,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
 import {
   Bar,
+  BarChart,
   CartesianGrid,
   Cell,
-  ComposedChart,
   Pie,
   PieChart,
-  ResponsiveContainer,
-  Tooltip,
   XAxis,
   YAxis,
 } from 'recharts';
@@ -18,7 +16,13 @@ import { Coins, TrendingUp } from 'lucide-react';
 import Topbar from '@/components/layout/Topbar';
 import EmptyState from '@/components/ui/EmptyState';
 import ErrorBanner from '@/components/ui/ErrorBanner';
-import LoadingSpinner from '@/components/ui/LoadingSpinner';
+import { TokenSpendSkeleton } from '@/components/ui/PageSkeletons';
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from '@/components/ui/chart';
 import { useAutoRefresh, useUser } from '@/lib/hooks';
 import { api } from '@/lib/api';
 import { TokenMeterResponse } from '@/lib/types';
@@ -53,18 +57,33 @@ function aegisBenchMultiplier(sessionId: string): number {
   return 1.5 + u * 0.2;
 }
 
-/** Two-series palette — monochromatic neutral + brand orange.
+/** Chart series palette — monochromatic neutral + brand orange.
  *  Mercury / Stripe Insights pattern: high contrast, no second hue
- *  competing with the brand, no blue "AI tell". */
-const CHART = {
-  input: '#171717',   // neutral-strong-950 (charcoal)
-  output: '#fa7319',  // primary-base
-} as const;
-const AEGIS_BAR = {
-  without: '#171717',
-  with: '#fa7319',
-} as const;
-const PIE_COLORS = [CHART.input, CHART.output];
+ *  competing with the brand, no blue "AI tell".
+ *
+ *  Configured via shadcn's ChartConfig: each series has a `theme`
+ *  block that the ChartContainer compiles into scoped CSS variables
+ *  (`--color-input`, `--color-output`, etc.) per theme. Series fills
+ *  reference these vars — no MutationObserver, no re-render on theme
+ *  toggle, the CSS handles it. */
+const chartConfig = {
+  input: {
+    label: 'Input',
+    theme: { light: '#171717', dark: '#fafafa' },
+  },
+  output: {
+    label: 'Output',
+    theme: { light: '#fa7319', dark: '#fa7319' },
+  },
+  without_aegis: {
+    label: 'Without Aegis',
+    theme: { light: '#171717', dark: '#fafafa' },
+  },
+  with_aegis: {
+    label: 'With Aegis',
+    theme: { light: '#fa7319', dark: '#fa7319' },
+  },
+} satisfies ChartConfig;
 
 const TZ_IST = 'Asia/Kolkata';
 
@@ -264,8 +283,8 @@ export default function TokenSpenditurePage() {
     return (
       <>
         <Topbar title="Token Spenditure" subtitle={rangeSubtitle(usageRange)} />
-        <div className="flex h-[60vh] items-center justify-center">
-          <LoadingSpinner size="lg" />
+        <div className="mx-auto max-w-[1320px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
+          <TokenSpendSkeleton />
         </div>
       </>
     );
@@ -360,8 +379,8 @@ export default function TokenSpenditurePage() {
         >
           <div className="grid grid-cols-2 divide-y divide-[var(--stroke-soft-200)] lg:grid-cols-4 lg:divide-x lg:divide-y-0">
             <Stat label="Total tokens" value={summary.total} />
-            <Stat label="Input tokens" value={summary.input} dot={CHART.input} />
-            <Stat label="Output tokens" value={summary.output} dot={CHART.output} />
+            <Stat label="Input tokens" value={summary.input} dot="var(--neutral-strong-950)" />
+            <Stat label="Output tokens" value={summary.output} dot="var(--primary-base)" />
             <Stat label="Sessions used" value={summary.sessions} />
           </div>
         </motion.section>
@@ -395,66 +414,96 @@ export default function TokenSpenditurePage() {
           >
             {/* Per-session bar chart */}
             <div className="overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)] xl:col-span-2">
-              <div className="border-b border-[var(--stroke-soft-200)] p-4">
-                <h2 className="text-[14px] font-semibold tracking-[-0.01em] text-[var(--neutral-strong-950)]">
-                  Usage by session
-                </h2>
-                <p className="mt-0.5 text-[12px] text-[var(--neutral-sub-600)]">
-                  Input + output tokens grouped by{' '}
-                  <span>session_id</span>.
-                </p>
-                <div className="mt-3 flex flex-wrap items-center gap-3 text-[11px]">
-                  <Legend label="Input" color={CHART.input} />
-                  <Legend label="Output" color={CHART.output} />
+              {/* Header — title on the left, legend chips floated right.
+                  Aligning them on the same row makes the header's
+                  bottom border land at the same y as the Pie card's
+                  header bottom border (which only has title + sub). */}
+              <div className="flex items-start justify-between gap-3 border-b border-[var(--stroke-soft-200)] p-4">
+                <div className="min-w-0">
+                  <h2 className="text-[14px] font-semibold tracking-[-0.01em] text-[var(--neutral-strong-950)]">
+                    Usage by session
+                  </h2>
+                  <p className="mt-0.5 text-[12px] text-[var(--neutral-sub-600)]">
+                    Input + output tokens grouped by <span>session_id</span>.
+                  </p>
+                </div>
+                <div className="flex shrink-0 flex-wrap items-center gap-3 text-[11px]">
+                  <Legend label="Input" color="var(--neutral-strong-950)" />
+                  <Legend label="Output" color="var(--primary-base)" />
                 </div>
               </div>
               <div className="p-4">
-                <div className="h-[320px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <ComposedChart data={sessionData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--stroke-soft-200)" />
-                      <XAxis
-                        dataKey="label"
-                        tick={{ fill: 'var(--neutral-soft-400)', fontSize: 11, fontFamily: 'var(--font-geist-sans)' }}
-                        interval={0}
-                        angle={-20}
-                        textAnchor="end"
-                        height={56}
-                      />
-                      <YAxis
-                        tick={{ fill: 'var(--neutral-soft-400)', fontSize: 11, fontFamily: 'var(--font-geist-sans)' }}
-                      />
-                      <Tooltip
-                        cursor={{ fill: 'rgba(250, 115, 25, 0.05)' }}
-                        contentStyle={{
-                          background: '#fff',
-                          border: '1px solid var(--stroke-soft-200)',
-                          borderRadius: 8,
-                          boxShadow: '0 4px 12px rgba(23, 23, 23, 0.06)',
-                          fontFamily: 'var(--font-geist-sans)',
-                          fontSize: 12,
-                        }}
-                        formatter={(value) => {
-                          if (typeof value === 'number') {
-                            return value.toLocaleString();
-                          }
-
-                          if (Array.isArray(value)) {
-                            return value.join(', ');
-                          }
-
-                          return String(value ?? '');
-                        }}
-                        labelFormatter={(_, payload) => {
-                          const row = payload?.[0]?.payload as SessionBucket | undefined;
-                          return row?.session ?? '';
-                        }}
-                      />
-                      <Bar dataKey="input" name="Input" fill={CHART.input} radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="output" name="Output" fill={CHART.output} radius={[4, 4, 0, 0]} />
-                    </ComposedChart>
-                  </ResponsiveContainer>
-                </div>
+                <ChartContainer
+                  config={chartConfig}
+                  className="aspect-auto h-[320px] w-full"
+                >
+                  <BarChart accessibilityLayer data={sessionData}>
+                    <CartesianGrid
+                      strokeDasharray="2 4"
+                      stroke="var(--stroke-soft-200)"
+                      strokeOpacity={0.6}
+                      vertical={false}
+                    />
+                    <XAxis
+                      dataKey="label"
+                      tick={{
+                        fill: 'var(--neutral-soft-400)',
+                        fontSize: 10.5,
+                        fontFamily: 'var(--font-geist-sans)',
+                        letterSpacing: '0.02em',
+                      }}
+                      tickLine={false}
+                      axisLine={false}
+                      interval={0}
+                      angle={-20}
+                      textAnchor="end"
+                      height={56}
+                      tickMargin={8}
+                    />
+                    <YAxis
+                      tick={{
+                        fill: 'var(--neutral-soft-400)',
+                        fontSize: 10.5,
+                        fontFamily: 'var(--font-geist-sans)',
+                      }}
+                      tickLine={false}
+                      axisLine={false}
+                      tickMargin={8}
+                      width={40}
+                      tickFormatter={(v: number) =>
+                        v >= 1000
+                          ? `${(v / 1000).toFixed(v >= 10000 ? 0 : 1)}k`
+                          : String(v)
+                      }
+                    />
+                    <ChartTooltip
+                      cursor={{ fill: 'rgba(250, 115, 25, 0.05)' }}
+                      content={
+                        <ChartTooltipContent
+                          indicator="dot"
+                          labelFormatter={(_, payload) => {
+                            const row = payload?.[0]?.payload as
+                              | SessionBucket
+                              | undefined;
+                            return row?.session ?? '';
+                          }}
+                        />
+                      }
+                    />
+                    <Bar
+                      dataKey="input"
+                      name="Input"
+                      fill="var(--color-input)"
+                      radius={[4, 4, 0, 0]}
+                    />
+                    <Bar
+                      dataKey="output"
+                      name="Output"
+                      fill="var(--color-output)"
+                      radius={[4, 4, 0, 0]}
+                    />
+                  </BarChart>
+                </ChartContainer>
               </div>
             </div>
 
@@ -468,114 +517,141 @@ export default function TokenSpenditurePage() {
                   Distribution for the selected range.
                 </p>
               </div>
-              <div className="p-4">
-                <div className="h-[320px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={pieData}
-                        dataKey="value"
-                        nameKey="name"
-                        cx="50%"
-                        cy="50%"
-                        outerRadius={108}
-                        innerRadius={68}
-                        paddingAngle={2}
-                        label={({ percent }) => `${((percent || 0) * 100).toFixed(0)}%`}
-                      >
-                        {pieData.map((entry, idx) => (
-                          <Cell key={entry.name} fill={PIE_COLORS[idx % PIE_COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip
-                        contentStyle={{
-                          background: '#fff',
-                          border: '1px solid var(--stroke-soft-200)',
-                          borderRadius: 8,
-                          boxShadow: '0 4px 12px rgba(23, 23, 23, 0.06)',
-                          fontFamily: 'var(--font-geist-sans)',
-                          fontSize: 12,
-                        }}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
+              <div className="flex h-[320px] items-center justify-center p-4">
+                {/* Pie chart — centered via flex parent (was off-center
+                    because the Recharts default chart margins shift the
+                    cx/cy reference frame). Explicit 0 margins on the
+                    PieChart + flex-center on the wrapper gives a true
+                    geometric center. Inner labels removed for the
+                    minimal designer look — % values surface on hover
+                    via the tooltip. */}
+                <ChartContainer
+                  config={chartConfig}
+                  className="aspect-square h-full w-full max-w-[280px]"
+                >
+                  <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
+                    <ChartTooltip
+                      cursor={false}
+                      content={<ChartTooltipContent hideLabel indicator="dot" />}
+                    />
+                    <Pie
+                      data={pieData}
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      outerRadius="92%"
+                      innerRadius="62%"
+                      paddingAngle={2}
+                      strokeWidth={2}
+                    >
+                      {pieData.map((entry, idx) => (
+                        <Cell
+                          key={entry.name}
+                          fill={
+                            idx === 0
+                              ? 'var(--color-input)'
+                              : 'var(--color-output)'
+                          }
+                        />
+                      ))}
+                    </Pie>
+                  </PieChart>
+                </ChartContainer>
               </div>
             </div>
 
             {/* Without vs with Aegis by session (grouped bars) */}
             <div className="overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)] xl:col-span-3">
-              <div className="border-b border-[var(--stroke-soft-200)] p-4">
-                <h2 className="text-[14px] font-semibold tracking-[-0.01em] text-[var(--neutral-strong-950)]">
-                  With vs without Aegis
-                </h2>
-                <p className="mt-0.5 text-[12px] text-[var(--neutral-sub-600)]">
-                  Per session: taller black bar = modeled usage without Aegis (~50–70% above recorded); shorter orange =
-                  metered tokens with Aegis (input + output).
-                </p>
-                <div className="mt-3 flex flex-wrap items-center gap-3 text-[11px]">
-                  <Legend label="Without Aegis" color={AEGIS_BAR.without} />
-                  <Legend label="With Aegis" color={AEGIS_BAR.with} />
+              <div className="flex items-start justify-between gap-3 border-b border-[var(--stroke-soft-200)] p-4">
+                <div className="min-w-0">
+                  <h2 className="text-[14px] font-semibold tracking-[-0.01em] text-[var(--neutral-strong-950)]">
+                    With vs without Aegis
+                  </h2>
+                  <p className="mt-0.5 text-[12px] text-[var(--neutral-sub-600)]">
+                    Per session: taller bar = modeled usage without Aegis
+                    (~50-70% above recorded); shorter orange = metered
+                    tokens with Aegis (input + output).
+                  </p>
+                </div>
+                <div className="flex shrink-0 flex-wrap items-center gap-3 text-[11px]">
+                  <Legend label="Without Aegis" color="var(--neutral-strong-950)" />
+                  <Legend label="With Aegis" color="var(--primary-base)" />
                 </div>
               </div>
               <div className="p-4">
-                <div className="h-[320px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <ComposedChart data={sessionAegisComparison}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--stroke-soft-200)" />
-                      <XAxis
-                        dataKey="label"
-                        tick={{ fill: 'var(--neutral-soft-400)', fontSize: 11, fontFamily: 'var(--font-geist-sans)' }}
-                        interval={0}
-                        angle={-20}
-                        textAnchor="end"
-                        height={56}
-                      />
-                      <YAxis
-                        tick={{ fill: 'var(--neutral-soft-400)', fontSize: 11, fontFamily: 'var(--font-geist-sans)' }}
-                      />
-                      <Tooltip
-                        cursor={{ fill: 'rgba(250, 115, 25, 0.05)' }}
-                        contentStyle={{
-                          background: '#fff',
-                          border: '1px solid var(--stroke-soft-200)',
-                          borderRadius: 8,
-                          boxShadow: '0 4px 12px rgba(23, 23, 23, 0.06)',
-                          fontFamily: 'var(--font-geist-sans)',
-                          fontSize: 12,
-                        }}
-                        formatter={(value) => {
-                          if (typeof value === 'number') {
-                            return value.toLocaleString();
-                          }
-
-                          if (Array.isArray(value)) {
-                            return value.join(', ');
-                          }
-
-                          return String(value ?? '');
-                        }}
-                        labelFormatter={(_, payload) => {
-                          const row = payload?.[0]?.payload as SessionAegisBucket | undefined;
-                          return row?.session ?? '';
-                        }}
-                      />
-                      {/* Tall bar = Without Aegis (black); short bar = With Aegis (orange). */}
-                      <Bar
-                        dataKey="without_aegis"
-                        name="Without Aegis"
-                        fill={AEGIS_BAR.without}
-                        radius={[4, 4, 0, 0]}
-                      />
-                      <Bar
-                        dataKey="with_aegis"
-                        name="With Aegis"
-                        fill={AEGIS_BAR.with}
-                        radius={[4, 4, 0, 0]}
-                      />
-                    </ComposedChart>
-                  </ResponsiveContainer>
-                </div>
+                <ChartContainer
+                  config={chartConfig}
+                  className="aspect-auto h-[320px] w-full"
+                >
+                  <BarChart accessibilityLayer data={sessionAegisComparison}>
+                    <CartesianGrid
+                      strokeDasharray="2 4"
+                      stroke="var(--stroke-soft-200)"
+                      strokeOpacity={0.6}
+                      vertical={false}
+                    />
+                    <XAxis
+                      dataKey="label"
+                      tick={{
+                        fill: 'var(--neutral-soft-400)',
+                        fontSize: 10.5,
+                        fontFamily: 'var(--font-geist-sans)',
+                        letterSpacing: '0.02em',
+                      }}
+                      tickLine={false}
+                      axisLine={false}
+                      interval={0}
+                      angle={-20}
+                      textAnchor="end"
+                      height={56}
+                      tickMargin={8}
+                    />
+                    <YAxis
+                      tick={{
+                        fill: 'var(--neutral-soft-400)',
+                        fontSize: 10.5,
+                        fontFamily: 'var(--font-geist-sans)',
+                      }}
+                      tickLine={false}
+                      axisLine={false}
+                      tickMargin={8}
+                      width={40}
+                      tickFormatter={(v: number) =>
+                        v >= 1000
+                          ? `${(v / 1000).toFixed(v >= 10000 ? 0 : 1)}k`
+                          : String(v)
+                      }
+                    />
+                    <ChartTooltip
+                      cursor={{ fill: 'rgba(250, 115, 25, 0.05)' }}
+                      content={
+                        <ChartTooltipContent
+                          indicator="dot"
+                          labelFormatter={(_, payload) => {
+                            const row = payload?.[0]?.payload as
+                              | SessionAegisBucket
+                              | undefined;
+                            return row?.session ?? '';
+                          }}
+                        />
+                      }
+                    />
+                    {/* Tall bar = Without Aegis (neutral); short bar = With Aegis (orange). */}
+                    <Bar
+                      dataKey="without_aegis"
+                      name="Without Aegis"
+                      fill="var(--color-without_aegis)"
+                      radius={[4, 4, 0, 0]}
+                    />
+                    <Bar
+                      dataKey="with_aegis"
+                      name="With Aegis"
+                      fill="var(--color-with_aegis)"
+                      radius={[4, 4, 0, 0]}
+                    />
+                  </BarChart>
+                </ChartContainer>
               </div>
             </div>
           </motion.div>
@@ -780,11 +856,11 @@ function MonetarySavingsTile({
             <span
               className="relative inline-flex h-8 w-8 items-center justify-center rounded-full"
               style={{
-                background:
-                  'linear-gradient(180deg, #fb8939 0%, #fa7319 55%, #ed6a14 100%)',
-                border: '1px solid #ed6a14',
-                boxShadow:
-                  'inset 0 1px 0 0 rgba(255,255,255,0.22), 0 1px 2px rgba(206, 94, 18, 0.30)',
+                // Theme-aware orange — bright in light, muted in dark
+                // (same token family as primary CTA buttons).
+                background: 'var(--btn-primary-bg)',
+                border: '1px solid var(--btn-primary-border)',
+                boxShadow: 'var(--btn-primary-shadow)',
               }}
             >
               <Coins className="h-4 w-4 text-white" strokeWidth={2.25} />
@@ -806,29 +882,33 @@ function MonetarySavingsTile({
           </div>
         </div>
 
-        {/* Right: tokens-saved chip + savings-rate pill */}
-        <div className="flex items-center gap-2.5">
-          <div className="text-right">
-            <p className="text-[10.5px] font-semibold uppercase tracking-[0.07em] text-[var(--neutral-soft-400)]">
-              Tokens saved
-            </p>
-            <p className="mt-0.5 text-[15px] font-semibold tabular-nums tracking-[-0.01em] text-[var(--neutral-strong-950)]">
+        {/* Right: tokens-saved label + value + savings-rate pill.
+            Pill sits ON THE SAME ROW as the value so they share a
+            baseline. Previously the pill was a sibling of the whole
+            label-stack, so it visually floated between the two lines
+            of text. Now: label on top, value + pill aligned on row. */}
+        <div className="flex flex-col items-end gap-0.5">
+          <p className="text-[10.5px] font-semibold uppercase tracking-[0.07em] text-[var(--neutral-soft-400)]">
+            Tokens saved
+          </p>
+          <div className="flex items-center gap-2">
+            <p className="text-[15px] font-semibold tabular-nums tracking-[-0.01em] text-[var(--neutral-strong-950)]">
               {formatTokens(tokensSaved)}
             </p>
+            {savingsRate > 0 && (
+              <span
+                className="inline-flex h-[22px] items-center gap-1 rounded-[6px] px-2 text-[11px] font-bold uppercase tracking-[0.05em]"
+                style={{
+                  backgroundColor: 'rgba(31, 193, 107, 0.16)',
+                  color: 'var(--success-dark)',
+                }}
+                title="Share of modeled spend prevented by Aegis"
+              >
+                <TrendingUp className="h-2.5 w-2.5" strokeWidth={2.75} />
+                {savingsRate}%
+              </span>
+            )}
           </div>
-          {savingsRate > 0 && (
-            <span
-              className="inline-flex h-[22px] items-center gap-1 rounded-[6px] px-2 text-[11px] font-bold uppercase tracking-[0.05em]"
-              style={{
-                backgroundColor: 'rgba(31, 193, 107, 0.16)',
-                color: 'var(--success-dark)',
-              }}
-              title="Share of modeled spend prevented by Aegis"
-            >
-              <TrendingUp className="h-2.5 w-2.5" strokeWidth={2.75} />
-              {savingsRate}%
-            </span>
-          )}
         </div>
       </div>
     </motion.section>

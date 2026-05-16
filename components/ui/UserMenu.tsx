@@ -16,6 +16,7 @@ import {
 import { useUser } from '@/lib/hooks';
 import { getInitials } from '@/lib/utils';
 import { Badge } from '@/components/ui/Badge';
+import ThemeToggle from '@/components/ui/ThemeToggle';
 
 // Emphasized-decel easing — matches DateRangePicker / homepage rhythm.
 const EASE_EMPH: [number, number, number, number] = [0.2, 0.8, 0.2, 1];
@@ -171,6 +172,18 @@ export function UserMenu({ pendingApprovals = 0, className }: UserMenuProps) {
                 label="Plan & usage"
                 onClick={() => setOpen(false)}
               />
+            </div>
+
+            <div className="border-t border-[var(--stroke-soft-200)]" />
+
+            {/* Appearance — inline theme toggle. Not a navigable row;
+                the segmented pill flips theme instantly without
+                closing the menu, so users can A/B before committing. */}
+            <div className="flex items-center justify-between gap-3 px-3 py-2.5">
+              <span className="text-[12.5px] font-medium text-[var(--neutral-sub-600)]">
+                Appearance
+              </span>
+              <ThemeToggle variant="compact" />
             </div>
 
             <div className="border-t border-[var(--stroke-soft-200)]" />

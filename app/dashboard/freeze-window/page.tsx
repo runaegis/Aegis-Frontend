@@ -17,7 +17,7 @@ import { formatFullTimestamp } from '@/lib/utils';
 import Topbar from '@/components/layout/Topbar';
 import EmptyState from '@/components/ui/EmptyState';
 import ErrorBanner from '@/components/ui/ErrorBanner';
-import LoadingSpinner from '@/components/ui/LoadingSpinner';
+import { FreezeWindowSkeleton } from '@/components/ui/PageSkeletons';
 import { useToast } from '@/components/ui/Toast';
 import { Button } from '@/components/ui/Button';
 import { DUR, EASE, fadeUp, fadeUpSm, staggerContainer } from '@/lib/motion';
@@ -112,7 +112,7 @@ export default function FreezeWindowPage() {
       } else {
         await api.createFreezeWindow(payload);
         toast.success('Freeze window created', {
-          description: `${formData.window_start}–${formData.window_end} · ${formData.timezone}`,
+          description: `${formData.window_start} to ${formData.window_end} · ${formData.timezone}`,
         });
       }
       await fetchWindows();
@@ -176,8 +176,8 @@ export default function FreezeWindowPage() {
     return (
       <>
         <Topbar title="Freeze Windows" subtitle="When agents should stand down" />
-        <div className="flex h-[60vh] items-center justify-center">
-          <LoadingSpinner size="lg" />
+        <div className="mx-auto max-w-[1320px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
+          <FreezeWindowSkeleton />
         </div>
       </>
     );
@@ -220,7 +220,7 @@ export default function FreezeWindowPage() {
               variants={fadeUp}
               className="mt-2 text-[13.5px] text-[var(--neutral-sub-600)]"
             >
-              Block write actions during scheduled windows — releases, on-call hours, weekends.
+              Block write actions during scheduled windows: releases, on-call hours, weekends.
             </motion.p>
           </div>
           <motion.div variants={fadeUp}>

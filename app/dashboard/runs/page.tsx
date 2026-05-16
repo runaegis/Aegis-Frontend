@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Activity, ChevronRight, Search } from 'lucide-react';
 import Link from 'next/link';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
@@ -14,13 +14,14 @@ import {
   formatRelativeTime,
   truncate,
 } from '@/lib/utils';
+import { RelativeTime } from '@/components/ui/RelativeTime';
 import Topbar from '@/components/layout/Topbar';
 import AgentAvatar from '@/components/ui/AgentAvatar';
 import DecisionBadge, { decisionColor } from '@/components/ui/DecisionBadge';
 import EmptyState from '@/components/ui/EmptyState';
 import ErrorBanner from '@/components/ui/ErrorBanner';
 import JsonViewer from '@/components/ui/JsonViewer';
-import LoadingSpinner from '@/components/ui/LoadingSpinner';
+import { RunsSkeleton } from '@/components/ui/PageSkeletons';
 import { Button } from '@/components/ui/Button';
 import { CodeChip } from '@/components/ui/CodeChip';
 import { Input } from '@/components/ui/Input';
@@ -33,6 +34,7 @@ import {
   THead,
   TR,
   TRExpanded,
+  type SortDirection,
 } from '@/components/ui/Table';
 
 export default function RunsPage() {
@@ -72,12 +74,59 @@ export default function RunsPage() {
     return matchesSearch && matchesDecision;
   });
 
+  // Client-side sort layered on top of the filter. Default is null
+  // (server order — newest-first from DashboardDataProvider). Clicking
+  // a sortable column header cycles asc → desc → null. No backend
+  // change: we're just reordering the in-memory filtered array.
+  type SortKey = 'agent' | 'tool' | 'repo' | 'decision' | 'time';
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
+  const [sortDir, setSortDir] = useState<SortDirection>(null);
+  const onSort = useCallback(
+    (key: SortKey) => {
+      if (sortKey !== key) {
+        setSortKey(key);
+        setSortDir('asc');
+      } else if (sortDir === 'asc') {
+        setSortDir('desc');
+      } else {
+        setSortKey(null);
+        setSortDir(null);
+      }
+    },
+    [sortKey, sortDir],
+  );
+
+  const sortedRuns = useMemo(() => {
+    if (!sortKey || sortDir === null) return filteredRuns;
+    const acc = (r: typeof filteredRuns[number]): string | number => {
+      switch (sortKey) {
+        case 'agent':    return r.agent_name?.toLowerCase() ?? '';
+        case 'tool':     return r.tool_name?.toLowerCase() ?? '';
+        case 'repo':     return r.target_repo?.toLowerCase() ?? '';
+        case 'decision': return r.decision ?? '';
+        case 'time':     return new Date(r.timestamp).getTime();
+      }
+    };
+    const arr = [...filteredRuns];
+    arr.sort((a, b) => {
+      const av = acc(a);
+      const bv = acc(b);
+      if (av < bv) return sortDir === 'asc' ? -1 : 1;
+      if (av > bv) return sortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+    return arr;
+  }, [filteredRuns, sortKey, sortDir]);
+
+  const dirFor = (key: SortKey): SortDirection =>
+    sortKey === key ? sortDir : null;
+
   if (userLoading || (runsLoading && runs.length === 0)) {
     return (
       <>
         <Topbar title="Runs" subtitle="Real-time agent activity" />
-        <div className="flex h-[60vh] items-center justify-center">
-          <LoadingSpinner size="lg" />
+        <div className="mx-auto max-w-[1320px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
+          <RunsSkeleton />
         </div>
       </>
     );
@@ -196,17 +245,17 @@ export default function RunsPage() {
             <Table>
               <THead>
                 <tr>
-                  <TH>Agent</TH>
-                  <TH>Tool</TH>
-                  <TH>Repository</TH>
+                  <TH sortable sortDirection={dirFor('agent')} onSort={() => onSort('agent')}>Agent</TH>
+                  <TH sortable sortDirection={dirFor('tool')} onSort={() => onSort('tool')}>Tool</TH>
+                  <TH sortable sortDirection={dirFor('repo')} onSort={() => onSort('repo')}>Repository</TH>
                   <TH>Branch</TH>
-                  <TH>Decision</TH>
-                  <TH className="text-right">Time</TH>
+                  <TH sortable sortDirection={dirFor('decision')} onSort={() => onSort('decision')}>Decision</TH>
+                  <TH sortable sortDirection={dirFor('time')} onSort={() => onSort('time')} className="text-right">Time</TH>
                   <TH aria-label="Expand" className="w-8" />
                 </tr>
               </THead>
               <TBody>
-                {filteredRuns.map((run) => (
+                {sortedRuns.map((run) => (
                   <RunRow
                     key={run.id}
                     run={run}
@@ -309,9 +358,10 @@ function RunRow({
         </TD>
         <TD className="text-right tabular-nums">
           <div className="flex items-center justify-end gap-2 whitespace-nowrap">
-            <span className="whitespace-nowrap text-[12px] text-[var(--neutral-soft-400)]">
-              {formatRelativeTime(run.timestamp)}
-            </span>
+            <RelativeTime
+              timestamp={run.timestamp}
+              className="whitespace-nowrap text-[12px] text-[var(--neutral-soft-400)]"
+            />
             {run.execution_time !== undefined && run.execution_time !== null && (
               <CodeChip>{formatExecutionTimeMs(run.execution_time)}</CodeChip>
             )}

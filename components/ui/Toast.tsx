@@ -371,7 +371,12 @@ function ToastCard({
       role="status"
       className={cn(
         'pointer-events-auto w-full max-w-[380px] sm:w-[360px]',
-        'flex items-start gap-3 rounded-[12px] border border-[var(--stroke-soft-200)] bg-white p-3.5 pr-2.5',
+        // Single-line toasts (no description) use `items-center` so the
+        // icon disc and the title text align on the same horizontal axis.
+        // Multi-line toasts (with description) keep `items-start` so the
+        // icon anchors to the title's top row instead of floating mid-card.
+        'flex gap-3 rounded-[12px] border border-[var(--stroke-soft-200)] bg-white p-3.5 pr-2.5',
+        toast.description ? 'items-start' : 'items-center',
         'shadow-[0_8px_24px_rgba(23,23,23,0.10),0_2px_6px_rgba(23,23,23,0.05)]',
       )}
     >

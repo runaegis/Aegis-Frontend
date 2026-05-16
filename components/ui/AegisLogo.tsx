@@ -3,8 +3,12 @@
 import type { SVGProps } from 'react';
 
 /**
- * Aegis wordmark. Black glyph paths use currentColor so the logo inherits
- * the surrounding text color; white knockouts (letter counters) stay white.
+ * Aegis wordmark. Glyph paths use `currentColor` so the logo inherits the
+ * surrounding text color. Letter counters (inside-of-A, loop of g, etc.)
+ * are filled with `var(--bg-app)` so they always match whatever surface
+ * the logo sits on — light gray in light mode, near-black in dark mode.
+ * This avoids the "white square peeking above the letters in dark mode"
+ * artifact that occurred when knockouts were hardcoded to `white`.
  * Aspect ratio is 509 × 150 (~3.4 : 1) — set `height` and let `width` be auto.
  */
 export function AegisLogo({
@@ -28,7 +32,7 @@ export function AegisLogo({
       />
       <path
         d="M347.698 47.3998C361.328 46.8098 371.888 50.4648 375.428 64.9398C379.378 81.0528 375.547 99.5708 357.797 104.126C329.217 107.89 322.097 78.8308 332.847 57.0908C335.627 51.4618 341.748 48.6818 347.698 47.3998Z"
-        fill="white"
+        fill="var(--bg-app)"
       />
       {/* A */}
       <path
@@ -37,7 +41,7 @@ export function AegisLogo({
       />
       <path
         d="M172.115 22.5889C175.208 26.5459 189.505 69.8339 192.743 78.7439C185.955 79.0889 178.22 78.9909 171.357 79.0529L151.348 79.1679C157.268 61.6129 165.272 39.8649 172.115 22.5889Z"
-        fill="white"
+        fill="var(--bg-app)"
       />
       {/* e */}
       <path
@@ -46,7 +50,7 @@ export function AegisLogo({
       />
       <path
         d="M263.089 46.2569C280.507 45.2649 286.921 54.6858 289.007 70.5468L266.199 70.5688C256.932 70.6218 247.664 70.5658 238.397 70.4018C241.499 54.9198 246.921 48.2299 263.089 46.2569Z"
-        fill="white"
+        fill="var(--bg-app)"
       />
       {/* Shield right */}
       <path

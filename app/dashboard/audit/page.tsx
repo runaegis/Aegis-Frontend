@@ -25,7 +25,8 @@ import DecisionBadge, { decisionColor } from '@/components/ui/DecisionBadge';
 import EmptyState from '@/components/ui/EmptyState';
 import ErrorBanner from '@/components/ui/ErrorBanner';
 import JsonViewer from '@/components/ui/JsonViewer';
-import LoadingSpinner from '@/components/ui/LoadingSpinner';
+import { AuditSkeleton } from '@/components/ui/PageSkeletons';
+import { Skeleton } from '@/components/ui/Skeleton';
 import { Button } from '@/components/ui/Button';
 import { CodeChip } from '@/components/ui/CodeChip';
 import {
@@ -116,6 +117,17 @@ export default function AuditPage() {
     }
   };
 
+  if (userLoading || (loading && events.length === 0)) {
+    return (
+      <>
+        <Topbar title="Audit Trail" subtitle="Immutable event log" />
+        <div className="mx-auto max-w-[1320px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
+          <AuditSkeleton />
+        </div>
+      </>
+    );
+  }
+
   return (
     <>
       <Topbar title="Audit Trail" subtitle="Immutable event log" />
@@ -185,15 +197,28 @@ export default function AuditPage() {
         </motion.div>
 
         {loading ? (
-          <div className="flex justify-center py-16">
-            <LoadingSpinner size="lg" />
+          <div className="overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div
+                key={i}
+                className="flex items-center gap-3 border-b border-[var(--stroke-soft-200)] px-[18px] py-[14px] last:border-b-0"
+              >
+                <div className="w-[180px]"><Skeleton className="h-[13px] w-32" /></div>
+                <div className="flex-1"><Skeleton className="h-[13px] w-24" /></div>
+                <div className="w-[100px]"><Skeleton className="h-[13px] w-16" /></div>
+                <div className="flex-1"><Skeleton className="h-[13px] w-40" /></div>
+                <div className="w-[140px]"><Skeleton className="h-[13px] w-20" /></div>
+                <div className="w-[80px]"><Skeleton className="h-[19px] w-16 rounded-[6px]" /></div>
+                <div className="w-6"><Skeleton className="h-[13px] w-4" /></div>
+              </div>
+            ))}
           </div>
         ) : events.length === 0 ? (
           <div className="overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
             <EmptyState
               icon={<FileText className="h-5 w-5" />}
-              title="No audit events"
-              description="Agent actions will be logged here as they happen."
+              title="No audit events yet"
+              description="Once your agent runs its first action, every decision is logged here with the tool, arguments, and policy outcome. Filter by date and export as JSON."
             />
           </div>
         ) : (

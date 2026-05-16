@@ -32,7 +32,8 @@ import AgentAvatar from '@/components/ui/AgentAvatar';
 import DecisionBadge, { decisionColor } from '@/components/ui/DecisionBadge';
 import EmptyState from '@/components/ui/EmptyState';
 import ErrorBanner from '@/components/ui/ErrorBanner';
-import LoadingSpinner from '@/components/ui/LoadingSpinner';
+import { DashboardHomeSkeleton } from '@/components/ui/PageSkeletons';
+import { RelativeTime } from '@/components/ui/RelativeTime';
 import { Button } from '@/components/ui/Button';
 import { CodeChip } from '@/components/ui/CodeChip';
 
@@ -191,9 +192,7 @@ export default function DashboardHomePage() {
     return (
       <>
         <Topbar title="Dashboard" subtitle="Overview" />
-        <div className="flex h-[60vh] items-center justify-center">
-          <LoadingSpinner size="lg" />
-        </div>
+        <DashboardHomeSkeleton />
       </>
     );
   }
@@ -624,9 +623,10 @@ function ActivityRow({ run }: { run: SessionAction }) {
             {formatExecutionTimeMs(run.execution_time)}
           </span>
         )}
-        <span className="hidden text-[11px] text-[var(--neutral-soft-400)] tabular-nums lg:inline">
-          {formatRelativeTime(run.timestamp)}
-        </span>
+        <RelativeTime
+          timestamp={run.timestamp}
+          className="hidden text-[11px] text-[var(--neutral-soft-400)] tabular-nums lg:inline"
+        />
         <DecisionBadge decision={run.decision} />
         <ChevronRight
           className="h-3.5 w-3.5 shrink-0 text-[var(--neutral-soft-400)]"
@@ -679,7 +679,7 @@ function ApprovalRow({
         </span>
         <span className="ml-auto inline-flex items-center gap-1 text-[11px] text-[var(--neutral-soft-400)]">
           <Clock className="h-3 w-3" strokeWidth={2} />
-          {formatRelativeTime(approval.created_at)}
+          <RelativeTime timestamp={approval.created_at} />
         </span>
       </div>
 
