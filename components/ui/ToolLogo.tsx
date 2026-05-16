@@ -9,13 +9,38 @@ import type { CSSProperties } from 'react';
  * is cropped — the image is centered inside the box with `object-contain`.
  */
 
-type ToolId = 'vscode-copilot' | 'cursor' | 'claude-code';
+export type ToolId = 'vscode-copilot' | 'cursor' | 'claude-code';
 
 const SOURCES: Record<ToolId, { src: string; alt: string }> = {
   'vscode-copilot': { src: '/integrations/vscode.png',      alt: 'VS Code' },
   cursor:           { src: '/integrations/cursor.png',      alt: 'Cursor' },
   'claude-code':    { src: '/integrations/claude-code.png', alt: 'Claude Code' },
 };
+
+/**
+ * Best-effort mapping from a free-form `agent_name` (e.g. `claude-sonnet-4`,
+ * `cursor-agent`, `github-copilot`) to the corresponding integration logo.
+ * Returns `null` when no confident match is found so callers can fall back
+ * to a generic initials avatar.
+ */
+export function getAgentToolId(agentName?: string | null): ToolId | null {
+  if (!agentName) return null;
+  const n = agentName.toLowerCase();
+
+  // Host/IDE name wins over the model name. An agent like
+  // `copilot Claude Haiku 4.5` is Copilot using a Claude model,
+  // so we want the Copilot logo, not the Claude one. Same for
+  // `cursor composer` etc.
+  if (n.includes('copilot') || n.includes('vscode') || n.includes('vs-code')) {
+    return 'vscode-copilot';
+  }
+  if (n.includes('cursor')) return 'cursor';
+
+  // Only treat the agent as Claude Code when no IDE host is mentioned.
+  if (n.includes('claude')) return 'claude-code';
+
+  return null;
+}
 
 interface ToolLogoProps {
   id: ToolId;

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import {api} from '@/lib/api';
 import {
   LayoutDashboard,
   Activity,
@@ -25,6 +26,7 @@ import {
 import { useUser } from '@/lib/hooks';
 import { getInitials } from '@/lib/utils';
 import { AegisLogo } from '@/components/ui/AegisLogo';
+import { useRouter } from 'next/navigation';
 
 /**
  * Sidebar collapse state.
@@ -130,11 +132,10 @@ export default function Sidebar() {
     return pathname === href || pathname.startsWith(`${href}/`);
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
-    window.location.href = '/auth';
-  };
+  const handleLogout = async () => {
+    await api.logOut();
+    router.replace('/auth');
+  }; 
 
   // Nav-row link. `data-sidebar-center` is consumed by globals.css
   // to center the icon when the rail collapses. The label span is
