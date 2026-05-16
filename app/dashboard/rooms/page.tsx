@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import Topbar from '@/components/layout/Topbar';
 import ErrorBanner from '@/components/ui/ErrorBanner';
-import LoadingSpinner from '@/components/ui/LoadingSpinner';
+import { RoomsSkeleton } from '@/components/ui/PageSkeletons';
 import EmptyState from '@/components/ui/EmptyState';
 import { Button } from '@/components/ui/Button';
 import { Input, Select } from '@/components/ui/Input';
@@ -23,6 +23,7 @@ import { api } from '@/lib/api';
 import { useAutoRefresh, useUser } from '@/lib/hooks';
 import { RoomSummary, RoomDetails, RoomInvite, RoomMember } from '@/lib/types'; 
 import { formatRelativeTime } from '@/lib/utils';
+import { RelativeTime } from '@/components/ui/RelativeTime';
 import { DUR, EASE, fadeUp, fadeUpSm, staggerContainer } from '@/lib/motion';
 
 const getRoomId = (room: RoomSummary | RoomDetails): string =>
@@ -331,8 +332,8 @@ useEffect(() => {
     return (
       <>
         <Topbar title="Rooms" subtitle="Team workspaces for agents" />
-        <div className="flex h-[60vh] items-center justify-center">
-          <LoadingSpinner size="lg" />
+        <div className="mx-auto max-w-[1320px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
+          <RoomsSkeleton />
         </div>
       </>
     );
@@ -567,7 +568,11 @@ useEffect(() => {
                 {canCreateInvites ? (
                   <form
                     onSubmit={handleCreateInvite}
-                    className="grid grid-cols-1 gap-3 sm:grid-cols-3"
+                    // `items-end` on the grid container so all three grid
+                    // cells align their END edge — the button (which has
+                    // no label) lines up with the bottom of the two input
+                    // fields, instead of floating below them.
+                    className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:items-end"
                   >
                     <Field label="Max uses">
                       <Input
@@ -765,9 +770,10 @@ useEffect(() => {
                             {member.role || 'member'}
                           </Badge>
                           {member.joined_at && (
-                            <span className="hidden text-[11px] text-[var(--neutral-soft-400)] sm:inline">
-                              {formatRelativeTime(member.joined_at)}
-                            </span>
+                            <RelativeTime
+                              timestamp={member.joined_at}
+                              className="hidden text-[11px] text-[var(--neutral-soft-400)] sm:inline"
+                            />
                           )}
                         </motion.li>
                       ))}

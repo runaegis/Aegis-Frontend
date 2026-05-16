@@ -19,6 +19,7 @@ import {
   KeyRound,
   Lock,
   LogOut,
+  Palette,
   Plus,
   RefreshCw,
   Shield,
@@ -41,12 +42,15 @@ import { Input } from '@/components/ui/Input';
 import { Switch } from '@/components/ui/Switch';
 import { useToast } from '@/components/ui/Toast';
 import { CodeChip } from '@/components/ui/CodeChip';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import ThemeToggle from '@/components/ui/ThemeToggle';
 import { DUR, EASE, fadeUp, staggerContainer } from '@/lib/motion';
 import { useRouter } from 'next/navigation';
 
 // ── Section catalog ─────────────────────────────────────────────────────────
 type SectionId =
   | 'profile'
+  | 'appearance'
   | 'notifications'
   | 'security'
   | 'github'
@@ -66,6 +70,7 @@ const GROUPS: Group[] = [
     label: 'Account',
     items: [
       { id: 'profile',       label: 'Profile',       icon: UserIcon },
+      { id: 'appearance',    label: 'Appearance',    icon: Palette },
       { id: 'notifications', label: 'Notifications', icon: Bell },
       { id: 'security',      label: 'Security',      icon: Shield },
     ],
@@ -97,6 +102,7 @@ const GROUPS: Group[] = [
 
 const SECTION_DESCRIPTIONS: Record<SectionId, string> = {
   profile:       'How you appear inside Aegis.',
+  appearance:    'Theme and visual preferences for the dashboard.',
   notifications: 'Where and when Aegis pings you about agent activity.',
   security:      'Passwords, two-factor auth, and active sessions.',
   github:        'Your GitHub identity and personal access token.',
@@ -244,6 +250,7 @@ export default function SettingsPage() {
             {active === 'profile' && (
               <ProfileSection user={user} setUser={setUser} onError={handleSectionError} onSuccess={handleSectionSuccess} reduce={!!reduce} />
             )}
+            {active === 'appearance' && <AppearanceSection reduce={!!reduce} />}
             {active === 'notifications' && <NotificationsSection reduce={!!reduce} onSuccess={handleSectionSuccess} />}
             {active === 'security' && <SecuritySection reduce={!!reduce} />}
             {active === 'github' && <GitHubSection user={user} reduce={!!reduce} />}
@@ -359,6 +366,27 @@ function Row({
   );
 }
 
+// ── Section: Appearance ─────────────────────────────────────────────────────
+// Canonical home for the theme switch. The same control surfaces in the
+// profile dropdown as a compact pill — both write to the same
+// `localStorage.aegis_theme` flag + DOM attribute, so they stay in sync.
+function AppearanceSection({ reduce }: { reduce: boolean }) {
+  return (
+    <motion.div
+      initial={reduce ? false : { opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: DUR.default, ease: EASE.out }}
+    >
+      <SettingsCard
+        title="Theme"
+        description="Choose how the dashboard looks. Auth and onboarding stay light by design."
+      >
+        <ThemeToggle variant="card" />
+      </SettingsCard>
+    </motion.div>
+  );
+}
+
 // ── Section: Profile ────────────────────────────────────────────────────────
 function ProfileSection({
   user,
@@ -430,7 +458,7 @@ function ProfileSection({
                 Profile picture
               </p>
               <p className="text-[11.5px] text-[var(--neutral-soft-400)]">
-                Synced from your GitHub avatar — managed there.
+                Synced from your GitHub avatar. Managed there.
               </p>
             </div>
             <Button variant="secondary" disabled>
@@ -543,7 +571,7 @@ function NotificationsSection({
             />
             <Row
               title="Slack"
-              description="Coming soon — connect a workspace to forward alerts to a channel."
+              description="Coming soon. Connect a workspace to forward alerts to a channel."
               action={
                 <Switch
                   checked={slackEnabled}
@@ -993,7 +1021,7 @@ function ApiKeysSection({
         >
           {keys.length === 0 ? (
             <p className="py-6 text-center text-[12.5px] text-[var(--neutral-soft-400)]">
-              No keys yet — create one to call the Aegis API.
+              No keys yet. Create one to call the Aegis API.
             </p>
           ) : (
             <div className="divide-y divide-[var(--stroke-soft-200)]">
@@ -1290,7 +1318,7 @@ function AuditSection({
           <Button
             variant="primary"
             leadingIcon={<Download className="h-3.5 w-3.5" strokeWidth={2.25} />}
-            onClick={() => onSuccess('Export started — check your email')}
+            onClick={() => onSuccess('Export started. Check your email.')}
           >
             Export full audit log
           </Button>
@@ -1333,7 +1361,7 @@ function BillingSection({ reduce }: { reduce: boolean }) {
           description="Receipts for your records."
         >
           <p className="rounded-[8px] border border-dashed border-[var(--stroke-sub-300)] p-6 text-center text-[12.5px] text-[var(--neutral-soft-400)]">
-            No invoices yet — you&apos;re on the free plan.
+            No invoices yet. You&apos;re on the free plan.
           </p>
         </SettingsCard>
       </motion.div>
@@ -1388,6 +1416,12 @@ function DangerSection({
   onLogout: () => void;
   reduce: boolean;
 }) {
+  // Branded confirmation dialogs replace `window.confirm()` so destructive
+  // actions feel intentional + theme-aware. Each card tracks its own
+  // open-state because both can be triggered independently.
+  const [resetOpen, setResetOpen] = useState(false);
+  const [signOutOpen, setSignOutOpen] = useState(false);
+
   return (
     <motion.div
       variants={staggerContainer(0.05)}
@@ -1399,9 +1433,7 @@ function DangerSection({
           title="Reset onboarding"
           description="Walk through Aegis setup again from scratch."
           actionLabel="Reset"
-          onAction={() => {
-            if (confirm('Reset onboarding and start over?')) onReset();
-          }}
+          onAction={() => setResetOpen(true)}
         />
       </motion.div>
       <motion.div variants={fadeUp}>
@@ -1409,11 +1441,34 @@ function DangerSection({
           title="Sign out of every device"
           description="Invalidate all sessions including this one."
           actionLabel="Sign out everywhere"
-          onAction={() => {
-            if (confirm('Sign out everywhere?')) onLogout();
-          }}
+          onAction={() => setSignOutOpen(true)}
         />
       </motion.div>
+
+      <ConfirmDialog
+        open={resetOpen}
+        onOpenChange={setResetOpen}
+        title="Reset onboarding?"
+        description="You'll be walked through Aegis setup again from scratch. Your existing repositories, policies, and audit history stay intact."
+        confirmLabel="Reset"
+        variant="danger"
+        onConfirm={() => {
+          setResetOpen(false);
+          onReset();
+        }}
+      />
+      <ConfirmDialog
+        open={signOutOpen}
+        onOpenChange={setSignOutOpen}
+        title="Sign out of every device?"
+        description="All active sessions, including this one, will be invalidated. You'll need to sign in again."
+        confirmLabel="Sign out everywhere"
+        variant="danger"
+        onConfirm={() => {
+          setSignOutOpen(false);
+          onLogout();
+        }}
+      />
       <motion.div variants={fadeUp}>
         <DangerCard
           title="Delete account"
@@ -1421,7 +1476,7 @@ function DangerSection({
           actionLabel="Delete account"
           icon={Trash2}
           onAction={() =>
-            alert('Account deletion is not yet enabled — contact support@runaegis.com.')
+            alert('Account deletion is not yet enabled. Contact support@runaegis.com.')
           }
           permanent
         />

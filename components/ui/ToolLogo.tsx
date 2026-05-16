@@ -65,11 +65,16 @@ export function ToolLogo({ id, size = 28, className, style }: ToolLogoProps) {
         ...style,
       }}
     >
-      {/* Plain <img> — these are small PNGs, no need for next/image. */}
+      {/* Plain <img> — these are small PNGs, no need for next/image.
+          `data-tool-id` lets the dark-mode CSS in globals.css selectively
+          invert monochromatic dark logos (Cursor) without touching
+          colored ones (VS Code blue). Add new dark-only inversions
+          there as new logos get added. */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={src}
         alt={alt}
+        data-tool-id={id}
         width={size}
         height={size}
         style={{

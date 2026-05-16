@@ -7,13 +7,14 @@ import { api } from '@/lib/api';
 import { useAutoRefresh, useUser } from '@/lib/hooks';
 import { MCPApproval } from '@/lib/types';
 import { formatRelativeTime } from '@/lib/utils';
+import { RelativeTime } from '@/components/ui/RelativeTime';
 import Topbar from '@/components/layout/Topbar';
 import AgentAvatar from '@/components/ui/AgentAvatar';
 import DecisionBadge from '@/components/ui/DecisionBadge';
 import EmptyState from '@/components/ui/EmptyState';
 import ErrorBanner from '@/components/ui/ErrorBanner';
 import JsonViewer from '@/components/ui/JsonViewer';
-import LoadingSpinner from '@/components/ui/LoadingSpinner';
+import { ApprovalsSkeleton } from '@/components/ui/PageSkeletons';
 import { Button } from '@/components/ui/Button';
 import { CodeChip } from '@/components/ui/CodeChip';
 import { useToast } from '@/components/ui/Toast';
@@ -148,8 +149,8 @@ export default function ApprovalsPage() {
     return (
       <>
         <Topbar title="Approvals" subtitle="Actions requiring review" />
-        <div className="flex h-[60vh] items-center justify-center">
-          <LoadingSpinner size="lg" />
+        <div className="mx-auto max-w-[1320px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
+          <ApprovalsSkeleton />
         </div>
       </>
     );
@@ -347,7 +348,7 @@ function ApprovalItem({
       data-card-hover
       className={`group overflow-hidden rounded-[12px] border shadow-[0_1px_2px_rgba(23,23,23,0.04)] hover:shadow-[0_4px_12px_rgba(23,23,23,0.06)] ${
         isPending
-          ? 'border-[var(--primary-base)]/20 bg-gradient-to-b from-[var(--primary-lighter)]/55 via-white to-white'
+          ? 'border-[var(--primary-base)]/20 bg-gradient-to-b from-[var(--primary-lighter)]/55 via-[var(--white-0)] to-[var(--white-0)]'
           : 'border-[var(--stroke-soft-200)] bg-white opacity-75'
       }`}
     >
@@ -363,11 +364,11 @@ function ApprovalItem({
               </p>
               <div className="mt-0.5 flex items-center gap-1.5 text-[11.5px] text-[var(--neutral-soft-400)]">
                 <Clock className="h-3 w-3" strokeWidth={2} />
-                <span>{formatRelativeTime(approval.created_at)}</span>
+                <RelativeTime timestamp={approval.created_at} />
                 {approval.approved_at && (
                   <>
                     <span>·</span>
-                    <span>actioned {formatRelativeTime(approval.approved_at)}</span>
+                    <span>actioned <RelativeTime timestamp={approval.approved_at} /></span>
                   </>
                 )}
               </div>

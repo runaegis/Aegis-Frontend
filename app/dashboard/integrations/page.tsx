@@ -5,7 +5,7 @@ import { motion, useReducedMotion } from 'motion/react';
 import { Check, Copy } from 'lucide-react';
 import Topbar from '@/components/layout/Topbar';
 import { useUser } from '@/lib/hooks';
-import LoadingSpinner from '@/components/ui/LoadingSpinner';
+import { IntegrationsSkeleton } from '@/components/ui/PageSkeletons';
 import { CodeChip } from '@/components/ui/CodeChip';
 import { JsonHighlight } from '@/components/ui/JsonHighlight';
 import { ToolLogo } from '@/components/ui/ToolLogo';
@@ -52,8 +52,8 @@ export default function IntegrationsPage() {
     return (
       <>
         <Topbar title="Integrations" subtitle="Connect Aegis to your dev tools" />
-        <div className="flex h-[60vh] items-center justify-center">
-          <LoadingSpinner size="lg" />
+        <div className="mx-auto max-w-[1320px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
+          <IntegrationsSkeleton />
         </div>
       </>
     );
@@ -164,7 +164,7 @@ export default function IntegrationsPage() {
               <ul className="space-y-2.5 p-4 text-[12.5px] text-[var(--neutral-sub-600)]">
                 <li className="flex gap-2">
                   <span className="mt-1 h-1 w-1 shrink-0 rounded-full bg-[var(--neutral-soft-400)]" />
-                  Rooms are required for access — create one before you connect.
+                  Rooms are required for access. Create one before you connect.
                 </li>
                 <li className="flex gap-2">
                   <span className="mt-1 h-1 w-1 shrink-0 rounded-full bg-[var(--neutral-soft-400)]" />

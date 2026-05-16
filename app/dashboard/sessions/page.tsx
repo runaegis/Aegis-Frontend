@@ -22,13 +22,14 @@ import {
   formatExecutionTimeMs,
   formatRelativeTime,
 } from '@/lib/utils';
+import { RelativeTime } from '@/components/ui/RelativeTime';
 import Topbar from '@/components/layout/Topbar';
 import AgentAvatar from '@/components/ui/AgentAvatar';
 import DecisionBadge from '@/components/ui/DecisionBadge';
 import EmptyState from '@/components/ui/EmptyState';
 import ErrorBanner from '@/components/ui/ErrorBanner';
 import JsonViewer from '@/components/ui/JsonViewer';
-import LoadingSpinner from '@/components/ui/LoadingSpinner';
+import { SessionsSkeleton } from '@/components/ui/PageSkeletons';
 import { CodeChip } from '@/components/ui/CodeChip';
 import { DUR, EASE, fadeUp, fadeUpSm, staggerContainer } from '@/lib/motion';
 
@@ -107,8 +108,8 @@ export default function SessionsPage() {
     return (
       <>
         <Topbar title="Sessions" subtitle="Agent working sessions" />
-        <div className="flex h-[60vh] items-center justify-center">
-          <LoadingSpinner size="lg" />
+        <div className="mx-auto max-w-[1320px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
+          <SessionsSkeleton />
         </div>
       </>
     );
@@ -167,7 +168,7 @@ export default function SessionsPage() {
             <EmptyState
               icon={<Layers className="h-5 w-5" />}
               title="No sessions yet"
-              description="Sessions will appear here once your agent starts working."
+              description="A session groups every action from one agent conversation. They appear automatically once your agent runs its first tool."
             />
           </div>
         ) : (
@@ -289,7 +290,7 @@ function SessionRow({
           <div className="mt-[3px] flex flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px] text-[var(--neutral-soft-400)]">
             <span className="inline-flex items-center gap-1">
               <Clock className="h-3 w-3" strokeWidth={2} />
-              {formatRelativeTime(session.started_at)}
+              <RelativeTime timestamp={session.started_at} />
             </span>
             <span className="text-[var(--stroke-sub-300)]">·</span>
             <span className="inline-flex items-center gap-1">
@@ -349,7 +350,7 @@ function SessionRow({
           // Bottom half of the continuous orange → white wash. Start-stop
           // (/45) matches the trigger's end-stop above so the gradient
           // hands off seamlessly into the panel.
-          className="bg-gradient-to-b from-[var(--primary-lighter)]/45 to-white"
+          className="bg-gradient-to-b from-[var(--primary-lighter)]/45 to-[var(--white-0)]"
         >
         <div className="px-4 pb-5 pt-1 sm:px-6">
           {/* Inner surface — pure white card so it reads as a true nested panel */}
@@ -380,20 +381,30 @@ function SessionRow({
                     key={action.id}
                     className="relative flex gap-3 pb-3 last:pb-0"
                   >
-                    {/* Timeline gutter: dot + line share the same column;
-                        the line passes through BEHIND the dot so the dot
-                        sits visually on the rail with the line tucking
-                        under both sides. */}
-                    <div className="relative flex w-[14px] shrink-0 justify-center pt-[8px]">
-                      {idx < session.sessions.length - 1 && (
-                        <span
-                          aria-hidden
-                          className="absolute left-1/2 top-0 h-full w-px -translate-x-1/2 bg-[var(--stroke-soft-200)]"
-                        />
-                      )}
+                    {/* Continuous timeline line, positioned absolutely on
+                        the li so it can bridge the `pb-3` gap between
+                        items (the previous in-gutter line couldn't reach
+                        across that 12px gap, producing visible breaks).
+                          • Starts at y=17 (gutter pt 8 + dot 9), so it
+                            sits BELOW the current dot — no "weird line
+                            above" the first node.
+                          • Ends at bottom: -8 (8px past the li's bottom
+                            edge), reaching the top of the NEXT li's dot
+                            (which is at its own pt-8 offset). The result
+                            is a single visually-continuous line
+                            connecting consecutive dots.
+                          • left-[7px] = center of the 14px gutter.
+                          • Skipped on the last item (idx check). */}
+                    {idx < session.sessions.length - 1 && (
                       <span
                         aria-hidden
-                        className="relative z-10 inline-block h-[9px] w-[9px] rounded-full bg-[var(--neutral-soft-400)] ring-2 ring-white"
+                        className="absolute left-[7px] top-[17px] -bottom-2 w-px -translate-x-1/2 bg-[var(--stroke-soft-200)]"
+                      />
+                    )}
+                    <div className="relative flex w-[14px] shrink-0 justify-center pt-[8px]">
+                      <span
+                        aria-hidden
+                        className="relative inline-block h-[9px] w-[9px] rounded-full bg-[var(--neutral-soft-400)]"
                       />
                     </div>
 
@@ -417,9 +428,10 @@ function SessionRow({
                                   </span>
                                 )}
                               <span className="text-[var(--stroke-sub-300)] text-[11px]">·</span>
-                              <span className="text-[11px] text-[var(--neutral-soft-400)]">
-                                {formatRelativeTime(action.timestamp)}
-                              </span>
+                              <RelativeTime
+                                timestamp={action.timestamp}
+                                className="text-[11px] text-[var(--neutral-soft-400)]"
+                              />
                             </div>
                             <p className="mt-1.5 text-[13px] leading-[1.45] text-[var(--neutral-strong-950)]">
                               {action.action_summary}
