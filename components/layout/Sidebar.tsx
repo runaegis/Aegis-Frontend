@@ -126,6 +126,7 @@ export default function Sidebar() {
   const { user } = useUser();
   const [mobileOpen, setMobileOpen] = useState(false);
   const { collapsed, toggle } = useSidebarCollapsed();
+  const router = useRouter();
 
   const isActive = (href: string) => {
     if (href === '/dashboard') return pathname === '/dashboard';

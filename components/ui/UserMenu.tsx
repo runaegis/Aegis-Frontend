@@ -17,6 +17,8 @@ import { useUser } from '@/lib/hooks';
 import { getInitials } from '@/lib/utils';
 import { Badge } from '@/components/ui/Badge';
 import ThemeToggle from '@/components/ui/ThemeToggle';
+import {useRouter} from "next/navigation";
+import { api } from "@/lib/api";
 
 // Emphasized-decel easing — matches DateRangePicker / homepage rhythm.
 const EASE_EMPH: [number, number, number, number] = [0.2, 0.8, 0.2, 1];
