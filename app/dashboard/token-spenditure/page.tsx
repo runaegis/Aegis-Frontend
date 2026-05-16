@@ -217,9 +217,12 @@ export default function TokenSpenditurePage() {
   }, [displayRows]);
 
   const sessionData = useMemo<SessionBucket[]>(() => {
-    const map = new Map<string, SessionBucket>();
+    type WithTs = SessionBucket & { firstTs: number };
+    const map = new Map<string, WithTs>();
     for (const row of displayRows) {
       const sid = row.session_id || 'unknown';
+      const tsRaw = row.timestamp ?? row.created_at ?? '';
+      const tsMs = tsRaw ? parseApiDate(tsRaw).getTime() : NaN;
       if (!map.has(sid)) {
         map.set(sid, {
           label: sid === 'unknown' ? 'unknown' : `${sid.slice(0, 8)}…`,
@@ -227,6 +230,7 @@ export default function TokenSpenditurePage() {
           input: 0,
           output: 0,
           total: 0,
+          firstTs: Number.isFinite(tsMs) ? tsMs : Number.MAX_SAFE_INTEGER,
         });
       }
       const bucket = map.get(sid);
@@ -234,8 +238,11 @@ export default function TokenSpenditurePage() {
       bucket.input += toNumber(row.input_token);
       bucket.output += toNumber(row.output_token);
       bucket.total = bucket.input + bucket.output;
+      if (Number.isFinite(tsMs) && tsMs < bucket.firstTs) bucket.firstTs = tsMs;
     }
-    return Array.from(map.values()).sort((a, b) => b.total - a.total);
+    return Array.from(map.values())
+      .sort((a, b) => a.firstTs - b.firstTs)
+      .map(({ firstTs: _ts, ...rest }) => rest);
   }, [displayRows]);
 
   const pieData = useMemo(
@@ -414,41 +421,18 @@ export default function TokenSpenditurePage() {
                     <ComposedChart data={sessionData}>
                       <CartesianGrid strokeDasharray="3 3" stroke="var(--stroke-soft-200)" />
                       <XAxis
-                        dataKey="label"
-                        tick={{ fill: 'var(--neutral-soft-400)', fontSize: 11, fontFamily: 'var(--font-geist-sans)' }}
-                        interval={0}
-                        angle={-20}
-                        textAnchor="end"
-                        height={56}
+                        dataKey="session"
+                        tick={false}
+                        tickLine={false}
+                        axisLine={{ stroke: 'var(--stroke-soft-200)' }}
+                        height={8}
                       />
                       <YAxis
                         tick={{ fill: 'var(--neutral-soft-400)', fontSize: 11, fontFamily: 'var(--font-geist-sans)' }}
                       />
                       <Tooltip
                         cursor={{ fill: 'rgba(250, 115, 25, 0.05)' }}
-                        contentStyle={{
-                          background: '#fff',
-                          border: '1px solid var(--stroke-soft-200)',
-                          borderRadius: 8,
-                          boxShadow: '0 4px 12px rgba(23, 23, 23, 0.06)',
-                          fontFamily: 'var(--font-geist-sans)',
-                          fontSize: 12,
-                        }}
-                        formatter={(value) => {
-                          if (typeof value === 'number') {
-                            return value.toLocaleString();
-                          }
-
-                          if (Array.isArray(value)) {
-                            return value.join(', ');
-                          }
-
-                          return String(value ?? '');
-                        }}
-                        labelFormatter={(_, payload) => {
-                          const row = payload?.[0]?.payload as SessionBucket | undefined;
-                          return row?.session ?? '';
-                        }}
+                        content={<SessionTokenTooltip />}
                       />
                       <Bar dataKey="input" name="Input" fill={CHART.input} radius={[4, 4, 0, 0]} />
                       <Bar dataKey="output" name="Output" fill={CHART.output} radius={[4, 4, 0, 0]} />
@@ -524,41 +508,18 @@ export default function TokenSpenditurePage() {
                     <ComposedChart data={sessionAegisComparison}>
                       <CartesianGrid strokeDasharray="3 3" stroke="var(--stroke-soft-200)" />
                       <XAxis
-                        dataKey="label"
-                        tick={{ fill: 'var(--neutral-soft-400)', fontSize: 11, fontFamily: 'var(--font-geist-sans)' }}
-                        interval={0}
-                        angle={-20}
-                        textAnchor="end"
-                        height={56}
+                        dataKey="session"
+                        tick={false}
+                        tickLine={false}
+                        axisLine={{ stroke: 'var(--stroke-soft-200)' }}
+                        height={8}
                       />
                       <YAxis
                         tick={{ fill: 'var(--neutral-soft-400)', fontSize: 11, fontFamily: 'var(--font-geist-sans)' }}
                       />
                       <Tooltip
                         cursor={{ fill: 'rgba(250, 115, 25, 0.05)' }}
-                        contentStyle={{
-                          background: '#fff',
-                          border: '1px solid var(--stroke-soft-200)',
-                          borderRadius: 8,
-                          boxShadow: '0 4px 12px rgba(23, 23, 23, 0.06)',
-                          fontFamily: 'var(--font-geist-sans)',
-                          fontSize: 12,
-                        }}
-                        formatter={(value) => {
-                          if (typeof value === 'number') {
-                            return value.toLocaleString();
-                          }
-
-                          if (Array.isArray(value)) {
-                            return value.join(', ');
-                          }
-
-                          return String(value ?? '');
-                        }}
-                        labelFormatter={(_, payload) => {
-                          const row = payload?.[0]?.payload as SessionAegisBucket | undefined;
-                          return row?.session ?? '';
-                        }}
+                        content={<SessionTokenTooltip />}
                       />
                       {/* Tall bar = Without Aegis (black); short bar = With Aegis (orange). */}
                       <Bar
@@ -683,6 +644,86 @@ function Stat({
       <p className="mt-2.5 text-[28px] font-semibold leading-none tracking-[-0.04em] tabular-nums text-[var(--neutral-strong-950)]">
         {value.toLocaleString()}
       </p>
+    </div>
+  );
+}
+
+// ── Shared tooltip for the session bar charts ───────────────────────────────
+// Header = full session_id (mono, so UUIDs read cleanly); body = each visible
+// series with its token value. Used by both the "Usage by session" chart
+// (Input + Output) and the "With vs without Aegis" chart so hovering reads
+// the same way everywhere.
+type RechartsTooltipItem = {
+  name?: string | number;
+  value?: number | string | Array<number | string>;
+  color?: string;
+  payload?: { session?: string };
+};
+
+function SessionTokenTooltip({
+  active,
+  payload,
+}: {
+  active?: boolean;
+  payload?: RechartsTooltipItem[];
+}) {
+  if (!active || !payload || payload.length === 0) return null;
+
+  const session = payload[0]?.payload?.session ?? '';
+  const items = payload.filter((p) => typeof p.value === 'number') as Array<
+    RechartsTooltipItem & { value: number }
+  >;
+
+  return (
+    <div
+      style={{
+        background: '#fff',
+        border: '1px solid var(--stroke-soft-200)',
+        borderRadius: 8,
+        boxShadow: '0 4px 12px rgba(23, 23, 23, 0.06)',
+        padding: '8px 10px',
+        fontFamily: 'var(--font-geist-sans)',
+        fontSize: 12,
+        minWidth: 180,
+      }}
+    >
+      <p
+        className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.07em] text-[var(--neutral-soft-400)]"
+      >
+        Session
+      </p>
+      <p
+        style={{
+          fontFamily: 'var(--font-geist-mono), ui-monospace, monospace',
+          fontSize: 11.5,
+          color: 'var(--neutral-strong-950)',
+          wordBreak: 'break-all',
+          marginBottom: 8,
+          lineHeight: 1.35,
+        }}
+      >
+        {session || '—'}
+      </p>
+      <div className="space-y-1">
+        {items.map((item, i) => (
+          <div
+            key={i}
+            className="flex items-center justify-between gap-4 text-[12px]"
+          >
+            <span className="inline-flex items-center gap-1.5 text-[var(--neutral-sub-600)]">
+              <span
+                className="h-2 w-2 rounded-full"
+                style={{ backgroundColor: item.color }}
+                aria-hidden
+              />
+              {item.name ?? 'Tokens used'}
+            </span>
+            <span className="font-semibold tabular-nums text-[var(--neutral-strong-950)]">
+              {item.value.toLocaleString()}
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
