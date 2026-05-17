@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import type { DateRange } from 'react-day-picker';
 import { DateRangePicker } from '@/components/ui/DateRangePicker';
+import { CommandPaletteTrigger } from '@/components/ui/CommandPaletteTrigger';
 import { UserMenu } from '@/components/ui/UserMenu';
 import { NotificationsPanel } from '@/components/ui/NotificationsPanel';
 
@@ -69,6 +70,14 @@ export default function Topbar({
 
       {/* Right — controls */}
       <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+        {/* Command palette entry point. Placed first in the right
+            cluster so the search-bar look reads as the primary
+            navigation affordance — visually answers the "where do
+            I search?" question new users arrive with. Click opens
+            the palette via a custom event; ⌘K / Ctrl K also still
+            works (see CommandPalette's keydown listener). */}
+        <CommandPaletteTrigger />
+
         {/* Date filter — hidden on mobile (limited horizontal room); reappears at sm */}
         {!minimal && (
           <div className="hidden sm:inline-flex">

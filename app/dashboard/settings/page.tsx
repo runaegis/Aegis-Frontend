@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { motion, useReducedMotion } from 'motion/react';
 import {
@@ -24,6 +24,7 @@ import {
   RefreshCw,
   Shield,
   Trash2,
+  Upload,
   User as UserIcon,
   Webhook,
   type LucideIcon,
@@ -44,6 +45,12 @@ import { useToast } from '@/components/ui/Toast';
 import { CodeChip } from '@/components/ui/CodeChip';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import ThemeToggle from '@/components/ui/ThemeToggle';
+import { UserAvatar } from '@/components/ui/UserAvatar';
+import {
+  removeCustomAvatar,
+  setCustomAvatarFromFile,
+  useCustomAvatar,
+} from '@/lib/customAvatar';
 import { DUR, EASE, fadeUp, staggerContainer } from '@/lib/motion';
 import { useRouter } from 'next/navigation';
 
@@ -405,6 +412,12 @@ function ProfileSection({
   const [email, setEmail] = useState(user?.email || '');
   const [token, setToken] = useState(user?.access_token || '');
   const [saving, setSaving] = useState(false);
+  // Avatar upload — useCustomAvatar() reads localStorage + listens
+  // for changes, so the hero updates immediately after upload/remove
+  // without a manual re-fetch.
+  const customAvatar = useCustomAvatar();
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [avatarBusy, setAvatarBusy] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -413,6 +426,28 @@ function ProfileSection({
       setToken(user.access_token || '');
     }
   }, [user]);
+
+  const onAvatarFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    // Reset the input early so picking the same file twice still fires
+    // a change event.
+    e.target.value = '';
+    if (!file) return;
+    setAvatarBusy(true);
+    try {
+      await setCustomAvatarFromFile(file);
+      onSuccess('Profile picture updated');
+    } catch (err) {
+      onError(err instanceof Error ? err.message : 'Could not save the image.');
+    } finally {
+      setAvatarBusy(false);
+    }
+  };
+
+  const onAvatarRemove = () => {
+    removeCustomAvatar();
+    onSuccess('Reverted to generative avatar');
+  };
 
   const save = async () => {
     if (!user?.github_user_id) return;
@@ -443,26 +478,54 @@ function ProfileSection({
           title="Identity"
           description="Your public-facing details inside Aegis."
         >
+          {/* Profile picture row.
+              Default: a hero-sized generative halftone avatar seeded
+              by username — matches the topbar + sidebar marks, so a
+              user's identity reads identically everywhere across the
+              product. Upload an image to override (stored locally
+              for now; backend persistence is a future engineer task).
+              Removing reverts to the generative fallback. */}
           <div className="mb-5 flex items-center gap-4">
-            <div
-              className="flex h-14 w-14 items-center justify-center rounded-full text-[18px] font-semibold ring-1 ring-[var(--stroke-soft-200)]"
-              style={{
-                backgroundColor: 'var(--primary-alpha-10)',
-                color: 'var(--primary-base)',
-              }}
-            >
-              {user ? getInitials(user.username || 'A') : '?'}
-            </div>
+            <UserAvatar
+              seed={user?.username || user?.email || 'user'}
+              size={64}
+              radius={14}
+            />
             <div className="flex-1">
               <p className="text-[13px] font-medium text-[var(--neutral-strong-950)]">
                 Profile picture
               </p>
               <p className="text-[11.5px] text-[var(--neutral-soft-400)]">
-                Synced from your GitHub avatar. Managed there.
+                {customAvatar
+                  ? 'Custom upload. Remove to use the generative default.'
+                  : 'Auto-generated from your username. Upload to customize.'}
               </p>
             </div>
-            <Button variant="secondary" disabled>
-              From GitHub
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              hidden
+              onChange={onAvatarFile}
+            />
+            {customAvatar && (
+              <Button
+                variant="secondary"
+                onClick={onAvatarRemove}
+                disabled={avatarBusy}
+              >
+                Remove
+              </Button>
+            )}
+            <Button
+              variant="secondary"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={avatarBusy}
+              leadingIcon={
+                <Upload className="h-3.5 w-3.5" strokeWidth={2} />
+              }
+            >
+              {customAvatar ? 'Replace' : 'Upload'}
             </Button>
           </div>
 

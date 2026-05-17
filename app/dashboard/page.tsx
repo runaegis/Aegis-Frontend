@@ -192,7 +192,14 @@ export default function DashboardHomePage() {
     return (
       <>
         <Topbar title="Dashboard" subtitle="Overview" />
-        <DashboardHomeSkeleton />
+        {/* Same content container as the loaded state (mx-auto +
+            max-w-[1320px] + horizontal/vertical padding) so the
+            skeleton's gray blocks respect the page gutters instead
+            of going edge-to-edge — matches every other dashboard
+            page's loading layout. */}
+        <div className="mx-auto max-w-[1320px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
+          <DashboardHomeSkeleton />
+        </div>
       </>
     );
   }

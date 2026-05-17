@@ -119,7 +119,7 @@ export default function RootLayout({
             embedded contexts (iframes with cookies disabled, etc.). */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{if(!location.pathname.startsWith('/dashboard'))return;if(localStorage.getItem('aegis_theme')==='dark')document.documentElement.dataset.theme='dark';if(localStorage.getItem('aegis_sidebar_collapsed')==='true')document.documentElement.dataset.sidebarCollapsed='true';}catch(e){}})();`,
+            __html: `(function(){try{if(!location.pathname.startsWith('/dashboard'))return;if(localStorage.getItem('aegis_theme')==='dark')document.documentElement.dataset.theme='dark';if(localStorage.getItem('aegis_sidebar_collapsed')==='true')document.documentElement.dataset.sidebarCollapsed='true';var d=localStorage.getItem('aegis_demo');var url=new URLSearchParams(location.search);if(url.get('demo')==='1'||d==='true')document.documentElement.dataset.demo='true';}catch(e){}})();`,
           }}
         />
       </head>

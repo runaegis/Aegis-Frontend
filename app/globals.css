@@ -74,6 +74,19 @@
      dark card surface. */
   --table-header-bg: var(--neutral-weak-50);
 
+  /* Keycap chips (kbd) — used in the command palette footer hints,
+     tooltips, and anywhere we want a "press this key" affordance.
+     The chip MUST read as ELEVATED above whatever surface it sits on.
+     Light mode: footer is on neutral-weak-50 (#f7f7f7) so kbds use
+     pure white — whiter than parent, reads as raised. The inset
+     highlight at 60% white mimics light hitting the top edge.
+     Dark mode override (below in [data-theme="dark"]): flips bg to
+     neutral-soft-200 (#1f1f23, one shade ABOVE the dark footer's
+     #18181b) and dims the highlight hard so it doesn't glow. */
+  --kbd-bg: var(--white-0);
+  --kbd-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.6),
+                0 1px 0 0 var(--stroke-soft-200);
+
   /* Primary button — light-mode defaults (existing gradient). These are
      overridden in [data-theme="dark"] to a muted treatment that
      harmonizes with dark surfaces. */
@@ -156,6 +169,21 @@
      clearer header band without becoming heavy. */
   --table-header-bg: var(--neutral-soft-200);
 
+  /* Keycap chips — dark-mode flip.
+     Light kbds used --white-0 (pure white) on a neutral-weak-50
+     footer. In dark, --white-0 is #0f0f11 (the card surface) which
+     is DARKER than the footer (--neutral-weak-50 = #18181b in dark),
+     so the kbd would read as a "hole" in the footer instead of an
+     elevated chip. Flip to --neutral-soft-200 (#1f1f23) — one shade
+     ABOVE the dark footer — so the chip stays raised. The inset
+     top highlight drops from 60% white (way too bright in dark)
+     to 4% white — a hairline rim that suggests dimension without
+     glowing. Bottom shadow uses a faint near-black instead of the
+     light-mode stroke color, which would be invisible in dark. */
+  --kbd-bg: var(--neutral-soft-200);
+  --kbd-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.04),
+                0 1px 0 0 rgba(0, 0, 0, 0.4);
+
   /* Primary button — dialed in from feedback. First pass was too muted
      (read as brown, lost brand identity). Light mode stops are
      `#fb8939 → #fa7319 → #ed6a14`; these sit ~15-20% darker so the
@@ -214,6 +242,7 @@
   -webkit-box-shadow: 0 0 0 30px var(--white-0) inset;
   -webkit-text-fill-color: var(--text-strong);
 }
+
 
 /* Theme inline — exposes tokens as Tailwind utilities via arbitrary values */
 @theme inline {
@@ -338,6 +367,36 @@ body::-webkit-scrollbar {
   outline: none;
   box-shadow: 0 0 0 3px var(--primary-alpha-24);
   border-radius: 8px;
+}
+
+/* Suppress every possible outline/halo source on the command palette
+   input. The input lives inside a clearly-focused modal (search icon
+   to its left, blinking cursor, kbd hint + close X to its right) —
+   any halo around the input itself is redundant visual noise.
+
+   This rule has to cover a lot of ground because the "outline" we see
+   could come from:
+     • The global :focus-visible halo (box-shadow)
+     • The browser's UA :focus outline
+     • A :hover bg change inherited from somewhere
+     • A border on the input itself
+   So we clear outline / box-shadow / border across idle / hover /
+   focus / focus-visible / active. !important wins over both the
+   global rule above AND Tailwind utility classes regardless of
+   compilation order. */
+[data-command-palette-input],
+[data-command-palette-input]:hover,
+[data-command-palette-input]:focus,
+[data-command-palette-input]:focus-visible,
+[data-command-palette-input]:active {
+  outline: none !important;
+  outline-style: none !important;
+  outline-offset: 0 !important;
+  box-shadow: none !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  -webkit-appearance: none !important;
+  appearance: none !important;
 }
 
 /* ─── Interactive cursors ────────────────────────────────────────────

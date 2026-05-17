@@ -7,6 +7,7 @@
 
 import { api } from './api';
 import type {
+  AggregatedSessionAction,
   MCPApproval,
   Metrics,
   Repo,
@@ -375,9 +376,74 @@ export function installPreviewApi() {
 
   api.healthCheck = async () => ({ ok: true, mode: 'preview' });
 
+  // Sign-out — real impl swallows network errors but still pings the
+  // backend. In preview we skip that ping entirely and just clear the
+  // local user cache, matching the real cleanup behavior. The
+  // Sidebar / UserMenu / Settings sign-out flows continue to redirect
+  // to /auth after this resolves.
+  api.logOut = async () => {
+    try {
+      localStorage.removeItem('aegis_user');
+      localStorage.removeItem('aegis_onboarding_step');
+    } catch {
+      // ignore — localStorage may be unavailable in embedded contexts
+    }
+  };
+
   api.getRuns           = async () => RUNS;
   api.getSessions       = async () => SESSIONS;
   api.getMetrics        = async () => METRICS;
+
+  // Paginated variants — these are what `DashboardDataProvider` calls
+  // on mount for every dashboard route. Without these mocks, the
+  // provider's `sessionActions` stays empty across navigations and
+  // every page downstream (/runs, /sessions, /audit, etc.) renders
+  // empty even though preview mode is on. The Dashboard home page is
+  // the one exception because it reads from `api.getRuns` directly,
+  // bypassing the paginated context — that's why ONLY Dashboard
+  // appeared populated before this fix.
+  api.getSessionActionsPage = async (_userId, page = 1, page_size = 20) => {
+    const start = (page - 1) * page_size;
+    const items = RUNS.slice(start, start + page_size);
+    return {
+      items,
+      total: RUNS.length,
+      page,
+      page_size,
+      pages: Math.max(1, Math.ceil(RUNS.length / page_size)),
+    };
+  };
+
+  // Aggregated sessions — same paginated shape but with the session-level
+  // aggregate plus the constituent runs inlined (`sessions` array). The
+  // Sessions page renders the parent row from the aggregate and the
+  // expanded child rows from `sessions[]`.
+  api.getAggregatedSessions = async (_userId, page = 1, page_size = 20) => {
+    const aggregated: AggregatedSessionAction[] = SESSIONS.map((s) => {
+      const sessionRuns = RUNS.filter((r) => r.session_id === s.session_id);
+      const execTimes = sessionRuns.map((r) => r.execution_time ?? 0);
+      const tools = Array.from(new Set(sessionRuns.map((r) => r.tool_name)));
+      return {
+        session_id: s.session_id,
+        user_id: 'preview-user',
+        action_count: sessionRuns.length,
+        started_at: s.started_at ?? sessionRuns[sessionRuns.length - 1]?.timestamp ?? new Date().toISOString(),
+        ended_at: s.last_action_at ?? sessionRuns[0]?.timestamp ?? new Date().toISOString(),
+        total_execution_time: execTimes.reduce((a, b) => a + b, 0),
+        tools_used: tools,
+        sessions: sessionRuns,
+      };
+    });
+    const start = (page - 1) * page_size;
+    const items = aggregated.slice(start, start + page_size);
+    return {
+      items,
+      total: aggregated.length,
+      page,
+      page_size,
+      pages: Math.max(1, Math.ceil(aggregated.length / page_size)),
+    };
+  };
   api.getSessionActions = async (sessionId: string) =>
     RUNS.filter((r) => r.session_id === sessionId).sort(
       (a, b) => (a.sequence_order ?? 0) - (b.sequence_order ?? 0),
@@ -434,6 +500,13 @@ export function installPreviewApi() {
   api.getRoomTools = async (_roomId: string, role: string) =>
     PREVIEW_ROOM_TOOLS[role] ?? PREVIEW_ROOM_TOOLS.DEVELOPER;
   api.updateRoomTools = async () => ({ success: true });
+  // Room MCP integration URL — rendered into the copyable Integration
+  // field on the rooms page. Without this mock the Promise.all on
+  // /dashboard/rooms rejects and the whole detail panel goes empty.
+  // Format mirrors the real shape: a stable per-room slug + opaque token.
+  api.getRoomIntegrationConfig = async (roomId: string) => ({
+    url: `https://mcp.runaegis.com/r/${roomId}/aeg_${roomId.replace('room_', '')}_preview_token`,
+  });
   api.createRoom = async (repoId: string) => ({
     id: `room_${Date.now()}`,
     room_id: `room_${Date.now()}`,

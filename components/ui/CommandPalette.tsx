@@ -44,6 +44,7 @@ import {
   Settings,
   Sun,
   Users,
+  X,
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -86,6 +87,10 @@ export function CommandPalette() {
 
   // ⌘K / Ctrl+K to open. ⌘\ is already used by the sidebar toggle in
   // Sidebar.tsx — these don't conflict.
+  // Also listens for a custom `aegis-open-command-palette` event so
+  // the topbar's CommandPaletteTrigger (and anything else that wants
+  // to surface the palette via a click) can open it without
+  // simulating a keyboard event.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
@@ -96,8 +101,13 @@ export function CommandPalette() {
         setOpen(false);
       }
     };
+    const onCustomOpen = () => setOpen(true);
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener('aegis-open-command-palette', onCustomOpen);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('aegis-open-command-palette', onCustomOpen);
+    };
   }, [open]);
 
   // Reset query + focus the input on each open.
@@ -330,13 +340,34 @@ export function CommandPalette() {
                   onChange={(e) => setQuery(e.target.value)}
                   onKeyDown={onKeyDown}
                   placeholder="Type a command or search…"
-                  className="h-full flex-1 border-0 bg-transparent text-[13.5px] text-[var(--neutral-strong-950)] placeholder:text-[var(--neutral-soft-400)] focus:outline-none focus:ring-0"
+                  // Data hook for the matching `!important` rule in
+                  // globals.css that nukes the orange focus ring.
+                  // The global :focus-visible rule paints a 3px halo
+                  // via box-shadow; inline `style` alone wasn't
+                  // winning consistently across browsers + Tailwind v4
+                  // compilation. The targeted !important override
+                  // covers all states (focus, focus-visible, active).
+                  data-command-palette-input
+                  className="h-full flex-1 border-0 bg-transparent text-[13.5px] text-[var(--neutral-strong-950)] placeholder:text-[var(--neutral-soft-400)]"
                   autoComplete="off"
                   spellCheck={false}
                 />
-                <kbd className="hidden rounded-[5px] border border-[var(--stroke-soft-200)] bg-[var(--neutral-weak-50)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--neutral-sub-600)] sm:inline-block">
+                <kbd className="hidden rounded-[5px] border border-[var(--stroke-soft-200)] bg-[var(--kbd-bg)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--neutral-soft-400)] shadow-[var(--kbd-shadow)] sm:inline-block">
                   esc
                 </kbd>
+                {/* Click-to-close — paired with the esc kbd hint. Mouse
+                    users get an explicit affordance; keyboard users
+                    still see the shortcut. Always visible so mobile
+                    (where the esc kbd is hidden) has a way out too. */}
+                <button
+                  type="button"
+                  onClick={() => setOpen(false)}
+                  aria-label="Close command palette"
+                  title="Close (esc)"
+                  className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[var(--neutral-soft-400)] transition-colors hover:bg-[var(--neutral-weak-50)] hover:text-[var(--neutral-strong-950)]"
+                >
+                  <X className="h-3.5 w-3.5" strokeWidth={2.25} />
+                </button>
               </div>
 
               {/* Results */}
@@ -403,30 +434,47 @@ export function CommandPalette() {
                 )}
               </div>
 
-              {/* Footer hint row */}
-              <div className="flex items-center justify-between border-t border-[var(--stroke-soft-200)] bg-[var(--neutral-weak-50)] px-3 py-2 text-[10.5px] text-[var(--neutral-soft-400)]">
-                <div className="flex items-center gap-3">
-                  <span className="inline-flex items-center gap-1">
-                    <kbd className="rounded border border-[var(--stroke-soft-200)] bg-[var(--white-0)] px-1 font-mono text-[10px]">
+              {/* Footer hint row.
+                  Two-layer hierarchy:
+                    • Labels (navigate / select / toggle) — the primary
+                      layer at 11px in `--neutral-sub-600`, treated like
+                      readable text.
+                    • Kbds — accent layer at 10px in `--neutral-soft-400`,
+                      sized slightly smaller with restrained padding so
+                      they feel like little keycap chips rather than
+                      competing with the labels.
+                  Previously everything was at one flat `--neutral-soft-400`
+                  layer which read as visual mush. Spacing also opened
+                  up — gap-1.5 inside each cluster, gap-4 between
+                  clusters, py-2.5 vertical — to give the row breathing
+                  room without making the modal taller.
+
+                  Kbd treatment: 1px hairline border + 1px inset top
+                  highlight + 1px outer bottom shadow → physically reads
+                  as a keycap with a tiny lip, matching Raycast / Linear. */}
+              <div className="flex items-center justify-between border-t border-[var(--stroke-soft-200)] bg-[var(--neutral-weak-50)] px-3.5 py-2.5 text-[11px] text-[var(--neutral-sub-600)]">
+                <div className="flex items-center gap-4">
+                  <span className="inline-flex items-center gap-1.5">
+                    <kbd className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-[5px] border border-[var(--stroke-soft-200)] bg-[var(--kbd-bg)] px-1 font-mono text-[10px] text-[var(--neutral-soft-400)] shadow-[var(--kbd-shadow)]">
                       ↑
                     </kbd>
-                    <kbd className="rounded border border-[var(--stroke-soft-200)] bg-[var(--white-0)] px-1 font-mono text-[10px]">
+                    <kbd className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-[5px] border border-[var(--stroke-soft-200)] bg-[var(--kbd-bg)] px-1 font-mono text-[10px] text-[var(--neutral-soft-400)] shadow-[var(--kbd-shadow)]">
                       ↓
                     </kbd>
-                    navigate
+                    <span>navigate</span>
                   </span>
-                  <span className="inline-flex items-center gap-1">
-                    <kbd className="rounded border border-[var(--stroke-soft-200)] bg-[var(--white-0)] px-1 font-mono text-[10px]">
+                  <span className="inline-flex items-center gap-1.5">
+                    <kbd className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-[5px] border border-[var(--stroke-soft-200)] bg-[var(--kbd-bg)] px-1 font-mono text-[10px] text-[var(--neutral-soft-400)] shadow-[var(--kbd-shadow)]">
                       ⏎
                     </kbd>
-                    select
+                    <span>select</span>
                   </span>
                 </div>
-                <span className="inline-flex items-center gap-1">
-                  <kbd className="rounded border border-[var(--stroke-soft-200)] bg-[var(--white-0)] px-1 font-mono text-[10px]">
+                <span className="inline-flex items-center gap-1.5">
+                  <kbd className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-[5px] border border-[var(--stroke-soft-200)] bg-[var(--kbd-bg)] px-1 font-mono text-[10px] text-[var(--neutral-soft-400)] shadow-[var(--kbd-shadow)]">
                     ⌘K
                   </kbd>
-                  toggle
+                  <span>toggle</span>
                 </span>
               </div>
             </motion.div>
