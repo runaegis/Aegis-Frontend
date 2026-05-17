@@ -20,6 +20,7 @@ import ErrorBanner from '@/components/ui/ErrorBanner';
 import { FreezeWindowSkeleton } from '@/components/ui/PageSkeletons';
 import { useToast } from '@/components/ui/Toast';
 import { Button } from '@/components/ui/Button';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { DUR, EASE, fadeUp, fadeUpSm, staggerContainer } from '@/lib/motion';
 
 interface FreezeWindow {
@@ -68,6 +69,11 @@ export default function FreezeWindowPage() {
   const [showForm, setShowForm] = useState(false);
   const [expandedWindow, setExpandedWindow] = useState<string | null>(null);
   const [editingWindowId, setEditingWindowId] = useState<string | null>(null);
+  // Pending delete confirmation — stores the full window object so
+  // the ConfirmDialog description can reference the timezone + days
+  // being removed.
+  const [pendingDelete, setPendingDelete] = useState<FreezeWindow | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const [formData, setFormData] = useState<FreezeWindowFormData>({
     timezone: 'UTC',
     work_days: [],
@@ -393,13 +399,51 @@ export default function FreezeWindowPage() {
                     setExpandedWindow(expandedWindow === w.id ? null : w.id)
                   }
                   onEdit={handleEdit}
-                  onDelete={handleDelete}
+                  onDelete={(id) => {
+                    const target = windows.find((x) => x.id === id);
+                    if (target) setPendingDelete(target);
+                  }}
                 />
               ))}
             </motion.ul>
           </motion.div>
         )}
       </div>
+      {/* Delete-window confirmation. Surfaces the window's timezone +
+          day count so the user knows exactly which one they're about
+          to remove. */}
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        onOpenChange={(open) => {
+          if (!open && !deleteBusy) setPendingDelete(null);
+        }}
+        variant="danger"
+        title="Delete this freeze window?"
+        description={
+          pendingDelete ? (
+            <>
+              Agents will no longer be paused during the{' '}
+              <span className="font-mono text-[12.5px] text-[var(--neutral-strong-950)]">
+                {pendingDelete.window_start.slice(0, 5)}–
+                {pendingDelete.window_end.slice(0, 5)}
+              </span>{' '}
+              window ({pendingDelete.timezone}). This can't be undone.
+            </>
+          ) : null
+        }
+        confirmLabel="Delete window"
+        loading={deleteBusy}
+        onConfirm={async () => {
+          if (!pendingDelete) return;
+          setDeleteBusy(true);
+          try {
+            await handleDelete(pendingDelete.id);
+            setPendingDelete(null);
+          } finally {
+            setDeleteBusy(false);
+          }
+        }}
+      />
     </>
   );
 }
@@ -463,11 +507,9 @@ function FreezeWindowRow({
         </button>
         <button
           type="button"
-          onClick={() => {
-            if (confirm('Delete this freeze window?')) onDelete(w.id);
-          }}
+          onClick={() => onDelete(w.id)}
           aria-label="Delete"
-          className="inline-flex h-8 items-center justify-center gap-1.5 rounded-[8px] border border-[var(--stroke-sub-300)] bg-white px-2 text-[12.5px] font-medium text-[var(--neutral-sub-600)] transition-colors hover:bg-[var(--neutral-weak-50)] sm:px-3"
+          className="inline-flex h-8 items-center justify-center gap-1.5 rounded-[8px] border border-[var(--stroke-sub-300)] bg-white px-2 text-[12.5px] font-medium text-[var(--neutral-sub-600)] transition-colors hover:bg-[var(--neutral-weak-50)] hover:text-[var(--error)] sm:px-3"
         >
           <Trash2 className="h-3.5 w-3.5" strokeWidth={2} />
           <span className="hidden sm:inline">Delete</span>

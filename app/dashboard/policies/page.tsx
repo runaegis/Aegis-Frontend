@@ -20,6 +20,8 @@ import Topbar from '@/components/layout/Topbar';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Switch } from '@/components/ui/Switch';
+import ErrorBanner from '@/components/ui/ErrorBanner';
+import { useToast } from '@/components/ui/Toast';
 import { api } from '@/lib/api';
 import { useUser } from '@/lib/hooks';
 import { DUR, EASE, fadeUp, fadeUpSm, staggerContainer } from '@/lib/motion';
@@ -83,6 +85,11 @@ export default function PoliciesPage() {
   );
   const [loading, setLoading] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  // Load + save error state — surfaced via ErrorBanner (load) and
+  // toast (save). Previously both error paths silently console.error'd
+  // and the user had no idea anything failed.
+  const [error, setError] = useState<string | null>(null);
+  const toast = useToast();
 
   const togglePolicy = (key: string) =>
     setActiveStates((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -102,8 +109,16 @@ export default function PoliciesPage() {
           ...defaultPolicyState,
           ...(stored ? decodePolicyString(stored) : {}),
         });
+        setError(null);
       } catch (err) {
         console.error('Failed to load user policies', err);
+        if (isMounted) {
+          setError(
+            err instanceof Error
+              ? err.message
+              : 'Failed to load your policy configuration.',
+          );
+        }
       }
     };
 
@@ -119,9 +134,18 @@ export default function PoliciesPage() {
       setLoading(true);
       await api.upsertUserPolicy(user.id, encodePolicyString(activeStates));
       setSaveSuccess(true);
+      toast.success('Policies updated', {
+        description: 'Your changes apply to every new agent action.',
+      });
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err) {
       console.error('Save failed', err);
+      toast.error('Save failed', {
+        description:
+          err instanceof Error
+            ? err.message
+            : 'Could not save policy changes. Try again.',
+      });
     } finally {
       setLoading(false);
     }
@@ -131,6 +155,11 @@ export default function PoliciesPage() {
     <>
       <Topbar title="Policies" subtitle="Rules that evaluate every agent action" />
       <div className="mx-auto max-w-[1320px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
+        {error && (
+          <div className="mb-6">
+            <ErrorBanner message={error} onDismiss={() => setError(null)} />
+          </div>
+        )}
         <motion.header
           className="mb-6 flex flex-wrap items-end justify-between gap-4"
           variants={staggerContainer(0.05, 0.04)}

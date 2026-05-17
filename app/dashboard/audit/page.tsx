@@ -10,8 +10,10 @@ import {
   ChevronRight,
   Download,
   FileText,
+  Search,
   Sparkles,
   Wand2,
+  X,
   XCircle,
 } from 'lucide-react';
 import { DateRangePicker } from '@/components/ui/DateRangePicker';
@@ -29,6 +31,8 @@ import { AuditSkeleton } from '@/components/ui/PageSkeletons';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { Button } from '@/components/ui/Button';
 import { CodeChip } from '@/components/ui/CodeChip';
+import { FilterChip } from '@/components/ui/FilterChip';
+import { useToast } from '@/components/ui/Toast';
 import {
   Table,
   TBody,
@@ -42,6 +46,7 @@ import { DUR, EASE, fadeUp, staggerContainer } from '@/lib/motion';
 
 export default function AuditPage() {
   const { user, isLoading: userLoading } = useUser();
+  const toast = useToast();
   const reduce = useReducedMotion();
   const [events, setEvents] = useState<SessionAction[]>([]);
   const [loading, setLoading] = useState(true);
@@ -49,6 +54,18 @@ export default function AuditPage() {
   const [page, setPage] = useState(0);
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const pageSize = 50;
+
+  // Filter state — client-side filtering layered over the fetched
+  // page. Empty arrays = "all" (no filter). For a governance product
+  // with potentially thousands of events, this is the difference
+  // between "useless infinite list" and "find every DENY on aegis/api
+  // by claude-sonnet last Tuesday." Server-side filtering would be
+  // the next step once the backend supports it.
+  const [agentFilter, setAgentFilter] = useState<string[]>([]);
+  const [decisionFilter, setDecisionFilter] = useState<string[]>([]);
+  const [repoFilter, setRepoFilter] = useState<string[]>([]);
+  const [toolFilter, setToolFilter] = useState<string[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const initialRange = useMemo<DateRange>(() => {
     const today = new Date();
@@ -86,6 +103,84 @@ export default function AuditPage() {
     fetchData();
   }, [fetchData]);
 
+  // Derive unique filter options from the loaded events. Memoized
+  // so we don't rebuild the option arrays on every render — only
+  // when the events list changes.
+  const filterOptions = useMemo(() => {
+    const agents = new Set<string>();
+    const decisions = new Set<string>();
+    const repos = new Set<string>();
+    const tools = new Set<string>();
+    for (const ev of events) {
+      if (ev.agent_name) agents.add(ev.agent_name);
+      if (ev.decision) decisions.add(ev.decision);
+      if (ev.target_repo) repos.add(ev.target_repo);
+      if (ev.tool_name) tools.add(ev.tool_name);
+    }
+    const sorted = (s: Set<string>) =>
+      Array.from(s)
+        .sort((a, b) => a.localeCompare(b))
+        .map((value) => ({ value }));
+    return {
+      agents: sorted(agents),
+      decisions: sorted(decisions),
+      repos: sorted(repos),
+      tools: sorted(tools),
+    };
+  }, [events]);
+
+  // Apply all filters + free-text search to derive the visible rows.
+  // Free-text matches across summary, tool, repo, branch, and agent —
+  // covers most reviewer use cases ("find anything mentioning X").
+  const filteredEvents = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return events.filter((ev) => {
+      if (agentFilter.length && !agentFilter.includes(ev.agent_name)) {
+        return false;
+      }
+      if (decisionFilter.length && !decisionFilter.includes(ev.decision)) {
+        return false;
+      }
+      if (repoFilter.length && !repoFilter.includes(ev.target_repo ?? '')) {
+        return false;
+      }
+      if (toolFilter.length && !toolFilter.includes(ev.tool_name)) {
+        return false;
+      }
+      if (q) {
+        const hay = [
+          ev.action_summary,
+          ev.tool_name,
+          ev.target_repo,
+          ev.target_branch,
+          ev.agent_name,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [events, agentFilter, decisionFilter, repoFilter, toolFilter, searchQuery]);
+
+  // Tracks whether any non-date filter is active. Drives the
+  // "Clear filters" affordance in the filter bar.
+  const hasActiveFilters =
+    agentFilter.length > 0 ||
+    decisionFilter.length > 0 ||
+    repoFilter.length > 0 ||
+    toolFilter.length > 0 ||
+    searchQuery.trim().length > 0;
+
+  const clearAllFilters = () => {
+    setAgentFilter([]);
+    setDecisionFilter([]);
+    setRepoFilter([]);
+    setToolFilter([]);
+    setSearchQuery('');
+  };
+
   const exportJson = async () => {
     if (!user?.id) {
       setError('No authenticated user found for export');
@@ -112,8 +207,17 @@ export default function AuditPage() {
       a.download = `aegis-audit-${new Date().toISOString().split('T')[0]}.json`;
       a.click();
       URL.revokeObjectURL(url);
-    } catch {
+      toast.success('Audit trail exported', {
+        description: `${allEvents.length.toLocaleString()} events downloaded as JSON.`,
+      });
+    } catch (err) {
       setError('Failed to export audit trail');
+      toast.error('Export failed', {
+        description:
+          err instanceof Error
+            ? err.message
+            : 'Could not download the audit trail. Try again.',
+      });
     }
   };
 
@@ -168,32 +272,116 @@ export default function AuditPage() {
           </motion.p>
         </motion.header>
 
-        {/* Date filter + export */}
+        {/* Filter bar — date range, then per-dimension filter chips
+            (agent / decision / repo / tool), then a free-text search
+            on the right. Layout collapses to a single column on
+            narrow viewports. "Clear filters" appears only when
+            something is filtering. */}
         <motion.div
-          className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-[12px] border border-[var(--stroke-soft-200)] bg-white p-4 shadow-[0_1px_2px_rgba(23,23,23,0.04)]"
+          className="mb-6 rounded-[12px] border border-[var(--stroke-soft-200)] bg-white p-3 shadow-[0_1px_2px_rgba(23,23,23,0.04)]"
           initial={reduce ? false : { opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: DUR.slow, ease: EASE.out, delay: 0.18 }}
         >
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[10.5px] font-semibold uppercase tracking-[0.07em] text-[var(--neutral-soft-400)]">
-              Range
-            </span>
+          {/* Row 1: date range + export, justified between */}
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <DateRangePicker
               value={range}
               onChange={setRange}
               defaultPreset="last7"
-              size="md"
+              size="sm"
             />
+            <Button
+              variant="secondary"
+              onClick={exportJson}
+              disabled={!user?.id || userLoading}
+              leadingIcon={<Download className="h-3.5 w-3.5" strokeWidth={2} />}
+            >
+              Export JSON
+            </Button>
           </div>
-          <Button
-            variant="secondary"
-            onClick={exportJson}
-            disabled={!user?.id || userLoading}
-            leadingIcon={<Download className="h-3.5 w-3.5" strokeWidth={2} />}
-          >
-            Export JSON
-          </Button>
+          {/* Divider between date row and filter row */}
+          <div className="my-3 border-t border-[var(--stroke-soft-200)]" />
+          {/* Row 2: filter chips + search.
+              Filter chips are wrapped on small viewports so the
+              search input stays usable; chips group at the left,
+              search input grows to fill remaining space. */}
+          <div className="flex flex-wrap items-center gap-2">
+            <FilterChip
+              label="Agent"
+              options={filterOptions.agents}
+              value={agentFilter}
+              onChange={setAgentFilter}
+            />
+            <FilterChip
+              label="Decision"
+              options={filterOptions.decisions}
+              value={decisionFilter}
+              onChange={setDecisionFilter}
+            />
+            <FilterChip
+              label="Repository"
+              options={filterOptions.repos}
+              value={repoFilter}
+              onChange={setRepoFilter}
+            />
+            <FilterChip
+              label="Tool"
+              options={filterOptions.tools}
+              value={toolFilter}
+              onChange={setToolFilter}
+            />
+            {/* Free-text search — flex-1 so it expands to fill
+                the row. Searches across summary, tool, repo, branch,
+                agent. */}
+            <div className="relative ml-auto min-w-[200px] flex-1 sm:max-w-[280px]">
+              <Search
+                className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--neutral-soft-400)]"
+                strokeWidth={2}
+                aria-hidden
+              />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search events…"
+                aria-label="Search audit events"
+                className="h-7 w-full rounded-[8px] border border-[var(--stroke-sub-300)] bg-white pl-7 pr-2.5 text-[12px] font-medium text-[var(--neutral-strong-950)] placeholder:text-[var(--neutral-soft-400)] shadow-[var(--shadow-regular-xs)] focus:border-[var(--neutral-soft-400)] focus:outline-none"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  aria-label="Clear search"
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-[var(--neutral-soft-400)] transition-colors hover:text-[var(--neutral-strong-950)]"
+                >
+                  <X className="h-3 w-3" strokeWidth={2.25} />
+                </button>
+              )}
+            </div>
+            {/* Clear-all only renders when something is filtering.
+                Subtle ghost button so it doesn't compete with the
+                primary controls when no filters are active. */}
+            {hasActiveFilters && (
+              <button
+                type="button"
+                onClick={clearAllFilters}
+                className="inline-flex h-7 items-center gap-1 rounded-[8px] px-2 text-[11.5px] font-medium text-[var(--neutral-sub-600)] transition-colors hover:bg-[var(--neutral-weak-50)] hover:text-[var(--error)]"
+              >
+                <X className="h-3 w-3" strokeWidth={2.25} aria-hidden />
+                Clear filters
+              </button>
+            )}
+          </div>
+          {/* Result-count strip — only shows when filtering is
+              active, surfaces "X of Y" so the user can verify the
+              filter is doing what they expect. */}
+          {hasActiveFilters && (
+            <div className="mt-2.5 text-[11px] text-[var(--neutral-soft-400)]">
+              Showing {filteredEvents.length.toLocaleString()} of{' '}
+              {events.length.toLocaleString()} loaded events
+            </div>
+          )}
         </motion.div>
 
         {loading ? (
@@ -213,13 +401,29 @@ export default function AuditPage() {
               </div>
             ))}
           </div>
-        ) : events.length === 0 ? (
+        ) : filteredEvents.length === 0 ? (
           <div className="overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
-            <EmptyState
-              icon={<FileText className="h-5 w-5" />}
-              title="No audit events yet"
-              description="Once your agent runs its first action, every decision is logged here with the tool, arguments, and policy outcome. Filter by date and export as JSON."
-            />
+            {events.length === 0 ? (
+              <EmptyState
+                icon={<FileText className="h-5 w-5" />}
+                title="No audit events yet"
+                description="Once your agent runs its first action, every decision is logged here with the tool, arguments, and policy outcome."
+              />
+            ) : (
+              // Filtered-empty state — clarifies that data exists,
+              // just nothing matches the current filters. Offers an
+              // immediate path out.
+              <EmptyState
+                icon={<FileText className="h-5 w-5" />}
+                title="No events match your filters"
+                description="Adjust or clear the filters to see other events from this date range."
+                action={
+                  <Button variant="secondary" onClick={clearAllFilters}>
+                    Clear filters
+                  </Button>
+                }
+              />
+            )}
           </div>
         ) : (
           <motion.div
@@ -240,7 +444,7 @@ export default function AuditPage() {
                 </tr>
               </THead>
               <TBody>
-                {events.map((event) => (
+                {filteredEvents.map((event) => (
                   <AuditRow
                     key={event.id}
                     event={event}

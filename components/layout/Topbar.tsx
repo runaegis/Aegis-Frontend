@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import type { DateRange } from 'react-day-picker';
+import { cn } from '@/lib/utils';
 import { DateRangePicker } from '@/components/ui/DateRangePicker';
 import { CommandPaletteTrigger } from '@/components/ui/CommandPaletteTrigger';
 import { UserMenu } from '@/components/ui/UserMenu';
@@ -42,6 +43,63 @@ export default function Topbar({
     start.setDate(start.getDate() - 6);
     return { from: start, to: today };
   });
+
+  // Refresh in-flight state. We track it locally so the icon can
+  // spin even when the caller's onRefresh isn't awaitable from here.
+  // Two sources signal that a refresh is happening:
+  //   1. The user just clicked → set `refreshing` true, await the
+  //      promise if onRefresh returns one, else flip back after a
+  //      short min-duration so the user perceives the click as
+  //      doing something.
+  //   2. `lastUpdated` changes — flip refreshing false when the
+  //      caller signals fresh data has landed.
+  const [refreshing, setRefreshing] = useState(false);
+  const minSpinTimerRef = useRef<number | null>(null);
+
+  // When `lastUpdated` ticks forward (caller produced new data),
+  // clear the spinner. Guarded by the min-spin timer so a too-fast
+  // refresh still spins for a perceptible beat.
+  const lastUpdatedRef = useRef<Date | undefined>(lastUpdated);
+  useEffect(() => {
+    if (lastUpdated && lastUpdated !== lastUpdatedRef.current) {
+      lastUpdatedRef.current = lastUpdated;
+      // Only stop if no min-spin timer is queued.
+      if (!minSpinTimerRef.current) setRefreshing(false);
+    }
+  }, [lastUpdated]);
+
+  // Cleanup any pending timer on unmount.
+  useEffect(() => {
+    return () => {
+      if (minSpinTimerRef.current) {
+        window.clearTimeout(minSpinTimerRef.current);
+      }
+    };
+  }, []);
+
+  const handleRefreshClick = async () => {
+    if (!onRefresh || refreshing) return;
+    setRefreshing(true);
+    // Min-spin floor: 500ms. Stops the UI feeling "did anything
+    // happen?" on instantaneous refreshes (e.g. cached data).
+    minSpinTimerRef.current = window.setTimeout(() => {
+      minSpinTimerRef.current = null;
+      // If the caller already finished + lastUpdated has changed,
+      // turn off now. Otherwise wait for the next lastUpdated tick.
+      if (lastUpdatedRef.current !== lastUpdated) {
+        setRefreshing(false);
+      }
+    }, 500);
+    try {
+      // onRefresh may be sync or async. Awaiting a non-promise is
+      // safe (resolves immediately).
+      await Promise.resolve(onRefresh());
+    } catch {
+      // Errors are the caller's concern (they'll typically toast).
+      // Just make sure we don't get stuck in refreshing state.
+      setRefreshing(false);
+    }
+  };
 
   return (
     // Mobile: the Sidebar renders a 48px top bar with the hamburger.
@@ -93,14 +151,42 @@ export default function Topbar({
         {onRefresh && (
           <button
             type="button"
-            onClick={onRefresh}
-            className="flex h-7 items-center gap-1.5 rounded-lg border border-[var(--stroke-sub-300)] bg-white px-2 text-[12px] font-medium text-[var(--neutral-sub-600)] hover:bg-[var(--neutral-weak-50)] sm:px-2.5"
-            title={lastUpdated ? `Updated ${formatRelative(lastUpdated)}` : 'Refresh'}
-            aria-label="Refresh"
+            onClick={handleRefreshClick}
+            disabled={refreshing}
+            className={cn(
+              'flex h-7 items-center gap-1.5 rounded-lg border border-[var(--stroke-sub-300)] bg-white px-2 text-[12px] font-medium text-[var(--neutral-sub-600)] sm:px-2.5',
+              'transition-colors hover:bg-[var(--neutral-weak-50)]',
+              'shadow-[var(--shadow-regular-xs)]',
+              // Subtle visual signal while refreshing: muted text +
+              // disabled cursor (no double-clicks). The spin on the
+              // icon itself does the bulk of the "something is
+              // happening" communication.
+              refreshing && 'cursor-wait text-[var(--neutral-soft-400)]',
+            )}
+            title={
+              refreshing
+                ? 'Refreshing…'
+                : lastUpdated
+                ? `Updated ${formatRelative(lastUpdated)}`
+                : 'Refresh'
+            }
+            aria-label={refreshing ? 'Refreshing' : 'Refresh'}
+            aria-busy={refreshing}
           >
-            <RefreshCw className="h-3.5 w-3.5" strokeWidth={2} />
+            <RefreshCw
+              className={cn(
+                'h-3.5 w-3.5 transition-transform',
+                refreshing && 'animate-spin',
+              )}
+              strokeWidth={2}
+              aria-hidden
+            />
             <span className="hidden md:inline">
-              {lastUpdated ? formatRelative(lastUpdated) : 'Refresh'}
+              {refreshing
+                ? 'Refreshing…'
+                : lastUpdated
+                ? formatRelative(lastUpdated)
+                : 'Refresh'}
             </span>
           </button>
         )}

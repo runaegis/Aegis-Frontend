@@ -36,6 +36,8 @@ import { DashboardHomeSkeleton } from '@/components/ui/PageSkeletons';
 import { RelativeTime } from '@/components/ui/RelativeTime';
 import { Button } from '@/components/ui/Button';
 import { CodeChip } from '@/components/ui/CodeChip';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { useToast } from '@/components/ui/Toast';
 
 const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 const ONE_HOUR_MS = 60 * 60 * 1000;
@@ -56,6 +58,7 @@ function normalizeApprovalStatus(status: string): 'pending' | 'approved' | 'reje
 
 export default function DashboardHomePage() {
   const { user, isLoading: userLoading } = useUser();
+  const toast = useToast();
   const reduce = useReducedMotion();
   const [runs, setRuns] = useState<SessionAction[]>([]);
   const [metrics, setMetrics] = useState<Metrics>({
@@ -70,6 +73,10 @@ export default function DashboardHomePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actioningIds, setActioningIds] = useState<Set<string>>(new Set());
+  // Pending Deny confirmation — null when no dialog is open. Same
+  // pattern as /dashboard/approvals: gate the destructive path,
+  // let Approve fire-and-forget.
+  const [pendingDeny, setPendingDeny] = useState<MCPApproval | null>(null);
 
   const fetchData = useCallback(async () => {
     if (!user?.id) return;
@@ -177,8 +184,23 @@ export default function DashboardHomePage() {
     try {
       await api.executeMcpApproval(id, reject);
       await fetchData();
+      // Match the /approvals page toast pattern exactly so a reviewer
+      // gets identical feedback regardless of which surface they
+      // acted on. Approve = success, deny = warning (denial blocks).
+      if (reject) {
+        toast.warning('Request denied', {
+          description: 'The agent will receive the rejection.',
+        });
+      } else {
+        toast.success('Request approved', {
+          description: 'The agent can proceed with the action.',
+        });
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update approval');
+      const msg =
+        err instanceof Error ? err.message : 'Failed to update approval';
+      setError(msg);
+      toast.error('Approval failed', { description: msg });
     } finally {
       setActioningIds((prev) => {
         const next = new Set(prev);
@@ -526,7 +548,14 @@ export default function DashboardHomePage() {
                     key={approval.id}
                     approval={approval}
                     isActioning={actioningIds.has(approval.id)}
-                    onAction={handleApproval}
+                    onAction={(id, reject) => {
+                      if (reject) {
+                        const target = pendingItems.find((a) => a.id === id);
+                        if (target) setPendingDeny(target);
+                      } else {
+                        handleApproval(id, false);
+                      }
+                    }}
                   />
                 ))}
               </motion.ul>
@@ -534,6 +563,40 @@ export default function DashboardHomePage() {
           </section>
         </motion.div>
       </div>
+      {/* Deny confirmation. Same shape as /dashboard/approvals so
+          the destructive interaction feels consistent across both
+          surfaces where pending approvals can be acted on. */}
+      <ConfirmDialog
+        open={pendingDeny !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingDeny(null);
+        }}
+        variant="danger"
+        title="Deny this action?"
+        description={
+          pendingDeny ? (
+            <>
+              The agent will be blocked from running{' '}
+              <span className="font-mono text-[12.5px] text-[var(--neutral-strong-950)]">
+                {pendingDeny.tool_name}
+              </span>{' '}
+              on{' '}
+              <span className="font-mono text-[12.5px] text-[var(--neutral-strong-950)]">
+                {pendingDeny.arguments?.repo ?? 'this repository'}
+              </span>
+              . The denial appears in the audit log and can't be undone.
+            </>
+          ) : null
+        }
+        confirmLabel="Deny request"
+        loading={pendingDeny ? actioningIds.has(pendingDeny.id) : false}
+        onConfirm={async () => {
+          if (!pendingDeny) return;
+          const id = pendingDeny.id;
+          setPendingDeny(null);
+          await handleApproval(id, true);
+        }}
+      />
     </>
   );
 }

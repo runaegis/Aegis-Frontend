@@ -9,6 +9,7 @@ import { IntegrationsSkeleton } from '@/components/ui/PageSkeletons';
 import { CodeChip } from '@/components/ui/CodeChip';
 import { JsonHighlight } from '@/components/ui/JsonHighlight';
 import { ToolLogo } from '@/components/ui/ToolLogo';
+import { useToast } from '@/components/ui/Toast';
 import { DUR, EASE, fadeUp, staggerContainer } from '@/lib/motion';
 
 type Tool = 'vscode-copilot' | 'cursor' | 'claude-code';
@@ -22,6 +23,7 @@ const TOOLS: { id: Tool; name: string; subtitle: string; configPath: string }[] 
 export default function IntegrationsPage() {
   const { user } = useUser();
   const reduce = useReducedMotion();
+  const toast = useToast();
   const [selectedTool, setSelectedTool] = useState<Tool>('vscode-copilot');
   const [copied, setCopied] = useState(false);
 
@@ -42,10 +44,24 @@ export default function IntegrationsPage() {
     );
   };
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(configFor(selectedTool));
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(configFor(selectedTool));
+      setCopied(true);
+      toast.success('Copied to clipboard', {
+        description: 'Paste it into your tool settings to finish wiring.',
+      });
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      // Clipboard API can fail (browser perms, non-HTTPS, etc.).
+      // Surface the failure so the user doesn't think they copied.
+      toast.error('Could not copy', {
+        description:
+          err instanceof Error
+            ? err.message
+            : 'Your browser blocked clipboard access. Try selecting the text manually.',
+      });
+    }
   };
 
   if (!user?.id) {
