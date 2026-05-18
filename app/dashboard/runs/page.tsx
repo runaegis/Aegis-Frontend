@@ -9,6 +9,7 @@ import { useUser } from '@/lib/hooks';
 import { Metrics, SessionAction } from '@/lib/types';
 import { useDashboardData } from '@/lib/dashboardDataContext';
 import {
+  extractPullRequestUrl,
   formatExecutionTimeMs,
   formatFullTimestamp,
   formatRelativeTime,
@@ -26,6 +27,7 @@ import { RunsSkeleton } from '@/components/ui/PageSkeletons';
 import { Button } from '@/components/ui/Button';
 import { CodeChip } from '@/components/ui/CodeChip';
 import { Input } from '@/components/ui/Input';
+import { PullRequestLink } from '@/components/ui/PullRequestLink';
 import { SelectMenu } from '@/components/ui/SelectMenu';
 import {
   Table,
@@ -325,6 +327,12 @@ function RunRow({
     // collapse → false happens via AnimatePresence onExitComplete below
   }, [isExpanded]);
 
+  const prUrl = extractPullRequestUrl({
+    action_pointers: run.action_pointers,
+    result: run.result,
+    arguments: run.arguments,
+  });
+
   return (
     <>
       <TR clickable isExpanded={stillExpanded} onClick={onToggle}>
@@ -354,8 +362,11 @@ function RunRow({
             <span className="text-[var(--neutral-soft-400)]">—</span>
           )}
         </TD>
-        <TD>
-          <DecisionBadge decision={run.decision} />
+        <TD className="whitespace-nowrap">
+          <div className="flex flex-col items-start gap-1">
+            <DecisionBadge decision={run.decision} />
+            {prUrl && <PullRequestLink url={prUrl} variant="chip" />}
+          </div>
         </TD>
         <TD className="text-right tabular-nums">
           <div className="flex items-center justify-end gap-2 whitespace-nowrap">

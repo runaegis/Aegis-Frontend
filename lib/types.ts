@@ -49,6 +49,12 @@ export interface MCPApproval {
   result: any;
   context: Record<string, any>;
   action_summary: string;
+  /**
+   * Backend-supplied human-readable bullet points. For PR-related tools the
+   * last entry typically contains the GitHub PR URL so reviewers can jump to
+   * the PR before approving / denying.
+   */
+  action_pointers?: string[];
 }
 
 export interface Session {
