@@ -22,6 +22,7 @@ import {
   formatDuration,
   formatExecutionTimeMs,
   formatRelativeTime,
+  readBlastRadius,
 } from '@/lib/utils';
 import { RelativeTime } from '@/components/ui/RelativeTime';
 import Topbar from '@/components/layout/Topbar';
@@ -31,7 +32,9 @@ import EmptyState from '@/components/ui/EmptyState';
 import ErrorBanner from '@/components/ui/ErrorBanner';
 import JsonViewer from '@/components/ui/JsonViewer';
 import { SessionsSkeleton } from '@/components/ui/PageSkeletons';
+import { BlastRadiusChip } from '@/components/ui/BlastRadiusChip';
 import { CodeChip } from '@/components/ui/CodeChip';
+import { PolicyChip } from '@/components/ui/PolicyChip';
 import { PullRequestLink } from '@/components/ui/PullRequestLink';
 import { DUR, EASE, fadeUp, fadeUpSm, staggerContainer } from '@/lib/motion';
 
@@ -447,6 +450,8 @@ function SessionRow({
                           </div>
                           <div className="flex shrink-0 flex-col items-end gap-1.5">
                             <DecisionBadge decision={action.decision} />
+                            <PolicyChip policy={action.policy} />
+                            <BlastRadiusChip value={readBlastRadius(action)} />
                             {actionPrUrl && (
                               <PullRequestLink url={actionPrUrl} variant="chip" />
                             )}

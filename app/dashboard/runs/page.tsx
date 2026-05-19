@@ -9,10 +9,14 @@ import { useUser } from '@/lib/hooks';
 import { Metrics, SessionAction } from '@/lib/types';
 import { useDashboardData } from '@/lib/dashboardDataContext';
 import {
+  blastRadiusRank,
   extractPullRequestUrl,
   formatExecutionTimeMs,
   formatFullTimestamp,
+  formatPolicy,
   formatRelativeTime,
+  normalizePolicy,
+  readBlastRadius,
   truncate,
 } from '@/lib/utils';
 import { RelativeTime } from '@/components/ui/RelativeTime';
@@ -24,9 +28,11 @@ import EmptyState from '@/components/ui/EmptyState';
 import ErrorBanner from '@/components/ui/ErrorBanner';
 import JsonViewer from '@/components/ui/JsonViewer';
 import { RunsSkeleton } from '@/components/ui/PageSkeletons';
+import { BlastRadiusChip } from '@/components/ui/BlastRadiusChip';
 import { Button } from '@/components/ui/Button';
 import { CodeChip } from '@/components/ui/CodeChip';
 import { Input } from '@/components/ui/Input';
+import { PolicyChip } from '@/components/ui/PolicyChip';
 import { PullRequestLink } from '@/components/ui/PullRequestLink';
 import { SelectMenu } from '@/components/ui/SelectMenu';
 import {
@@ -81,7 +87,7 @@ export default function RunsPage() {
   // (server order — newest-first from DashboardDataProvider). Clicking
   // a sortable column header cycles asc → desc → null. No backend
   // change: we're just reordering the in-memory filtered array.
-  type SortKey = 'agent' | 'tool' | 'repo' | 'decision' | 'time';
+  type SortKey = 'agent' | 'tool' | 'repo' | 'policy' | 'risk' | 'decision' | 'time';
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<SortDirection>(null);
   const onSort = useCallback(
@@ -106,6 +112,8 @@ export default function RunsPage() {
         case 'agent':    return r.agent_name?.toLowerCase() ?? '';
         case 'tool':     return r.tool_name?.toLowerCase() ?? '';
         case 'repo':     return r.target_repo?.toLowerCase() ?? '';
+        case 'policy':   return normalizePolicy(r.policy);
+        case 'risk':     return blastRadiusRank(readBlastRadius(r));
         case 'decision': return r.decision ?? '';
         case 'time':     return new Date(r.timestamp).getTime();
       }
@@ -252,6 +260,8 @@ export default function RunsPage() {
                   <TH sortable sortDirection={dirFor('tool')} onSort={() => onSort('tool')}>Tool</TH>
                   <TH sortable sortDirection={dirFor('repo')} onSort={() => onSort('repo')}>Repository</TH>
                   <TH>Branch</TH>
+                  <TH sortable sortDirection={dirFor('policy')} onSort={() => onSort('policy')}>Policy</TH>
+                  <TH sortable sortDirection={dirFor('risk')} onSort={() => onSort('risk')}>Blast radius</TH>
                   <TH sortable sortDirection={dirFor('decision')} onSort={() => onSort('decision')}>Decision</TH>
                   <TH sortable sortDirection={dirFor('time')} onSort={() => onSort('time')} className="text-right">Time</TH>
                   <TH aria-label="Expand" className="w-8" />
@@ -363,6 +373,12 @@ function RunRow({
           )}
         </TD>
         <TD className="whitespace-nowrap">
+          <PolicyChip policy={run.policy} showEmpty />
+        </TD>
+        <TD className="whitespace-nowrap">
+          <BlastRadiusChip value={readBlastRadius(run)} showEmpty />
+        </TD>
+        <TD className="whitespace-nowrap">
           <div className="flex flex-col items-start gap-1">
             <DecisionBadge decision={run.decision} />
             {prUrl && <PullRequestLink url={prUrl} variant="chip" />}
@@ -393,7 +409,7 @@ function RunRow({
         onExitComplete={() => setStillExpanded(false)}
       >
       {isExpanded && (
-        <TRExpanded key="expanded" colSpan={7}>
+        <TRExpanded key="expanded" colSpan={9}>
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
             <div>
               <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.05em] text-[var(--neutral-soft-400)]">
@@ -402,6 +418,13 @@ function RunRow({
               <p className="text-[13px] text-[var(--neutral-strong-950)]">
                 {run.action_summary || '—'}
               </p>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <p className="mr-1 text-[10px] font-semibold uppercase tracking-[0.05em] text-[var(--neutral-soft-400)]">
+                  Risk
+                </p>
+                <PolicyChip policy={run.policy} showEmpty />
+                <BlastRadiusChip value={readBlastRadius(run)} showEmpty />
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-3 text-[12px] md:grid-cols-4">
               <div>

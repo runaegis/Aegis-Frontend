@@ -222,6 +222,107 @@ const PR_URL_RE = /https?:\/\/[^\s"'<>)\]]+\/pull\/\d+(?:\/[^\s"'<>)\]]*)?/i;
  */
 const GITHUB_HOST = 'github.com';
 
+// ── Policy verdict ─────────────────────────────────────────────────────────
+
+export type PolicyStatus = 'pass' | 'enforced' | 'unknown';
+
+/** Normalize free-form backend `policy` strings (e.g. "pass", "policy enforced") to a known status. */
+export function normalizePolicy(policy?: string | null): PolicyStatus {
+  if (!policy) return 'unknown';
+  const v = policy.toLowerCase().trim();
+  if (!v) return 'unknown';
+  if (v === 'pass' || v === 'passed' || v === 'ok' || v === 'allow' || v === 'allowed') {
+    return 'pass';
+  }
+  if (
+    v.includes('enforc') ||
+    v === 'fail' ||
+    v === 'failed' ||
+    v === 'deny' ||
+    v === 'denied' ||
+    v === 'block' ||
+    v === 'blocked'
+  ) {
+    return 'enforced';
+  }
+  return 'unknown';
+}
+
+export type PolicyDisplay = {
+  status: PolicyStatus;
+  label: string;
+  tone: 'success' | 'warning' | 'neutral';
+};
+
+export function formatPolicy(policy?: string | null): PolicyDisplay {
+  const status = normalizePolicy(policy);
+  if (status === 'pass') return { status, label: 'Pass', tone: 'success' };
+  if (status === 'enforced') return { status, label: 'Enforced', tone: 'warning' };
+  return { status, label: policy?.trim() || 'Unknown', tone: 'neutral' };
+}
+
+// ── Blast radius ──────────────────────────────────────────────────────────
+
+export type BlastRadius = 'low' | 'medium' | 'high' | 'critical' | 'unknown';
+
+/** Normalize free-form backend severity strings to a known blast-radius bucket. */
+export function normalizeBlastRadius(value?: string | null): BlastRadius {
+  if (!value) return 'unknown';
+  const v = value.toLowerCase().trim();
+  if (!v) return 'unknown';
+  if (v === 'low' || v === 'lo' || v === 'minor') return 'low';
+  if (v === 'medium' || v === 'med' || v === 'moderate') return 'medium';
+  if (v === 'high' || v === 'major') return 'high';
+  if (v === 'critical' || v === 'crit' || v === 'severe') return 'critical';
+  return 'unknown';
+}
+
+export type BlastRadiusDisplay = {
+  level: BlastRadius;
+  label: string;
+  tone: 'success' | 'warning' | 'primary' | 'error' | 'neutral';
+};
+
+/** Stable rank for sorting by severity. */
+export function blastRadiusRank(value?: string | null): number {
+  switch (normalizeBlastRadius(value)) {
+    case 'low':
+      return 1;
+    case 'medium':
+      return 2;
+    case 'high':
+      return 3;
+    case 'critical':
+      return 4;
+    default:
+      return 0;
+  }
+}
+
+export function formatBlastRadius(value?: string | null): BlastRadiusDisplay {
+  const level = normalizeBlastRadius(value);
+  switch (level) {
+    case 'low':
+      return { level, label: 'Low', tone: 'success' };
+    case 'medium':
+      return { level, label: 'Medium', tone: 'warning' };
+    case 'high':
+      return { level, label: 'High', tone: 'primary' };
+    case 'critical':
+      return { level, label: 'Critical', tone: 'error' };
+    default:
+      return { level, label: value?.trim() || 'Unknown', tone: 'neutral' };
+  }
+}
+
+/** Read blast radius from a `SessionAction`-shaped object — tolerant of typo & corrected key. */
+export function readBlastRadius(input: {
+  blast_redius?: string | null;
+  blast_radius?: string | null;
+}): string | null | undefined {
+  return input.blast_redius ?? input.blast_radius;
+}
+
 /** Parse a PR URL into `{ owner, repo, number }` (host preserved). Returns `null` if not parseable. */
 export function parsePullRequestUrl(
   url: string,

@@ -23,6 +23,20 @@ export interface SessionAction {
   timestamp: string;
   user_id: string;
   execution_time: number;
+  /**
+   * Policy verdict for this action. `"pass"` when every policy check passed,
+   * otherwise an enforced state (`"enforced"` / `"policy_enforced"` / etc.).
+   * Stored as a free-form string so backend can evolve labels.
+   */
+  policy?: string | null;
+  /**
+   * Severity of the action if it were to take effect. Backend currently emits
+   * `"Low" | "Medium" | "High" | "Critical"`. Field name preserves the
+   * backend's spelling (`blast_redius`); also reads `blast_radius` for
+   * forward-compat once the typo is corrected upstream.
+   */
+  blast_redius?: string | null;
+  blast_radius?: string | null;
 }
 
 export interface AggregatedSessionAction {
