@@ -215,12 +215,13 @@ export function isPullRequestTool(toolName?: string | null): boolean {
 const PR_URL_RE = /https?:\/\/[^\s"'<>)\]]+\/pull\/\d+(?:\/[^\s"'<>)\]]*)?/i;
 
 /**
- * Canonical host we link to. Backend `action_pointers` sometimes carry an
- * enterprise host (e.g. `github.company.com`); the UI normalizes everything
- * to public `github.com` for now — swap this if/when we expose a per-tenant
- * setting for the GitHub host.
+ * Default host used ONLY when we have to synthesize a PR URL from arguments
+ * (i.e. `action_pointers` / `result` carry no URL of their own). For any
+ * URL discovered in backend payloads we preserve its host verbatim — that
+ * way enterprise GitHub instances (e.g. `github.company.com`) keep working
+ * without needing per-tenant config in the frontend.
  */
-const GITHUB_HOST = 'github.com';
+const GITHUB_HOST_FALLBACK = 'github.com';
 
 // ── Policy verdict ─────────────────────────────────────────────────────────
 
@@ -351,8 +352,10 @@ export function parsePullRequestUrl(
  *  4. `arguments.{owner, repo, pull_number}` — synthetic fallback so the link
  *     appears even when the backend hasn't appended one yet.
  *
- * The returned URL is always normalized to `https://github.com/...` regardless
- * of the host found in the source data.
+ * URLs discovered in backend payloads are returned VERBATIM (host preserved)
+ * so enterprise GitHub hosts like `github.company.com` keep working. Only the
+ * synthesized fallback (#4) defaults to public `github.com`, because we have
+ * no host hint when only `owner`/`repo`/`pull_number` are available.
  */
 export function extractPullRequestUrl(input: {
   action_pointers?: readonly string[] | null;
@@ -398,10 +401,6 @@ export function extractPullRequestUrl(input: {
   }
 
   if (found) {
-    const parsed = parsePullRequestUrl(found);
-    if (parsed) {
-      return `https://${GITHUB_HOST}/${parsed.owner}/${parsed.repo}/pull/${parsed.number}`;
-    }
     return found;
   }
 
@@ -414,7 +413,7 @@ export function extractPullRequestUrl(input: {
     if (typeof raw === 'number' && Number.isFinite(raw)) num = raw;
     else if (typeof raw === 'string' && /^\d+$/.test(raw.trim())) num = Number(raw.trim());
     if (owner && repo && num !== null) {
-      return `https://${GITHUB_HOST}/${owner}/${repo}/pull/${num}`;
+      return `https://${GITHUB_HOST_FALLBACK}/${owner}/${repo}/pull/${num}`;
     }
   }
 

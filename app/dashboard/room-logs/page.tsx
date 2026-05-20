@@ -491,10 +491,10 @@ function RoomActionRow({
         <TD>
           <CodeChip>{action.tool_name}</CodeChip>
         </TD>
-        <TD>
+        <TD className="max-w-[200px]">
           {action.target_branch ? (
-            <CodeChip className="max-w-[220px]">
-              <span className="truncate">{action.target_branch}</span>
+            <CodeChip className="max-w-full" title={action.target_branch}>
+              <span className="block truncate">{action.target_branch}</span>
             </CodeChip>
           ) : (
             <span className="text-[var(--neutral-soft-400)]">—</span>
@@ -512,8 +512,8 @@ function RoomActionRow({
             {prUrl && <PullRequestLink url={prUrl} variant="chip" />}
           </div>
         </TD>
-        <TD className="text-right tabular-nums">
-          <div className="flex items-center justify-end gap-2 whitespace-nowrap">
+        <TD className="whitespace-nowrap text-right tabular-nums">
+          <div className="flex flex-col items-end gap-1">
             <RelativeTime
               timestamp={action.timestamp}
               className="whitespace-nowrap text-[12px] text-[var(--neutral-soft-400)]"

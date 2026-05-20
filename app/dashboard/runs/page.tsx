@@ -346,7 +346,7 @@ function RunRow({
   return (
     <>
       <TR clickable isExpanded={stillExpanded} onClick={onToggle}>
-        <TD>
+        <TD className="max-w-[220px]">
           <div className="flex items-center gap-2.5">
             <span
               className="inline-block h-1.5 w-1.5 shrink-0 rounded-full"
@@ -354,7 +354,10 @@ function RunRow({
               aria-hidden
             />
             <AgentToolMark name={run.agent_name || ''} />
-            <span className="truncate text-[13.5px] font-semibold text-[var(--neutral-strong-950)]">
+            <span
+              className="min-w-0 flex-1 truncate text-[13.5px] font-semibold text-[var(--neutral-strong-950)]"
+              title={run.agent_name || 'Unknown'}
+            >
               {run.agent_name || 'Unknown'}
             </span>
           </div>
@@ -365,9 +368,14 @@ function RunRow({
         <TD className="text-[12.5px] font-normal text-[var(--neutral-sub-600)]">
           {run.target_repo}
         </TD>
-        <TD>
+        <TD className="max-w-[200px]">
           {run.target_branch ? (
-            <CodeChip>{run.target_branch}</CodeChip>
+            <CodeChip
+              className="max-w-full"
+              title={run.target_branch}
+            >
+              <span className="block truncate">{run.target_branch}</span>
+            </CodeChip>
           ) : (
             <span className="text-[var(--neutral-soft-400)]">—</span>
           )}
@@ -384,8 +392,8 @@ function RunRow({
             {prUrl && <PullRequestLink url={prUrl} variant="chip" />}
           </div>
         </TD>
-        <TD className="text-right tabular-nums">
-          <div className="flex items-center justify-end gap-2 whitespace-nowrap">
+        <TD className="whitespace-nowrap text-right tabular-nums">
+          <div className="flex flex-col items-end gap-1">
             <RelativeTime
               timestamp={run.timestamp}
               className="whitespace-nowrap text-[12px] text-[var(--neutral-soft-400)]"
