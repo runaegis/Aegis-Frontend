@@ -50,6 +50,17 @@ export interface AggregatedSessionAction {
   sessions: Array<SessionAction>;
 }
 
+/**
+ * One action in a room's audit log. Same shape as `SessionAction` plus the
+ * room scope and the resolved `username` of the user that triggered the run.
+ * Returned by `GET /sessions_by_room_id/{room_id}` (paginated).
+ */
+export interface RoomSessionAction extends SessionAction {
+  room_id: string;
+  /** Resolved display name of the user that initiated this action. */
+  username?: string | null;
+}
+
 export type MCPApprovalStatus = "pending" | "approved" | "rejected" | string;
 
 export interface MCPApproval {

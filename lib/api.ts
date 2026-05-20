@@ -12,6 +12,7 @@ import {
   RoomDetails,
   RoomMember,
   RoomInvite,
+  RoomSessionAction,
   PaginatedResponse,
 } from "./types";
 import { LogOut } from "lucide-react";
@@ -826,6 +827,39 @@ export const api = {
 
     const data = await res.json();
     return Array.isArray(data) ? data : [];
+  },
+
+  /**
+   * Paginated audit log for a single room. Mirrors the FastAPI endpoint
+   * `GET /sessions_by_room_id/{room_id}` which returns one `RoomSessionAction`
+   * per row (SessionAction + `room_id` + resolved `username`).
+   */
+  getSessionsByRoomId: async (
+    roomId: string,
+    page = 1,
+    pageSize = 20,
+  ): Promise<PaginatedResponse<RoomSessionAction>> => {
+    const url = new URL(
+      `${API_BASE}/sessions_by_room_id/${encodeURIComponent(roomId)}`,
+    );
+    url.searchParams.set("page", String(page));
+    url.searchParams.set("page_size", String(pageSize));
+
+    const res = await apiFetch(url.toString());
+    if (!res.ok) {
+      throw new Error(
+        `Failed to load room activity: ${await readErrorMessage(res)}`,
+      );
+    }
+
+    const data = await res.json();
+    return {
+      items: Array.isArray(data?.items) ? data.items : [],
+      total: Number(data?.total ?? 0),
+      page: Number(data?.page ?? page),
+      page_size: Number(data?.page_size ?? pageSize),
+      pages: Number(data?.pages ?? 0),
+    };
   },
 
   createRoomInvite: async (
