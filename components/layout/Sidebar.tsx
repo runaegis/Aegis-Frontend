@@ -13,6 +13,7 @@ import {
   FileText,
   Clock,
   Coins,
+  History,
   Plug,
   Settings,
   Menu,
@@ -94,6 +95,7 @@ const NAV_GROUPS: NavGroup[] = [
       { name: 'Runs', href: '/dashboard/runs', icon: Activity },
       { name: 'Sessions', href: '/dashboard/sessions', icon: Layers },
       { name: 'Rooms', href: '/dashboard/rooms', icon: Users },
+      { name: 'Room Logs', href: '/dashboard/room-logs', icon: History },
     ],
   },
   {

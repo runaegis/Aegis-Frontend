@@ -18,9 +18,11 @@ import { AggregatedSessionAction, PaginatedResponse } from '@/lib/types';
 import PaginatedLayout from '@/components/ui/PaginatedLayout';
 import { SessionAction } from '@/lib/types';
 import {
+  extractPullRequestUrl,
   formatDuration,
   formatExecutionTimeMs,
   formatRelativeTime,
+  readBlastRadius,
 } from '@/lib/utils';
 import { RelativeTime } from '@/components/ui/RelativeTime';
 import Topbar from '@/components/layout/Topbar';
@@ -30,7 +32,10 @@ import EmptyState from '@/components/ui/EmptyState';
 import ErrorBanner from '@/components/ui/ErrorBanner';
 import JsonViewer from '@/components/ui/JsonViewer';
 import { SessionsSkeleton } from '@/components/ui/PageSkeletons';
+import { BlastRadiusChip } from '@/components/ui/BlastRadiusChip';
 import { CodeChip } from '@/components/ui/CodeChip';
+import { PolicyChip } from '@/components/ui/PolicyChip';
+import { PullRequestLink } from '@/components/ui/PullRequestLink';
 import { DUR, EASE, fadeUp, fadeUpSm, staggerContainer } from '@/lib/motion';
 
 export default function SessionsPage() {
@@ -376,7 +381,13 @@ function SessionRow({
 
             {session.sessions && session.sessions.length > 0 ? (
               <ol className="px-4 py-3">
-                {session.sessions.map((action, idx) => (
+                {session.sessions.map((action, idx) => {
+                  const actionPrUrl = extractPullRequestUrl({
+                    action_pointers: action.action_pointers,
+                    result: action.result,
+                    arguments: action.arguments,
+                  });
+                  return (
                   <li
                     key={action.id}
                     className="relative flex gap-3 pb-3 last:pb-0"
@@ -437,7 +448,14 @@ function SessionRow({
                               {action.action_summary}
                             </p>
                           </div>
-                          <DecisionBadge decision={action.decision} />
+                          <div className="flex shrink-0 flex-col items-end gap-1.5">
+                            <DecisionBadge decision={action.decision} />
+                            <PolicyChip policy={action.policy} />
+                            <BlastRadiusChip value={readBlastRadius(action)} />
+                            {actionPrUrl && (
+                              <PullRequestLink url={actionPrUrl} variant="chip" />
+                            )}
+                          </div>
                         </div>
 
                         {/* Arguments — full-width below the summary row so the
@@ -455,7 +473,8 @@ function SessionRow({
                       </div>
                     </div>
                   </li>
-                ))}
+                  );
+                })}
               </ol>
             ) : (
               <p className="py-8 text-center text-[12.5px] text-[var(--neutral-soft-400)]">

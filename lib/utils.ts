@@ -179,3 +179,244 @@ export function getToolChipStyle(toolName: string): ToolChipStyle {
     color: `hsl(${th}, ${ts}%, ${tl}%)`,
   };
 }
+
+/**
+ * Tools whose execution targets a specific pull request. When one of these
+ * runs, the backend appends a GitHub PR link (typically as the last entry of
+ * `action_pointers`) so the reviewer can jump straight to the PR before
+ * acting on the approval / inspecting the run.
+ */
+export const PR_RELATED_TOOLS: ReadonlySet<string> = new Set([
+  'create_pull_request',
+  'merge_pull_request',
+  'update_pull_request',
+  'update_pull_request_branch',
+  'add_pull_request_review_comment',
+  'request_copilot_review',
+  'create_pull_request_review',
+  'get_pull_request',
+  'get_pull_request_files',
+  'get_pull_request_diff',
+  'get_pull_request_status',
+  'get_pull_request_reviews',
+  'get_pull_request_comments',
+]);
+
+/** True when the tool name (with or without the `mcp_aegis_` prefix) acts on a PR. */
+export function isPullRequestTool(toolName?: string | null): boolean {
+  if (!toolName) return false;
+  const raw = toolName.toLowerCase();
+  const stripped = raw.startsWith(MCP_AEGIS_TOOL_PREFIX)
+    ? raw.slice(MCP_AEGIS_TOOL_PREFIX.length)
+    : raw;
+  return PR_RELATED_TOOLS.has(stripped);
+}
+
+const PR_URL_RE = /https?:\/\/[^\s"'<>)\]]+\/pull\/\d+(?:\/[^\s"'<>)\]]*)?/i;
+
+/**
+ * Canonical host we link to. Backend `action_pointers` sometimes carry an
+ * enterprise host (e.g. `github.company.com`); the UI normalizes everything
+ * to public `github.com` for now — swap this if/when we expose a per-tenant
+ * setting for the GitHub host.
+ */
+const GITHUB_HOST = 'github.com';
+
+// ── Policy verdict ─────────────────────────────────────────────────────────
+
+export type PolicyStatus = 'pass' | 'enforced' | 'unknown';
+
+/** Normalize free-form backend `policy` strings (e.g. "pass", "policy enforced") to a known status. */
+export function normalizePolicy(policy?: string | null): PolicyStatus {
+  if (!policy) return 'unknown';
+  const v = policy.toLowerCase().trim();
+  if (!v) return 'unknown';
+  if (v === 'pass' || v === 'passed' || v === 'ok' || v === 'allow' || v === 'allowed') {
+    return 'pass';
+  }
+  if (
+    v.includes('enforc') ||
+    v === 'fail' ||
+    v === 'failed' ||
+    v === 'deny' ||
+    v === 'denied' ||
+    v === 'block' ||
+    v === 'blocked'
+  ) {
+    return 'enforced';
+  }
+  return 'unknown';
+}
+
+export type PolicyDisplay = {
+  status: PolicyStatus;
+  label: string;
+  tone: 'success' | 'warning' | 'neutral';
+};
+
+export function formatPolicy(policy?: string | null): PolicyDisplay {
+  const status = normalizePolicy(policy);
+  if (status === 'pass') return { status, label: 'Pass', tone: 'success' };
+  if (status === 'enforced') return { status, label: 'Enforced', tone: 'warning' };
+  return { status, label: policy?.trim() || 'Unknown', tone: 'neutral' };
+}
+
+// ── Blast radius ──────────────────────────────────────────────────────────
+
+export type BlastRadius = 'low' | 'medium' | 'high' | 'critical' | 'unknown';
+
+/** Normalize free-form backend severity strings to a known blast-radius bucket. */
+export function normalizeBlastRadius(value?: string | null): BlastRadius {
+  if (!value) return 'unknown';
+  const v = value.toLowerCase().trim();
+  if (!v) return 'unknown';
+  if (v === 'low' || v === 'lo' || v === 'minor') return 'low';
+  if (v === 'medium' || v === 'med' || v === 'moderate') return 'medium';
+  if (v === 'high' || v === 'major') return 'high';
+  if (v === 'critical' || v === 'crit' || v === 'severe') return 'critical';
+  return 'unknown';
+}
+
+export type BlastRadiusDisplay = {
+  level: BlastRadius;
+  label: string;
+  tone: 'success' | 'warning' | 'primary' | 'error' | 'neutral';
+};
+
+/** Stable rank for sorting by severity. */
+export function blastRadiusRank(value?: string | null): number {
+  switch (normalizeBlastRadius(value)) {
+    case 'low':
+      return 1;
+    case 'medium':
+      return 2;
+    case 'high':
+      return 3;
+    case 'critical':
+      return 4;
+    default:
+      return 0;
+  }
+}
+
+export function formatBlastRadius(value?: string | null): BlastRadiusDisplay {
+  const level = normalizeBlastRadius(value);
+  switch (level) {
+    case 'low':
+      return { level, label: 'Low', tone: 'success' };
+    case 'medium':
+      return { level, label: 'Medium', tone: 'warning' };
+    case 'high':
+      return { level, label: 'High', tone: 'primary' };
+    case 'critical':
+      return { level, label: 'Critical', tone: 'error' };
+    default:
+      return { level, label: value?.trim() || 'Unknown', tone: 'neutral' };
+  }
+}
+
+/** Read blast radius from a `SessionAction`-shaped object — tolerant of typo & corrected key. */
+export function readBlastRadius(input: {
+  blast_redius?: string | null;
+  blast_radius?: string | null;
+}): string | null | undefined {
+  return input.blast_redius ?? input.blast_radius;
+}
+
+/** Parse a PR URL into `{ owner, repo, number }` (host preserved). Returns `null` if not parseable. */
+export function parsePullRequestUrl(
+  url: string,
+): { owner: string; repo: string; number: number } | null {
+  if (!url) return null;
+  try {
+    const u = new URL(url);
+    const match = u.pathname.match(/^\/([^/]+)\/([^/]+)\/pull\/(\d+)\b/);
+    if (!match) return null;
+    const number = Number(match[3]);
+    if (!Number.isFinite(number)) return null;
+    return { owner: match[1], repo: match[2], number };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Best-effort extraction of a GitHub Pull Request URL associated with a tool
+ * call / approval / session action. Scans, in order of preference:
+ *
+ *  1. `action_pointers` (backend convention — the URL is normally appended as
+ *     the last bullet for PR-related tools, so we walk from the end).
+ *  2. The stringified `result` payload returned by the tool.
+ *  3. The stringified `context` blob (MCP approvals carry the bound context).
+ *  4. `arguments.{owner, repo, pull_number}` — synthetic fallback so the link
+ *     appears even when the backend hasn't appended one yet.
+ *
+ * The returned URL is always normalized to `https://github.com/...` regardless
+ * of the host found in the source data.
+ */
+export function extractPullRequestUrl(input: {
+  action_pointers?: readonly string[] | null;
+  result?: unknown;
+  context?: Record<string, unknown> | null;
+  arguments?: Record<string, unknown> | null;
+}): string | null {
+  let found: string | null = null;
+
+  const pointers = input.action_pointers;
+  if (Array.isArray(pointers)) {
+    for (let i = pointers.length - 1; i >= 0; i--) {
+      const entry = pointers[i];
+      if (typeof entry !== 'string') continue;
+      const m = entry.match(PR_URL_RE);
+      if (m) {
+        found = m[0];
+        break;
+      }
+    }
+  }
+
+  if (!found) {
+    const haystacks: unknown[] = [input.result, input.context];
+    for (const h of haystacks) {
+      if (h === null || h === undefined) continue;
+      let text: string | null = null;
+      if (typeof h === 'string') text = h;
+      else if (typeof h === 'object') {
+        try {
+          text = JSON.stringify(h);
+        } catch {
+          text = null;
+        }
+      }
+      if (!text) continue;
+      const m = text.match(PR_URL_RE);
+      if (m) {
+        found = m[0];
+        break;
+      }
+    }
+  }
+
+  if (found) {
+    const parsed = parsePullRequestUrl(found);
+    if (parsed) {
+      return `https://${GITHUB_HOST}/${parsed.owner}/${parsed.repo}/pull/${parsed.number}`;
+    }
+    return found;
+  }
+
+  const args = input.arguments;
+  if (args && typeof args === 'object') {
+    const owner = typeof args.owner === 'string' ? args.owner.trim() : '';
+    const repo = typeof args.repo === 'string' ? args.repo.trim() : '';
+    const raw = args.pull_number;
+    let num: number | null = null;
+    if (typeof raw === 'number' && Number.isFinite(raw)) num = raw;
+    else if (typeof raw === 'string' && /^\d+$/.test(raw.trim())) num = Number(raw.trim());
+    if (owner && repo && num !== null) {
+      return `https://${GITHUB_HOST}/${owner}/${repo}/pull/${num}`;
+    }
+  }
+
+  return null;
+}

@@ -6,7 +6,7 @@ import { Bell, Check, ChevronDown, ChevronRight, Clock, Minus, X } from 'lucide-
 import { api } from '@/lib/api';
 import { useAutoRefresh, useUser } from '@/lib/hooks';
 import { MCPApproval } from '@/lib/types';
-import { formatRelativeTime } from '@/lib/utils';
+import { extractPullRequestUrl, formatRelativeTime } from '@/lib/utils';
 import { RelativeTime } from '@/components/ui/RelativeTime';
 import Topbar from '@/components/layout/Topbar';
 import AgentAvatar from '@/components/ui/AgentAvatar';
@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/Button';
 import { CodeChip } from '@/components/ui/CodeChip';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { FreshnessBanner } from '@/components/ui/FreshnessBanner';
+import { PullRequestLink } from '@/components/ui/PullRequestLink';
 import { useToast } from '@/components/ui/Toast';
 import { DUR, EASE, fadeUp, fadeUpSm, staggerContainer } from '@/lib/motion';
 import { AuthError } from '@/lib/api';
@@ -533,6 +534,13 @@ export default function ApprovalsPage() {
                   ? approval.action_summary
                   : `Requested tool: ${approval.tool_name}`;
 
+              const prUrl = extractPullRequestUrl({
+                action_pointers: approval.action_pointers,
+                result: approval.result,
+                context: approval.context,
+                arguments: approval.arguments,
+              });
+
               return (
                 <ApprovalItem
                   key={approval.id}
@@ -541,6 +549,7 @@ export default function ApprovalsPage() {
                   summary={summary}
                   repo={repo}
                   branch={branch}
+                  prUrl={prUrl}
                   isPending={isPending}
                   isActioning={isActioning}
                   isExpanded={isExpanded}
@@ -681,6 +690,7 @@ function ApprovalItem({
   summary,
   repo,
   branch,
+  prUrl,
   isPending,
   isActioning,
   isExpanded,
@@ -694,6 +704,7 @@ function ApprovalItem({
   summary: string;
   repo: string | null;
   branch: string | null;
+  prUrl: string | null;
   isPending: boolean;
   isActioning: boolean;
   isExpanded: boolean;
@@ -767,7 +778,10 @@ function ApprovalItem({
               </div>
             </div>
           </div>
-          <DecisionBadge decision={approval.status} />
+          <div className="flex shrink-0 flex-col items-end gap-1.5">
+            <DecisionBadge decision={approval.status} />
+            {prUrl && <PullRequestLink url={prUrl} variant="chip" />}
+          </div>
         </div>
 
         {/* Action summary — headline */}
