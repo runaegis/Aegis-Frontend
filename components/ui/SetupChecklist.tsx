@@ -278,14 +278,20 @@ function ChecklistRow({
           className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--success)] text-white"
           aria-hidden
         >
-          <Check className="h-3 w-3" strokeWidth={2.75} />
+          {/* h-2.5 w-2.5 (10px) + strokeWidth 2.25 so the check reads
+              at roughly the same visual mass as the 11px step number
+              in the pending state. Previously h-3 / strokeWidth 2.75
+              made the green tick look noticeably bolder than the
+              orange number, which read as "the green circle is
+              bigger" even though all three circles are h-6 w-6. */}
+          <Check className="h-2.5 w-2.5" strokeWidth={2.25} />
         </span>
       ) : state === 'skipped' ? (
         <span
           className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--neutral-weak-50)] text-[var(--neutral-soft-400)]"
           aria-hidden
         >
-          <Check className="h-3 w-3" strokeWidth={2.75} />
+          <Check className="h-2.5 w-2.5" strokeWidth={2.25} />
         </span>
       ) : (
         <span

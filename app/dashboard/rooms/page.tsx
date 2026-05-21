@@ -491,9 +491,15 @@ export default function RoomsIndexPage() {
                   placeholder="aeg-..."
                   autoFocus
                 />
+                {/* size="lg" (h-9) so the Cancel + Join-room buttons
+                    share their height with the Input above (also h-9).
+                    Default Button md is h-8, which left a 4px height
+                    delta and made the row read as "buttons too short
+                    for the input." */}
                 <div className="flex gap-1.5">
                   <Button
                     type="button"
+                    size="lg"
                     variant="secondary"
                     onClick={() => {
                       setShowJoin(false);
@@ -505,7 +511,8 @@ export default function RoomsIndexPage() {
                   </Button>
                   <Button
                     type="submit"
-                    variant="secondary"
+                    size="lg"
+                    variant="primary"
                     disabled={submittingJoin || !joinCode.trim()}
                   >
                     {submittingJoin ? 'Joining…' : 'Join room'}
@@ -605,9 +612,18 @@ export default function RoomsIndexPage() {
                         <p className="truncate text-[14px] font-semibold tracking-[-0.005em] text-[var(--neutral-strong-950)]">
                           {room.repo_name || id}
                         </p>
+                        {/* Metadata line. The room ID used to be wrapped
+                            in font-mono, which gave the mono glyphs a
+                            different vertical baseline from the
+                            surrounding sans text — the "ID" prefix
+                            and "· created…" tail bounced ~1px above
+                            the mono span. Dropping mono here keeps the
+                            entire line on one baseline; the "ID" prefix
+                            still signals "this is the identifier" without
+                            needing the typography switch. */}
                         <p className="mt-0.5 truncate text-[11.5px] text-[var(--neutral-soft-400)]">
                           ID{' '}
-                          <span className="font-mono text-[var(--neutral-sub-600)]">
+                          <span className="text-[var(--neutral-sub-600)]">
                             {id}
                           </span>
                           {room.created_at && (

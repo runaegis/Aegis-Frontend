@@ -347,7 +347,7 @@ export default function RoomMembersPage() {
             {canCreateInvites && !showInviteForm && (
               <Button
                 size="sm"
-                variant="secondary"
+                variant="primary"
                 onClick={() => setShowInviteForm(true)}
                 leadingIcon={<UserPlus className="h-3 w-3" strokeWidth={2} />}
               >
@@ -495,14 +495,15 @@ export default function RoomMembersPage() {
                       </p>
                     </div>
                     <div className="flex shrink-0 items-center gap-1.5">
-                      {/* Primary "Share" — copies a Slack-ready message
-                          with the join URL + instructions, not just
-                          the raw code. The Tech Lead can paste straight
-                          into a DM and the recipient has 3 clear
-                          steps to follow. */}
+                      {/* "Share" — copies a Slack-ready message with the
+                          join URL + instructions, not just the raw code.
+                          Secondary style because "New invite" up in the
+                          panel header is the primary action; once invites
+                          exist, Share is a per-row repeat action and
+                          shouldn't compete with the section CTA. */}
                       <Button
                         size="sm"
-                        variant="primary"
+                        variant="secondary"
                         onClick={() => copyShareMessage(code)}
                         leadingIcon={
                           <Copy className="h-3 w-3" strokeWidth={2.25} />
@@ -551,11 +552,12 @@ export default function RoomMembersPage() {
               })}
             </ul>
           )}
-          {/* Roadmap signal — mirrors the Members panel footer so
-              users see the same "coming soon" framing across both
-              destructive surfaces. */}
+          {/* Roadmap signal for the missing DELETE-on-invite endpoint.
+              py-2 (not py-2.5) so the hint hugs the text rather than
+              leaving extra breathing room below — the bg-neutral-weak
+              fill made the extra ~2px read as a visible margin. */}
           {canCreateInvites && invites.length > 0 && (
-            <div className="border-t border-[var(--stroke-soft-200)] bg-[var(--neutral-weak-50)] px-5 py-2.5">
+            <div className="border-t border-[var(--stroke-soft-200)] bg-[var(--neutral-weak-50)] px-5 py-2">
               <p className="text-[11px] italic text-[var(--neutral-soft-400)]">
                 Revoke invite — pending backend endpoint. Coming soon.
               </p>
