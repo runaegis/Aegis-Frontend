@@ -9,7 +9,7 @@ import { MCPApproval } from '@/lib/types';
 import { extractPullRequestUrl, formatRelativeTime } from '@/lib/utils';
 import { RelativeTime } from '@/components/ui/RelativeTime';
 import Topbar from '@/components/layout/Topbar';
-import AgentAvatar from '@/components/ui/AgentAvatar';
+import { AgentMark } from '@/components/ui/AgentMark';
 import DecisionBadge from '@/components/ui/DecisionBadge';
 import EmptyState from '@/components/ui/EmptyState';
 import ErrorBanner from '@/components/ui/ErrorBanner';
@@ -27,6 +27,31 @@ import { AuthError } from '@/lib/api';
 import { useRouter } from 'next/navigation';
 
 type ApprovalFilter = 'all' | 'pending' | 'approved' | 'rejected';
+
+// ─── Pending-card visual treatment (FLAG) ──────────────────────────
+//
+// The pending approval cards previously used a loud pinkish wash
+// (full-card gradient from primary-lighter). That reads as urgent
+// but heavy, and clashes with the more restrained inset-tint
+// pattern we use on the Decision Overview hero on the Dashboard
+// and the freeze-window status banner.
+//
+// Flip this flag to `false` to revert the pending cards to the
+// original loud treatment — useful if the subtler version turns
+// out to under-signal "urgency" once we have real volume in the
+// approval queue. No other code paths are affected.
+const USE_INSET_GRADIENT_ON_APPROVAL_CARDS = true;
+
+// Inset gradient values — same shape as the Decision Overview hero.
+// `pending` = subtle 7% top fade; `selected` = stronger 14% top
+// fade so the "queued for batch action" state still anchors
+// against a row of unselected pending cards.
+const APPROVAL_CARD_GRADIENTS = {
+  pending:
+    'linear-gradient(180deg, rgba(250, 115, 25, 0.07) 0%, rgba(250, 115, 25, 0.03) 28%, rgba(255, 255, 255, 0) 60%)',
+  selected:
+    'linear-gradient(180deg, rgba(250, 115, 25, 0.14) 0%, rgba(250, 115, 25, 0.07) 28%, rgba(255, 255, 255, 0) 65%)',
+} as const;
 
 function normalizeStatus(status: string): 'pending' | 'approved' | 'rejected' {
   const value = (status ?? '').toLowerCase();
@@ -713,23 +738,51 @@ function ApprovalItem({
   isSelected: boolean;
   onSelectChange: (checked: boolean) => void;
 }) {
+  // Container styling — branched on the inset-gradient feature flag
+  // so reverting to the loud-pink original is a one-line change.
+  //   • Inset-gradient mode (default): white card + neutral stroke +
+  //     absolutely-positioned 4px-inset gradient overlay (rendered
+  //     below). Mirrors Decision Overview / freeze status banner.
+  //   • Legacy mode: full-card pinkish gradient with a primary
+  //     border tint, matching the historical approval-page look.
+  const containerClass = isPending
+    ? isSelected
+      ? USE_INSET_GRADIENT_ON_APPROVAL_CARDS
+        ? // Selected + inset: keep the colored border + ring so the
+          // "queued for batch action" anchor reads clearly; the
+          // gradient itself is the stronger of the two presets.
+          'border-[var(--primary-base)]/40 bg-white ring-1 ring-[var(--primary-base)]/25'
+        : 'border-[var(--primary-base)]/50 bg-gradient-to-b from-[var(--primary-alpha-16)] via-[var(--primary-alpha-10)] to-[var(--white-0)] ring-1 ring-[var(--primary-base)]/30'
+      : USE_INSET_GRADIENT_ON_APPROVAL_CARDS
+        ? // Unselected + inset: neutral stroke, white card surface.
+          // All color signal comes from the inset overlay below.
+          'border-[var(--stroke-soft-200)] bg-white'
+        : 'border-[var(--primary-base)]/20 bg-gradient-to-b from-[var(--primary-lighter)]/55 via-[var(--white-0)] to-[var(--white-0)]'
+    : 'border-[var(--stroke-soft-200)] bg-white opacity-75';
+
   return (
     <motion.li
       variants={fadeUpSm}
       data-card-hover
-      className={`group overflow-hidden rounded-[12px] border shadow-[0_1px_2px_rgba(23,23,23,0.04)] hover:shadow-[0_4px_12px_rgba(23,23,23,0.06)] transition-colors ${
-        isPending
-          ? isSelected
-            ? // Selected pending: stronger orange tint + thicker
-              // accent ring. Visually anchors the row as "queued for
-              // a batch action."
-              'border-[var(--primary-base)]/50 bg-gradient-to-b from-[var(--primary-alpha-16)] via-[var(--primary-alpha-10)] to-[var(--white-0)] ring-1 ring-[var(--primary-base)]/30'
-            : 'border-[var(--primary-base)]/20 bg-gradient-to-b from-[var(--primary-lighter)]/55 via-[var(--white-0)] to-[var(--white-0)]'
-          : 'border-[var(--stroke-soft-200)] bg-white opacity-75'
-      }`}
+      className={`group relative overflow-hidden rounded-[12px] border shadow-[0_1px_2px_rgba(23,23,23,0.04)] hover:shadow-[0_4px_12px_rgba(23,23,23,0.06)] transition-colors ${containerClass}`}
     >
+      {/* Inset tinted gradient overlay — same shape as the Decision
+          Overview hero. Only rendered for pending cards and only
+          when the flag is on, so resolved (approved/rejected) cards
+          stay clean neutral. */}
+      {USE_INSET_GRADIENT_ON_APPROVAL_CARDS && isPending && (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-1 rounded-[8px]"
+          style={{
+            background: isSelected
+              ? APPROVAL_CARD_GRADIENTS.selected
+              : APPROVAL_CARD_GRADIENTS.pending,
+          }}
+        />
+      )}
 
-      <div className="p-5">
+      <div className="relative p-5">
         {/* Top row: avatar + agent + meta on left, status pill on right */}
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
@@ -761,7 +814,7 @@ function ApprovalItem({
                 </span>
               </label>
             )}
-            <AgentAvatar name={contextUser} size="sm" />
+            <AgentMark name={contextUser} size="sm" />
             <div className="min-w-0">
               <p className="truncate text-[13.5px] font-semibold text-[var(--neutral-strong-950)]">
                 {contextUser}

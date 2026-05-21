@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ToastProvider } from "@/components/ui/Toast";
+import AgentationWidget from "@/components/dev/AgentationWidget";
 import "./globals.css";
 
 const geist = Geist({
@@ -125,6 +126,11 @@ export default function RootLayout({
       </head>
       <body className="min-h-full bg-[var(--bg-app)] text-[var(--text-strong)] antialiased">
         <ToastProvider>{children}</ToastProvider>
+        {/* Floating annotation toolbar — dev-only. Renders null in
+            production via NODE_ENV guard. Lets you click any element
+            and leave a note that I'll pick up via the agentation
+            MCP bridge. */}
+        <AgentationWidget />
       </body>
     </html>
   );

@@ -22,7 +22,7 @@ import { useUser } from '@/lib/hooks';
 import { SessionAction } from '@/lib/types';
 import { formatFullTimestamp, truncate } from '@/lib/utils';
 import Topbar from '@/components/layout/Topbar';
-import AgentAvatar from '@/components/ui/AgentAvatar';
+import { AgentMark } from '@/components/ui/AgentMark';
 import DecisionBadge, { decisionColor } from '@/components/ui/DecisionBadge';
 import EmptyState from '@/components/ui/EmptyState';
 import ErrorBanner from '@/components/ui/ErrorBanner';
@@ -533,7 +533,7 @@ function AuditRow({
         <TD>
           <div className="flex items-center gap-2">
             <DecisionIcon decision={event.decision} />
-            <AgentAvatar name={event.agent_name || ''} size="xs" />
+            <AgentMark name={event.agent_name || ''} size="xs" />
             <span className="font-medium text-[var(--neutral-strong-950)]">
               {event.agent_name || 'Unknown'}
             </span>

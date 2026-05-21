@@ -28,7 +28,7 @@ import {
   truncate,
 } from '@/lib/utils';
 import Topbar from '@/components/layout/Topbar';
-import AgentAvatar from '@/components/ui/AgentAvatar';
+import { AgentMark } from '@/components/ui/AgentMark';
 import DecisionBadge, { decisionColor } from '@/components/ui/DecisionBadge';
 import EmptyState from '@/components/ui/EmptyState';
 import ErrorBanner from '@/components/ui/ErrorBanner';
@@ -678,7 +678,7 @@ function ActivityRow({ run }: { run: SessionAction }) {
         className="flex items-center gap-3 px-6 py-3.5 transition-colors hover:bg-[var(--primary-lighter)]/60"
       >
         <DecisionIcon decision={run.decision} />
-        <AgentAvatar name={run.agent_name || ''} size="xs" />
+        <AgentMark name={run.agent_name || ''} size="xs" />
         <span className="shrink-0 text-[13px] font-medium text-[var(--neutral-strong-950)]">
           {run.agent_name || 'Unknown'}
         </span>
@@ -743,7 +743,7 @@ function ApprovalRow({
           style={{ backgroundColor: 'var(--primary-base)', color: 'var(--primary-base)' }}
           aria-hidden
         />
-        <AgentAvatar name={agentName} size="xs" />
+        <AgentMark name={agentName} size="xs" />
         <span className="truncate text-[12.5px] font-semibold text-[var(--neutral-strong-950)]">
           {agentName}
         </span>
