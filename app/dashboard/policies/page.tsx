@@ -308,7 +308,7 @@ export default function PoliciesPage() {
               </p>
             </div>
           </div>
-          <a href="mailto:deals@runaegis.com">
+          <a href="mailto:deals@runaegis.co">
             <Button variant="primary">Contact Sales</Button>
           </a>
         </motion.div>

@@ -671,7 +671,7 @@ export function installPreviewApi() {
   // /dashboard/rooms rejects and the whole detail panel goes empty.
   // Format mirrors the real shape: a stable per-room slug + opaque token.
   api.getRoomIntegrationConfig = async (roomId: string) => ({
-    url: `https://mcp.runaegis.com/r/${roomId}/aeg_${roomId.replace('room_', '')}_preview_token`,
+    url: `https://mcp.runaegis.co/r/${roomId}/aeg_${roomId.replace('room_', '')}_preview_token`,
   });
   api.createRoom = async (repoId: string) => ({
     id: `room_${Date.now()}`,
@@ -711,13 +711,13 @@ export function installPreviewApi() {
   api.saveUser = async (u) => ({
     ...u,
     id: 'preview-user',
-    email: 'preview@runaegis.com',
+    email: 'preview@runaegis.co',
     created_at: new Date().toISOString(),
   });
   api.getUserDetails = async () => ({
     id: 'preview-user',
     username: 'demo',
-    email: 'preview@runaegis.com',
+    email: 'preview@runaegis.co',
     github_user_id: 0,
   });
   api.getOnboardingStep = async () => ({ onboarding_step: 6 });

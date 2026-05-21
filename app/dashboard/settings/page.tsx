@@ -1411,7 +1411,7 @@ function BillingSection({ reduce }: { reduce: boolean }) {
             <UsageBlock label="Tokens" used={184310}  cap={500000} suffix="this month" />
           </div>
           <div className="mt-5 flex items-center justify-end">
-            <a href="mailto:deals@runaegis.com">
+            <a href="mailto:deals@runaegis.co">
               <Button variant="primary">Upgrade plan</Button>
             </a>
           </div>
@@ -1539,7 +1539,7 @@ function DangerSection({
           actionLabel="Delete account"
           icon={Trash2}
           onAction={() =>
-            alert('Account deletion is not yet enabled. Contact support@runaegis.com.')
+            alert('Account deletion is not yet enabled. Contact support@runaegis.co.')
           }
           permanent
         />

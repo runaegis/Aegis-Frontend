@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { api, AuthError } from '@/lib/api';
 import { useRouter } from 'next/navigation';
 import { useUser } from '@/lib/hooks';
@@ -10,6 +11,15 @@ import { CommandPalette } from '@/components/ui/CommandPalette';
 import { DemoWelcomeModal } from '@/components/ui/DemoWelcomeModal';
 import { installPreviewApi } from '@/lib/preview-data';
 import { DashboardDataProvider } from '@/lib/dashboardDataContext';
+
+// AgentationWidget is dev-only. Loaded via next/dynamic with ssr:false so
+// the agentation library never ends up in a prod bundle, even if the dev
+// guard inside the widget were somehow bypassed. The bottom-of-tree mount
+// also keeps it out of any server-rendered HTML.
+const AgentationWidget = dynamic(
+  () => import('@/components/dev/AgentationWidget'),
+  { ssr: false },
+);
 
 // Demo mode — production-safe "sample workspace" layer.
 //
@@ -60,7 +70,7 @@ function isFirstVisit(): boolean {
 const DEMO_USER = {
   id: 'demo-user',
   username: 'demo',
-  email: 'demo@runaegis.com',
+  email: 'demo@runaegis.co',
   github_user_id: 0,
 };
 
@@ -221,6 +231,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           once at the dashboard layout level so it's available on every
           route under /dashboard. */}
       <CommandPalette />
+      {/* Agentation — floating annotation toolbar for in-context UX
+          feedback. Mounted once at the dashboard level so it works
+          across every /dashboard route. Dev-only: the widget self-gates
+          on NODE_ENV and the dynamic import keeps the agentation library
+          out of prod bundles entirely. */}
+      {process.env.NODE_ENV !== 'production' && <AgentationWidget />}
     </DashboardDataProvider>
   );
 }

@@ -241,7 +241,7 @@ export function UserMenu({ pendingApprovals = 0, className }: UserMenuProps) {
             {/* Menu group 2 — external help */}
             <div className="p-1">
               <Item
-                href="https://docs.runaegis.com"
+                href="https://docs.runaegis.co"
                 external
                 icon={HelpCircle}
                 label="Documentation"

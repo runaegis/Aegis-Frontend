@@ -227,7 +227,7 @@ export function CommandPalette() {
         group: 'External' as const,
         perform: () => {
           setOpen(false);
-          window.open('https://docs.runaegis.com', '_blank', 'noopener');
+          window.open('https://docs.runaegis.co', '_blank', 'noopener');
         },
       },
       {
@@ -238,7 +238,7 @@ export function CommandPalette() {
         group: 'External' as const,
         perform: () => {
           setOpen(false);
-          window.location.href = 'mailto:support@runaegis.com';
+          window.location.href = 'mailto:support@runaegis.co';
         },
       },
     ];
