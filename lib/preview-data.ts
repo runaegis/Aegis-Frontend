@@ -673,22 +673,63 @@ export function installPreviewApi() {
   api.getRoomIntegrationConfig = async (roomId: string) => ({
     url: `https://mcp.runaegis.co/r/${roomId}/aeg_${roomId.replace('room_', '')}_preview_token`,
   });
-  api.createRoom = async (repoId: string) => ({
-    id: `room_${Date.now()}`,
-    room_id: `room_${Date.now()}`,
-    repo_name: repoId,
-    owner_username: 'preview-user',
-    created_at: new Date().toISOString(),
-  });
-  api.createRoomInvite = async (_roomId, payload) => ({
-    id: `inv_${Date.now()}`,
-    invite_code: `aeg-${Math.random().toString(36).slice(2, 8)}`,
-    room_id: _roomId,
-    max_uses: payload.max_uses ?? null,
-    used_count: 0,
-    expires_at: payload.expires_at ?? null,
-    created_at: new Date().toISOString(),
-  });
+  // Create a room AND seed it correctly into the in-memory mock store
+  // so the user-just-created flow works end-to-end:
+  //   • getMyRooms() returns the new room (so the RoomSwitcher + index
+  //     show it immediately)
+  //   • getRoomDetails(newId) returns the right repo (not PREVIEW_ROOMS[0]
+  //     fallback)
+  //   • getRoomMembers(newId) returns the creator as OWNER (so the demo
+  //     user shows as OWNER in the room header, NOT the DEVELOPER fallback
+  //     RoomContext was resolving to)
+  //   • role: 'OWNER' on the returned summary so RoomContext picks it up
+  //     immediately without a refetch race
+  // Net effect: creating a new room surfaces all OWNER-only affordances
+  // (Generate invite, etc.) the same way the seeded demo rooms do.
+  api.createRoom = async (repoId: string) => {
+    const newId = `room_${Date.now()}`;
+    const createdAt = new Date().toISOString();
+    const newRoom: RoomSummary = {
+      id: newId,
+      room_id: newId,
+      repo_name: repoId,
+      owner_username: 'demo',
+      role: 'OWNER',
+      created_at: createdAt,
+    };
+    PREVIEW_ROOMS.push(newRoom);
+    PREVIEW_ROOM_DETAILS[newId] = { ...newRoom };
+    PREVIEW_MEMBERS[newId] = [
+      {
+        id: `m_${Date.now()}`,
+        user_id: 'preview-user',
+        username: 'demo',
+        role: 'OWNER',
+        joined_at: createdAt,
+      },
+    ];
+    PREVIEW_INVITES[newId] = [];
+    PREVIEW_ROOM_ACTIONS[newId] = [];
+    return newRoom;
+  };
+  // Create an invite AND persist it into PREVIEW_INVITES so a refetch
+  // of getRoomInvites(roomId) actually returns the new row. Without
+  // the push, the Members tab's "Active invites" list stayed empty
+  // after Generate, even though the toast claimed success.
+  api.createRoomInvite = async (_roomId, payload) => {
+    const newInvite: RoomInvite = {
+      id: `inv_${Date.now()}`,
+      invite_code: `aeg-${Math.random().toString(36).slice(2, 8)}`,
+      room_id: _roomId,
+      max_uses: payload.max_uses ?? null,
+      used_count: 0,
+      expires_at: payload.expires_at ?? null,
+      created_at: new Date().toISOString(),
+    };
+    if (!PREVIEW_INVITES[_roomId]) PREVIEW_INVITES[_roomId] = [];
+    PREVIEW_INVITES[_roomId].unshift(newInvite);
+    return newInvite;
+  };
   api.joinRoom = async () => ({ success: true });
 
   api.getFreezeWindows = async () => PREVIEW_FREEZE_WINDOWS;
