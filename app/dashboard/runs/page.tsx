@@ -345,7 +345,7 @@ function RunRow({
   return (
     <>
       <TR clickable isExpanded={stillExpanded} onClick={onToggle}>
-        <TD>
+        <TD className="max-w-[220px]">
           <div className="flex items-center gap-2.5">
             <span
               className="inline-block h-1.5 w-1.5 shrink-0 rounded-full"
@@ -364,7 +364,7 @@ function RunRow({
         <TD className="text-[12.5px] font-normal text-[var(--neutral-sub-600)]">
           {run.target_repo}
         </TD>
-        <TD>
+        <TD className="max-w-[200px]">
           {run.target_branch ? (
             <CodeChip>{run.target_branch}</CodeChip>
           ) : null}
@@ -381,8 +381,8 @@ function RunRow({
             {prUrl && <PullRequestLink url={prUrl} variant="chip" />}
           </div>
         </TD>
-        <TD className="text-right tabular-nums">
-          <div className="flex items-center justify-end gap-2 whitespace-nowrap">
+        <TD className="whitespace-nowrap text-right tabular-nums">
+          <div className="flex flex-col items-end gap-1">
             <RelativeTime
               timestamp={run.timestamp}
               className="whitespace-nowrap text-[12px] text-[var(--neutral-soft-400)]"
