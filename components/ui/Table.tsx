@@ -71,7 +71,14 @@ export function THead({
     <thead
       className={cn(
         // Desktop (lg+): the table wrapper is overflow-visible, so sticky
-        // anchors against the page — pin under the 56px Topbar.
+        // anchors against the page — pin under the Topbar. The exact offset
+        // is layered: by default we pin at the 56px Topbar bottom, but
+        // any ancestor that introduces an extra sticky strip below the
+        // Topbar (e.g. the RoomTabs strip on /dashboard/rooms/[id]/*)
+        // overrides `--table-thead-top` to push the header further down so
+        // it lands BELOW that strip instead of colliding with it. Default
+        // 56px keeps every existing page working unchanged.
+        //
         // Below lg: the wrapper is a horizontal scroll container, so
         // sticky anchors within it; top-0 keeps the header flush with
         // the wrapper edge instead of leaving a 56px gap.
@@ -82,7 +89,7 @@ export function THead({
         // bg was leaking past the wrapper's clip and hiding the curved
         // border at the top corners in some browsers (sticky + clip
         // interaction).
-        'sticky top-0 z-10 backdrop-blur-sm lg:top-[56px]',
+        'sticky top-0 z-10 backdrop-blur-sm lg:top-[var(--table-thead-top,56px)]',
         // Subtle bottom border matching the table's outer stroke — just
         // enough to anchor the header without competing with the card edge.
         '[&_tr]:shadow-[inset_0_-1px_0_0_var(--stroke-soft-200)]',

@@ -33,7 +33,7 @@ import { Badge } from '@/components/ui/Badge';
 import { GenerativeAvatar } from '@/components/ui/GenerativeAvatar';
 import { Input } from '@/components/ui/Input';
 import { Skeleton } from '@/components/ui/Skeleton';
-import { cn } from '@/lib/utils';
+import { cn, getRoomRoleBadgeTone } from '@/lib/utils';
 
 // Emphasized-decel easing — matches UserMenu so the two popovers
 // feel like the same family of motion.
@@ -148,6 +148,14 @@ export function RoomSwitcher({
           <p className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[var(--neutral-soft-400)]">
             Room
           </p>
+          {/* Role badge sits on the title line, not as a sibling of
+              the eyebrow+title block. Placing it next to the title
+              keeps its baseline aligned with the room name; the
+              previous layout vertically centered it against the
+              whole 2-line block, which made it visually float above
+              the title. Tone now reflects role hierarchy (OWNER →
+              brand orange, ADMIN → amber, DEVELOPER → info blue)
+              instead of a single primary tone for every role. */}
           <div className="mt-0.5 flex items-center gap-2">
             <h1 className="max-w-[420px] truncate text-[20px] font-semibold leading-[1.15] tracking-[-0.02em] text-[var(--neutral-strong-950)]">
               {displayName}
@@ -157,13 +165,13 @@ export function RoomSwitcher({
               strokeWidth={2}
               aria-hidden
             />
+            {role && (
+              <Badge tone={getRoomRoleBadgeTone(role)} uppercase>
+                {role}
+              </Badge>
+            )}
           </div>
         </div>
-        {role && (
-          <Badge tone="primary" uppercase className="ml-2">
-            {role}
-          </Badge>
-        )}
       </button>
 
       <AnimatePresence>

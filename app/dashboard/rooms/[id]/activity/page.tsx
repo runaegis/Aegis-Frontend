@@ -178,22 +178,30 @@ export default function RoomActivityPage() {
         </div>
       </motion.div>
 
+      {/* The wrapper here owns animation only — no card chrome. Card
+          chrome lives ON the branch that needs it: loading/empty
+          states render their own bordered surface, while the Table
+          branch lets <Table> provide the card. Wrapping both in an
+          outer overflow:hidden card would (a) double-stack borders
+          and (b) trap the sticky <thead> inside its containing block,
+          which is what made the header look "broken" before. */}
       <motion.div
         initial={reduce ? false : { opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: DUR.slow, ease: EASE.out, delay: 0.06 }}
-        className="overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]"
       >
         {logsLoading && data.items.length === 0 ? (
-          <div className="p-10 text-center text-[12.5px] text-[var(--neutral-soft-400)]">
+          <div className="rounded-[12px] border border-[var(--stroke-soft-200)] bg-white p-10 text-center text-[12.5px] text-[var(--neutral-soft-400)] shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
             Loading activity…
           </div>
         ) : data.items.length === 0 ? (
-          <EmptyState
-            icon={<History className="h-5 w-5" />}
-            title="No activity yet"
-            description="Once teammates run agents against this room, every action will show up here with the user that triggered it."
-          />
+          <div className="overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
+            <EmptyState
+              icon={<History className="h-5 w-5" />}
+              title="No activity yet"
+              description="Once teammates run agents against this room, every action will show up here with the user that triggered it."
+            />
+          </div>
         ) : (
           <PaginatedLayout
             total={data.total}

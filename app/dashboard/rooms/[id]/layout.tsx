@@ -40,8 +40,17 @@ export default function RoomScopeLayout({
 
   return (
     <RoomProvider roomId={roomId}>
-      <RoomScopeInner />
-      {children}
+      {/* The room scope introduces an extra sticky strip (RoomTabs)
+          below the Topbar. Any sticky <thead> inside a room subpage
+          needs to land BELOW that strip, not at the default 56px
+          where it would collide with RoomTabs. We declare the
+          override here so every room subpage's tables get it for
+          free, no per-page wiring. 56 (Topbar) + 40 (RoomTabs h-10)
+          + 1 (its border-b) = 97. */}
+      <div style={{ '--table-thead-top': '97px' } as React.CSSProperties}>
+        <RoomScopeInner />
+        {children}
+      </div>
     </RoomProvider>
   );
 }
@@ -100,10 +109,14 @@ function RoomScopeInner() {
         <div className="border-b border-[var(--stroke-soft-200)] bg-[var(--white-0)]">
           <div className="mx-auto max-w-[1320px] px-4 py-3 sm:px-6 lg:px-8">
             {/* Breadcrumb — small, subtle, but the icon-only back
-                arrow is a real affordance the user can click. */}
+                arrow is a real affordance the user can click.
+                mb-5 (not 3) so the breadcrumb has visible breathing
+                room from the RoomSwitcher trigger below, which has
+                a -my-1.5 negative margin for its hover effect that
+                otherwise pulls it too tight against the breadcrumb. */}
             <nav
               aria-label="Breadcrumb"
-              className="mb-3 flex items-center gap-1 text-[11.5px] text-[var(--neutral-soft-400)]"
+              className="mb-5 flex items-center gap-1 text-[11.5px] text-[var(--neutral-soft-400)]"
             >
               <Link
                 href="/dashboard/rooms"

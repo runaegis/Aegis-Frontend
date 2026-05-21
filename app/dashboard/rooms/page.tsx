@@ -54,7 +54,7 @@ import { RelativeTime } from '@/components/ui/RelativeTime';
 import { RoomsSkeleton } from '@/components/ui/PageSkeletons';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
-import { cn } from '@/lib/utils';
+import { cn, getRoomRoleBadgeTone } from '@/lib/utils';
 import { fadeUp, fadeUpSm, staggerContainer } from '@/lib/motion';
 
 const getRoomId = (room: RoomSummary): string =>
@@ -622,7 +622,11 @@ export default function RoomsIndexPage() {
                         </p>
                       </div>
                       {room.role && (
-                        <Badge tone="primary" uppercase className="text-[10.5px]">
+                        <Badge
+                          tone={getRoomRoleBadgeTone(room.role)}
+                          uppercase
+                          className="text-[10.5px]"
+                        >
                           {room.role}
                         </Badge>
                       )}

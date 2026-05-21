@@ -48,6 +48,7 @@ import { useUser } from '@/lib/hooks';
 import { useRoom } from '@/lib/roomContext';
 import type { RoomInvite } from '@/lib/types';
 import { fadeUp, staggerContainer } from '@/lib/motion';
+import { getRoomRoleBadgeTone } from '@/lib/utils';
 
 const getInviteCode = (invite: RoomInvite): string =>
   String(invite.invite_code || invite.code || invite.id || '');
@@ -270,7 +271,17 @@ export default function RoomMembersPage() {
                         </p>
                       )}
                     </div>
-                    <Badge tone="primary" uppercase className="text-[10.5px]">
+                    {/* Role tone reflects role hierarchy: OWNER →
+                        brand orange (highest authority), ADMIN →
+                        warning amber, DEVELOPER → info blue. Helps
+                        users scan a long member list and pick out
+                        leads/admins at a glance instead of seeing
+                        one uniform color. */}
+                    <Badge
+                      tone={getRoomRoleBadgeTone(member.role)}
+                      uppercase
+                      className="text-[10.5px]"
+                    >
                       {member.role || 'member'}
                     </Badge>
                     {/* Disabled "..." button — surfaces that
