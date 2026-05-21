@@ -57,23 +57,26 @@ function aegisBenchMultiplier(sessionId: string): number {
   return 1.5 + u * 0.2;
 }
 
-/** Chart series palette — brand orange + AlignUI feature purple.
+/** Chart series palette — brand orange + muted plum.
  *
- *  Previously the second series used near-black (#171717 light /
- *  #fafafa dark) for "monochromatic neutral + brand orange." That
- *  read flat — heavy black bars dominated the chart and the dark-
- *  mode white was equally aggressive. Replacing with the AlignUI
- *  feature purple (#7d52f4) which is already in the design system
- *  (Badge tone="feature", semantic feature-* tokens) so the chart
- *  doesn't introduce a one-off color.
+ *  Two iterations to get here:
  *
- *  Orange + purple is split-complementary on the color wheel —
- *  Mode / Looker / Plotly all use this pairing for "two-series
- *  comparison" charts. No blue (per the no-AI-blue rule).
+ *    1. Original: monochromatic neutral (#171717 / #fafafa) + orange.
+ *       Black bars dominated, white in dark mode burned retinas.
+ *    2. First swap: AlignUI feature purple (#7d52f4 / #a78bfa). Read
+ *       as "too bright" + "too blue" — that hue sits at HSL 258° with
+ *       88% saturation, which the brain reads as a blue-leaning
+ *       indigo, not a warm purple.
+ *    3. This pass: a muted warm plum (#7c5e8c / #b39bcc). Hue shifted
+ *       to ~282° (away from blue, toward magenta) and saturation
+ *       dropped to ~19%, so the color reads as sophisticated and
+ *       distinctly purple — closer to Stripe / Modern Treasury chart
+ *       palettes than the bright violet/indigo that the first swap
+ *       landed on.
  *
- *  Dark mode uses a brighter violet (~Tailwind violet-400) so the
- *  bar fills read clearly on the darker page bg without burning
- *  retinas like the previous near-white.
+ *  Orange + muted plum is still split-complementary; the relationship
+ *  to the brand color is intact, just at a calmer volume so the
+ *  brand-orange series remains the prominent identity in every chart.
  *
  *  Configured via shadcn's ChartConfig: each series has a `theme`
  *  block that the ChartContainer compiles into scoped CSS variables
@@ -83,7 +86,7 @@ function aegisBenchMultiplier(sessionId: string): number {
 const chartConfig = {
   input: {
     label: 'Input',
-    theme: { light: '#7d52f4', dark: '#a78bfa' },
+    theme: { light: '#7c5e8c', dark: '#b39bcc' },
   },
   output: {
     label: 'Output',
@@ -91,7 +94,7 @@ const chartConfig = {
   },
   without_aegis: {
     label: 'Without Aegis',
-    theme: { light: '#7d52f4', dark: '#a78bfa' },
+    theme: { light: '#7c5e8c', dark: '#b39bcc' },
   },
   with_aegis: {
     label: 'With Aegis',
@@ -400,7 +403,7 @@ export default function TokenSpenditurePage() {
         >
           <div className="grid grid-cols-2 divide-y divide-[var(--stroke-soft-200)] lg:grid-cols-4 lg:divide-x lg:divide-y-0">
             <Stat label="Total tokens" value={summary.total} />
-            <Stat label="Input tokens" value={summary.input} dot="var(--feature)" />
+            <Stat label="Input tokens" value={summary.input} dot="var(--chart-plum)" />
             <Stat label="Output tokens" value={summary.output} dot="var(--primary-base)" />
             <Stat label="Sessions used" value={summary.sessions} />
           </div>
@@ -449,7 +452,7 @@ export default function TokenSpenditurePage() {
                   </p>
                 </div>
                 <div className="flex shrink-0 flex-wrap items-center gap-3 text-[11px]">
-                  <Legend label="Input" color="var(--feature)" />
+                  <Legend label="Input" color="var(--chart-plum)" />
                   <Legend label="Output" color="var(--primary-base)" />
                 </div>
               </div>
@@ -596,7 +599,7 @@ export default function TokenSpenditurePage() {
                   </p>
                 </div>
                 <div className="flex shrink-0 flex-wrap items-center gap-3 text-[11px]">
-                  <Legend label="Without Aegis" color="var(--feature)" />
+                  <Legend label="Without Aegis" color="var(--chart-plum)" />
                   <Legend label="With Aegis" color="var(--primary-base)" />
                 </div>
               </div>

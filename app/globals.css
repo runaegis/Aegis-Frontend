@@ -40,6 +40,12 @@
   --feature-lighter:   #efebff;
   --feature-dark:      #351a75;
 
+  /* Chart-only muted plum. Distinct from --feature (bright AlignUI
+     purple, used in Rewrite badges) because chart fills need lower
+     saturation to read well at scale. Pairs with the brand orange
+     in Token Spenditure's two-series comparison charts. */
+  --chart-plum:        #7c5e8c;
+
   --information:       #335cff;
   --info-lighter:      #ebefff;
   --info-dark:         #162060;
@@ -158,6 +164,10 @@
   --feature:           #8c71f6;
   --feature-lighter:   rgba(140, 113, 246, 0.14);
   --feature-dark:      #a78bfa;  /* lifted lilac — REWRITE badge legibility */
+
+  /* Dark-mode chart plum — lifted to soft mauve so it reads on the
+     dark page bg without burning like the previous near-white did. */
+  --chart-plum:        #b39bcc;
 
   --information:       #4d82ff;
   --info-lighter:      rgba(77, 130, 255, 0.14);
