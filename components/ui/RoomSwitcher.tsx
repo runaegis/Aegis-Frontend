@@ -210,7 +210,12 @@ export function RoomSwitcher({
               </div>
             )}
 
-            <div className="max-h-[320px] overflow-y-auto p-1">
+            {/* space-y-0.5 between rows so the hover bg on one item
+                and the active bg on another don't visually touch.
+                Without it the two surfaces shared an edge and read as
+                one continuous fill, which made it hard to see which
+                row was active and which was just hovered. */}
+            <div className="max-h-[320px] space-y-0.5 overflow-y-auto p-1">
               {loading ? (
                 <div className="space-y-1 p-1">
                   {Array.from({ length: 3 }).map((_, i) => (

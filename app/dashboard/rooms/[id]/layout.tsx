@@ -107,7 +107,12 @@ function RoomScopeInner() {
           tabbed sub-IA we just introduced. */}
       {!error && (
         <div className="border-b border-[var(--stroke-soft-200)] bg-[var(--white-0)]">
-          <div className="mx-auto max-w-[1320px] px-4 py-3 sm:px-6 lg:px-8">
+          {/* py-4 (not py-3) so the RoomSwitcher trigger's hover state
+              has real breathing room from the bottom border below.
+              The trigger uses -my-1.5 to widen its hover rect past
+              the title; with py-3 that left only ~6px of clearance,
+              which felt cramped when hovering. py-4 gives ~10px. */}
+          <div className="mx-auto max-w-[1320px] px-4 py-4 sm:px-6 lg:px-8">
             {/* Breadcrumb — small, subtle, but the icon-only back
                 arrow is a real affordance the user can click.
                 mb-5 (not 3) so the breadcrumb has visible breathing

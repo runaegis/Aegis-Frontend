@@ -69,7 +69,7 @@ export function RoomTabs({ roomId, className }: RoomTabsProps) {
       data-scrollable
     >
       <nav
-        className="mx-auto flex max-w-[1320px] items-center gap-4 overflow-x-auto px-4 sm:px-6 lg:px-8"
+        className="mx-auto flex max-w-[1320px] items-center gap-3 overflow-x-auto px-4 sm:px-6 lg:px-8"
         aria-label="Room sections"
       >
         {TABS.map((tab) => {
