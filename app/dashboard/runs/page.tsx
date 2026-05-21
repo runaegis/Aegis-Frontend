@@ -6,18 +6,14 @@ import Link from 'next/link';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { DUR, EASE, fadeUp, staggerContainer } from '@/lib/motion';
 import { useUser } from '@/lib/hooks';
-import { Metrics, SessionAction } from '@/lib/types';
+import { SessionAction } from '@/lib/types';
 import { useDashboardData } from '@/lib/dashboardDataContext';
 import {
   blastRadiusRank,
   extractPullRequestUrl,
   formatExecutionTimeMs,
   formatFullTimestamp,
-  formatPolicy,
-  formatRelativeTime,
-  normalizePolicy,
   readBlastRadius,
-  truncate,
 } from '@/lib/utils';
 import { RelativeTime } from '@/components/ui/RelativeTime';
 import Topbar from '@/components/layout/Topbar';
@@ -86,7 +82,11 @@ export default function RunsPage() {
   // (server order — newest-first from DashboardDataProvider). Clicking
   // a sortable column header cycles asc → desc → null. No backend
   // change: we're just reordering the in-memory filtered array.
-  type SortKey = 'agent' | 'tool' | 'repo' | 'policy' | 'risk' | 'decision' | 'time';
+  //
+  // `risk` sorts the combined Risk column by blast-radius severity rank
+  // (most severe last in asc / first in desc) — more product-meaningful
+  // than sorting by the textual policy verdict.
+  type SortKey = 'agent' | 'tool' | 'repo' | 'risk' | 'decision' | 'time';
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<SortDirection>(null);
   const onSort = useCallback(
@@ -111,7 +111,6 @@ export default function RunsPage() {
         case 'agent':    return r.agent_name?.toLowerCase() ?? '';
         case 'tool':     return r.tool_name?.toLowerCase() ?? '';
         case 'repo':     return r.target_repo?.toLowerCase() ?? '';
-        case 'policy':   return normalizePolicy(r.policy);
         case 'risk':     return blastRadiusRank(readBlastRadius(r));
         case 'decision': return r.decision ?? '';
         case 'time':     return new Date(r.timestamp).getTime();
@@ -259,8 +258,11 @@ export default function RunsPage() {
                   <TH sortable sortDirection={dirFor('tool')} onSort={() => onSort('tool')}>Tool</TH>
                   <TH sortable sortDirection={dirFor('repo')} onSort={() => onSort('repo')}>Repository</TH>
                   <TH>Branch</TH>
-                  <TH sortable sortDirection={dirFor('policy')} onSort={() => onSort('policy')}>Policy</TH>
-                  <TH sortable sortDirection={dirFor('risk')} onSort={() => onSort('risk')}>Blast radius</TH>
+                  {/* Combined Policy + Blast radius column — sort cycles
+                      through blast-radius severity (more useful than the
+                      free-form policy text). Hovering the cell shows both
+                      chip tooltips with the underlying values. */}
+                  <TH sortable sortDirection={dirFor('risk')} onSort={() => onSort('risk')}>Risk</TH>
                   <TH sortable sortDirection={dirFor('decision')} onSort={() => onSort('decision')}>Decision</TH>
                   <TH sortable sortDirection={dirFor('time')} onSort={() => onSort('time')} className="text-right">Time</TH>
                   <TH aria-label="Expand" className="w-8" />
@@ -370,10 +372,14 @@ function RunRow({
           ) : null}
         </TD>
         <TD className="whitespace-nowrap">
-          <PolicyChip policy={run.policy} showEmpty />
-        </TD>
-        <TD className="whitespace-nowrap">
-          <BlastRadiusChip value={readBlastRadius(run)} showEmpty />
+          {/* Stacked Policy + Blast radius — single column header "Risk".
+              Both chips render nothing when their underlying value is
+              missing, so empty cells stay blank instead of leaving
+              vertical whitespace. */}
+          <div className="flex flex-col items-start gap-1">
+            <PolicyChip policy={run.policy} />
+            <BlastRadiusChip value={readBlastRadius(run)} />
+          </div>
         </TD>
         <TD className="whitespace-nowrap">
           <div className="flex flex-col items-start gap-1">
@@ -407,7 +413,7 @@ function RunRow({
         onExitComplete={() => setStillExpanded(false)}
       >
       {isExpanded && (
-        <TRExpanded key="expanded" colSpan={9}>
+        <TRExpanded key="expanded" colSpan={8}>
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
             <div>
               <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.05em] text-[var(--neutral-soft-400)]">
@@ -422,13 +428,10 @@ function RunRow({
                   No summary provided
                 </p>
               )}
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <p className="mr-1 text-[10px] font-semibold uppercase tracking-[0.05em] text-[var(--neutral-soft-400)]">
-                  Risk
-                </p>
-                <PolicyChip policy={run.policy} showEmpty />
-                <BlastRadiusChip value={readBlastRadius(run)} showEmpty />
-              </div>
+              {/* Policy + Blast radius are already in the row's Risk
+                  column — no need to repeat them inside the expanded
+                  panel. Keeps the inspector focused on details not
+                  visible at the row level. */}
             </div>
             <div className="grid grid-cols-2 gap-3 text-[12px] md:grid-cols-4">
               <div>
