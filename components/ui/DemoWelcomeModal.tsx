@@ -125,7 +125,10 @@ export function DemoWelcomeModal({
               <div className="space-y-2.5 p-5 pb-6">
                 <OptionCard
                   icon={
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-[var(--primary-alpha-10)] text-[var(--primary-base)]">
+                    {/* Canonical icon box — white surface + 1px ring +
+                        soft shadow. Brand identity comes through the
+                        orange outline icon, not the box fill. */}
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-white text-[var(--primary-base)] shadow-[0_1px_2px_rgba(23,23,23,0.05)] ring-1 ring-[var(--stroke-soft-200)]">
                       <Sparkles className="h-5 w-5" strokeWidth={2.25} />
                     </div>
                   }
@@ -137,7 +140,13 @@ export function DemoWelcomeModal({
                 />
                 <OptionCard
                   icon={
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-[var(--neutral-weak-50)] text-[var(--neutral-strong-950)] text-[13px] font-semibold">
+                    {/* Same canonical icon box, neutral icon color for
+                        the "secondary path" — the differentiator from
+                        the primary card is the ICON tone, not the box
+                        fill. Keeps the two options visually balanced
+                        instead of one bright tinted square next to
+                        one drab gray one. */}
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-white text-[var(--neutral-strong-950)] text-[13px] font-semibold shadow-[0_1px_2px_rgba(23,23,23,0.05)] ring-1 ring-[var(--stroke-soft-200)]">
                       {user
                         ? getInitials(user.username)
                         : <UserIcon className="h-5 w-5" strokeWidth={2} />}

@@ -322,7 +322,13 @@ function QuickAction({
       href={href}
       className="group flex items-start gap-3 rounded-[12px] border border-[var(--stroke-soft-200)] bg-white p-4 shadow-[0_1px_2px_rgba(23,23,23,0.04)] transition-all hover:border-[var(--stroke-sub-300)] hover:shadow-[0_4px_12px_rgba(23,23,23,0.06)]"
     >
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-[var(--primary-alpha-10)] text-[var(--primary-base)]">
+      {/* Canonical icon box — white surface + 1px ring + soft shadow,
+          orange outline icon. Matches the EmptyState pattern the user
+          called out, just scaled down for inline use. Replaces the
+          previous tinted square so action-style icon containers read
+          consistently across the product (QuickAction, DemoWelcome,
+          and the rest). */}
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-white text-[var(--primary-base)] shadow-[0_1px_2px_rgba(23,23,23,0.05)] ring-1 ring-[var(--stroke-soft-200)]">
         <Icon className="h-4 w-4" strokeWidth={2} aria-hidden />
       </div>
       <div className="min-w-0 flex-1">
