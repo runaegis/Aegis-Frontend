@@ -104,14 +104,21 @@ export default function RoomOverviewPage() {
         {/* Setup checklist — surfaces immediately after Create.
             Auto-hides once all 3 steps are done (or dismissed) and
             persists per-room in localStorage so it doesn't pop up
-            on rooms the user has already configured. */}
-        <motion.div variants={fadeUp}>
-          <SetupChecklist
-            roomId={roomId}
-            memberCount={members.length}
-            hasFirstRun={recentRuns.length > 0}
-          />
-        </motion.div>
+            on rooms the user has already configured.
+            Rendered WITHOUT an outer motion.div wrapper on purpose:
+            SetupChecklist returns null when hidden, but a wrapper
+            motion.div still renders (just empty), and the parent's
+            `space-y-6` then adds 24px of phantom margin to the next
+            sibling. Letting SetupChecklist render directly means a
+            hidden checklist creates no DOM at all, and the stat
+            strip sits flush against the page's top padding. Its own
+            <motion.section> inside handles entry animation, so we
+            lose nothing by dropping the wrapper. */}
+        <SetupChecklist
+          roomId={roomId}
+          memberCount={members.length}
+          hasFirstRun={recentRuns.length > 0}
+        />
 
         {/* Top-of-page stat strip — three at-a-glance numbers that
             answer "what's happening in this room right now?" */}
