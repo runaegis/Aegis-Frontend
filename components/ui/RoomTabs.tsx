@@ -20,6 +20,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   Activity,
+  History,
   Plug,
   Settings as SettingsIcon,
   Shield,
@@ -40,9 +41,12 @@ interface TabDef {
 }
 
 // Order is the visual order in the strip. Overview is first because
-// it's the landing tab; Settings is last because it's rarely-used config.
+// it's the landing tab; Activity is second because it's the
+// highest-traffic surface (what's the team doing right now?); Settings
+// is last because it's rarely-used config.
 const TABS: TabDef[] = [
   { segment: '',          label: 'Overview', icon: Activity },
+  { segment: 'activity',  label: 'Activity', icon: History },
   { segment: 'tools',     label: 'Tools',    icon: Shield },
   { segment: 'members',   label: 'Members',  icon: Users },
   { segment: 'connect',   label: 'Connect',  icon: Plug },
