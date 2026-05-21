@@ -363,17 +363,17 @@ const PREVIEW_ROOM_DETAILS: Record<string, RoomDetails> = Object.fromEntries(
 
 const PREVIEW_MEMBERS: Record<string, RoomMember[]> = {
   room_dash: [
-    { id: 'm1', user_id: 'preview-user', username: 'preview',  role: 'OWNER',     joined_at: new Date(NOW - 12 * ONE_DAY).toISOString() },
+    { id: 'm1', user_id: 'preview-user', username: 'demo',  role: 'OWNER',     joined_at: new Date(NOW - 12 * ONE_DAY).toISOString() },
     { id: 'm2', user_id: 'u_kai',        username: 'kai',      role: 'DEVELOPER', joined_at: new Date(NOW - 10 * ONE_DAY).toISOString() },
     { id: 'm3', user_id: 'u_sora',       username: 'sora',     role: 'REVIEWER',  joined_at: new Date(NOW -  9 * ONE_DAY).toISOString() },
     { id: 'm4', user_id: 'u_lin',        username: 'lin',      role: 'VIEWER',    joined_at: new Date(NOW -  6 * ONE_DAY).toISOString() },
   ],
   room_mcp: [
-    { id: 'm5', user_id: 'preview-user', username: 'preview',  role: 'OWNER',     joined_at: new Date(NOW - 30 * ONE_DAY).toISOString() },
+    { id: 'm5', user_id: 'preview-user', username: 'demo',  role: 'OWNER',     joined_at: new Date(NOW - 30 * ONE_DAY).toISOString() },
     { id: 'm6', user_id: 'u_amir',       username: 'amir',     role: 'DEVELOPER', joined_at: new Date(NOW - 28 * ONE_DAY).toISOString() },
   ],
   room_api: [
-    { id: 'm7', user_id: 'preview-user', username: 'preview',  role: 'OWNER',     joined_at: new Date(NOW - 5 * ONE_DAY).toISOString() },
+    { id: 'm7', user_id: 'preview-user', username: 'demo',  role: 'OWNER',     joined_at: new Date(NOW - 5 * ONE_DAY).toISOString() },
   ],
 };
 
@@ -716,7 +716,7 @@ export function installPreviewApi() {
   });
   api.getUserDetails = async () => ({
     id: 'preview-user',
-    username: 'preview',
+    username: 'demo',
     email: 'preview@runaegis.com',
     github_user_id: 0,
   });
