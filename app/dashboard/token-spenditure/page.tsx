@@ -57,9 +57,23 @@ function aegisBenchMultiplier(sessionId: string): number {
   return 1.5 + u * 0.2;
 }
 
-/** Chart series palette — monochromatic neutral + brand orange.
- *  Mercury / Stripe Insights pattern: high contrast, no second hue
- *  competing with the brand, no blue "AI tell".
+/** Chart series palette — brand orange + AlignUI feature purple.
+ *
+ *  Previously the second series used near-black (#171717 light /
+ *  #fafafa dark) for "monochromatic neutral + brand orange." That
+ *  read flat — heavy black bars dominated the chart and the dark-
+ *  mode white was equally aggressive. Replacing with the AlignUI
+ *  feature purple (#7d52f4) which is already in the design system
+ *  (Badge tone="feature", semantic feature-* tokens) so the chart
+ *  doesn't introduce a one-off color.
+ *
+ *  Orange + purple is split-complementary on the color wheel —
+ *  Mode / Looker / Plotly all use this pairing for "two-series
+ *  comparison" charts. No blue (per the no-AI-blue rule).
+ *
+ *  Dark mode uses a brighter violet (~Tailwind violet-400) so the
+ *  bar fills read clearly on the darker page bg without burning
+ *  retinas like the previous near-white.
  *
  *  Configured via shadcn's ChartConfig: each series has a `theme`
  *  block that the ChartContainer compiles into scoped CSS variables
@@ -69,7 +83,7 @@ function aegisBenchMultiplier(sessionId: string): number {
 const chartConfig = {
   input: {
     label: 'Input',
-    theme: { light: '#171717', dark: '#fafafa' },
+    theme: { light: '#7d52f4', dark: '#a78bfa' },
   },
   output: {
     label: 'Output',
@@ -77,7 +91,7 @@ const chartConfig = {
   },
   without_aegis: {
     label: 'Without Aegis',
-    theme: { light: '#171717', dark: '#fafafa' },
+    theme: { light: '#7d52f4', dark: '#a78bfa' },
   },
   with_aegis: {
     label: 'With Aegis',
@@ -386,7 +400,7 @@ export default function TokenSpenditurePage() {
         >
           <div className="grid grid-cols-2 divide-y divide-[var(--stroke-soft-200)] lg:grid-cols-4 lg:divide-x lg:divide-y-0">
             <Stat label="Total tokens" value={summary.total} />
-            <Stat label="Input tokens" value={summary.input} dot="var(--neutral-strong-950)" />
+            <Stat label="Input tokens" value={summary.input} dot="var(--feature)" />
             <Stat label="Output tokens" value={summary.output} dot="var(--primary-base)" />
             <Stat label="Sessions used" value={summary.sessions} />
           </div>
@@ -435,7 +449,7 @@ export default function TokenSpenditurePage() {
                   </p>
                 </div>
                 <div className="flex shrink-0 flex-wrap items-center gap-3 text-[11px]">
-                  <Legend label="Input" color="var(--neutral-strong-950)" />
+                  <Legend label="Input" color="var(--feature)" />
                   <Legend label="Output" color="var(--primary-base)" />
                 </div>
               </div>
@@ -582,7 +596,7 @@ export default function TokenSpenditurePage() {
                   </p>
                 </div>
                 <div className="flex shrink-0 flex-wrap items-center gap-3 text-[11px]">
-                  <Legend label="Without Aegis" color="var(--neutral-strong-950)" />
+                  <Legend label="Without Aegis" color="var(--feature)" />
                   <Legend label="With Aegis" color="var(--primary-base)" />
                 </div>
               </div>
