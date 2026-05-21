@@ -248,11 +248,21 @@ export default function PoliciesPage() {
                     isActive ? '' : 'opacity-60'
                   }`}
                 >
+                  {/* Concentric-ring icon — scaled-down echo of the
+                      EmptyState illustration pattern the user called
+                      out. Outer ring sits at 44px (matches the grid
+                      column), inner white circle at 32px carries the
+                      orange outline icon. Single ring instead of
+                      EmptyState's three so the row stays dense
+                      enough for a 10-item list. */}
                   <div
-                    className="flex h-9 w-9 items-center justify-center rounded-[10px] border border-[var(--stroke-soft-200)] bg-white"
-                    style={{ color: 'var(--primary-base)' }}
+                    className="relative flex h-11 w-11 items-center justify-center"
+                    aria-hidden
                   >
-                    <Icon className="h-4 w-4" strokeWidth={2} />
+                    <div className="absolute h-11 w-11 rounded-full border border-[var(--stroke-soft-200)]" />
+                    <div className="relative flex h-8 w-8 items-center justify-center rounded-full bg-white text-[var(--primary-base)] shadow-[0_1px_2px_rgba(23,23,23,0.05)] ring-1 ring-[var(--stroke-soft-200)]">
+                      <Icon className="h-4 w-4" strokeWidth={2} />
+                    </div>
                   </div>
                   <div className="min-w-0">
                     <p className="text-[13.5px] font-semibold text-[var(--neutral-strong-950)]">
