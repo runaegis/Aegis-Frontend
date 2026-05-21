@@ -117,8 +117,8 @@ export default function IntegrationsPage() {
             className="space-y-6 lg:sticky lg:top-[72px]"
           >
             <div className="overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
-              <div className="border-b border-[var(--stroke-soft-200)] p-4">
-                <h2 className="text-[13.5px] font-semibold text-[var(--neutral-strong-950)]">
+              <div className="border-b border-[var(--stroke-soft-200)] px-5 py-3.5">
+                <h2 className="text-[14px] font-semibold tracking-[-0.01em] text-[var(--neutral-strong-950)]">
                   Choose your tool
                 </h2>
               </div>
@@ -172,8 +172,8 @@ export default function IntegrationsPage() {
             </div>
 
             <div className="overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
-              <div className="border-b border-[var(--stroke-soft-200)] p-4">
-                <h2 className="text-[13.5px] font-semibold text-[var(--neutral-strong-950)]">
+              <div className="border-b border-[var(--stroke-soft-200)] px-5 py-3.5">
+                <h2 className="text-[14px] font-semibold tracking-[-0.01em] text-[var(--neutral-strong-950)]">
                   Quick tips
                 </h2>
               </div>
@@ -203,8 +203,8 @@ export default function IntegrationsPage() {
           >
             {/* Getting started 3-step strip */}
             <div className="overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
-              <div className="border-b border-[var(--stroke-soft-200)] p-4">
-                <h2 className="text-[13.5px] font-semibold text-[var(--neutral-strong-950)]">
+              <div className="border-b border-[var(--stroke-soft-200)] px-5 py-3.5">
+                <h2 className="text-[14px] font-semibold tracking-[-0.01em] text-[var(--neutral-strong-950)]">
                   Getting started
                 </h2>
               </div>
@@ -217,10 +217,10 @@ export default function IntegrationsPage() {
 
             {/* Config snippet */}
             <div className="overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
-              <div className="flex items-center justify-between border-b border-[var(--stroke-soft-200)] p-4">
+              <div className="flex items-center justify-between border-b border-[var(--stroke-soft-200)] px-5 py-3.5">
                 <div className="flex items-center gap-2.5">
                   <ToolLogo id={active.id} size={22} />
-                  <h2 className="text-[13.5px] font-semibold text-[var(--neutral-strong-950)]">
+                  <h2 className="text-[14px] font-semibold tracking-[-0.01em] text-[var(--neutral-strong-950)]">
                     {active.name} setup
                   </h2>
                 </div>

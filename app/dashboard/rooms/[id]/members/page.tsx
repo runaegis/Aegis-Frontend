@@ -285,17 +285,23 @@ export default function RoomMembersPage() {
                       {member.role || 'member'}
                     </Badge>
                     {/* Disabled "..." button — surfaces that
-                        change-role / remove are coming without
-                        promising them yet. Only shown to admins
-                        and only on other members' rows (no point
-                        showing "remove yourself" here — that lives
-                        in Settings → Leave room). */}
+                        Change role / Remove member affordances are
+                        coming. Backend endpoints exist
+                        (PATCH /room/{id}/members/{user_id} for role
+                        and DELETE /room/{id}/members/{user_id} for
+                        remove). Wiring those up — popover menu,
+                        role picker, confirm dialog, optimistic
+                        updates — is its own feature task; we're
+                        keeping the kebab visible so the affordance
+                        is discoverable, but disabled until the
+                        frontend work lands. ADMIN/OWNER only and
+                        never on the current user's own row. */}
                     {canModifyMembers && !isSelf && (
                       <button
                         type="button"
                         disabled
                         aria-label="Member actions (coming soon)"
-                        title="Change role · Remove. Pending backend endpoint."
+                        title="Change role · Remove member — frontend coming soon."
                         className="flex h-7 w-7 shrink-0 cursor-not-allowed items-center justify-center rounded-[7px] text-[var(--neutral-soft-400)] opacity-60"
                       >
                         <MoreHorizontal
@@ -310,17 +316,13 @@ export default function RoomMembersPage() {
               })}
             </ul>
           )}
-          {/* Hint footer — explicit roadmap signal so the user
-              understands the gaps aren't accidental. Only renders
-              if there's actually a member to modify. */}
-          {canModifyMembers && members.length > 1 && (
-            <div className="border-t border-[var(--stroke-soft-200)] bg-[var(--neutral-weak-50)] px-5 py-2.5">
-              <p className="text-[11px] italic text-[var(--neutral-soft-400)]">
-                Change role · Remove member — pending backend endpoint.
-                Coming soon.
-              </p>
-            </div>
-          )}
+          {/* No hint footer here. The previous "Change role · Remove
+              member — pending backend endpoint. Coming soon." text
+              was misleading once Jenil shipped the backend mutations
+              (PATCH/DELETE on /room/{id}/members/{user_id}). The
+              kebab button above carries the "coming soon" signal
+              already via its tooltip; an extra footer claiming the
+              backend is the blocker would just be wrong. */}
         </motion.section>
 
         {/* Invites panel */}
@@ -454,7 +456,7 @@ export default function RoomMembersPage() {
                 return (
                   <li
                     key={`${code}-${idx}`}
-                    className="flex items-start gap-3 px-5 py-3"
+                    className="flex items-center gap-3 px-5 py-3"
                   >
                     <div className="min-w-0 flex-1">
                       <CodeChip>{code}</CodeChip>
