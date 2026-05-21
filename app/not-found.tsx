@@ -48,7 +48,7 @@ export default function NotFound() {
             Back to dashboard
           </Link>
           <a
-            href="https://docs.runaegis.com"
+            href="https://docs.runaegis.co"
             className="inline-flex h-9 items-center rounded-[8px] border border-[var(--stroke-sub-300)] bg-[var(--white-0)] px-4 text-[13px] font-medium text-[var(--neutral-sub-600)] transition-colors hover:bg-[var(--neutral-weak-50)] hover:text-[var(--neutral-strong-950)]"
           >
             Documentation

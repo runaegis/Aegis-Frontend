@@ -4,10 +4,15 @@ import { Badge } from './Badge';
 import { formatBlastRadius } from '@/lib/utils';
 
 interface BlastRadiusChipProps {
-  /** Free-form severity from the backend — typically Low / Medium / High / Critical. */
+  /** Free-form severity from the backend, typically Low / Medium / High / Critical. */
   value?: string | null;
   className?: string;
-  /** When true and the value is missing, render an em-dash placeholder. */
+  /**
+   * Kept for backwards-compat with callers that used to opt into an
+   * em-dash placeholder. We now always render an empty cell instead, since
+   * Aegis copy never uses em dashes. Signature preserved so existing
+   * callers don't need to be touched all at once.
+   */
   showEmpty?: boolean;
 }
 
@@ -18,24 +23,12 @@ interface BlastRadiusChipProps {
  *   medium   → amber
  *   high     → orange (primary)
  *   critical → red
- *   unknown  → neutral (or em-dash via `showEmpty`)
+ *   unknown  → renders nothing (empty cell)
  */
-export function BlastRadiusChip({ value, className, showEmpty = false }: BlastRadiusChipProps) {
+export function BlastRadiusChip({ value, className }: BlastRadiusChipProps) {
   const { level, label, tone } = formatBlastRadius(value);
 
-  if (level === 'unknown' && !value) {
-    if (showEmpty) {
-      return (
-        <span
-          className="text-[12px] text-[var(--neutral-soft-400)]"
-          aria-hidden
-        >
-          —
-        </span>
-      );
-    }
-    return null;
-  }
+  if (level === 'unknown') return null;
 
   return (
     <Badge

@@ -57,9 +57,26 @@ function aegisBenchMultiplier(sessionId: string): number {
   return 1.5 + u * 0.2;
 }
 
-/** Chart series palette — monochromatic neutral + brand orange.
- *  Mercury / Stripe Insights pattern: high contrast, no second hue
- *  competing with the brand, no blue "AI tell".
+/** Chart series palette — brand orange + muted plum.
+ *
+ *  Two iterations to get here:
+ *
+ *    1. Original: monochromatic neutral (#171717 / #fafafa) + orange.
+ *       Black bars dominated, white in dark mode burned retinas.
+ *    2. First swap: AlignUI feature purple (#7d52f4 / #a78bfa). Read
+ *       as "too bright" + "too blue" — that hue sits at HSL 258° with
+ *       88% saturation, which the brain reads as a blue-leaning
+ *       indigo, not a warm purple.
+ *    3. This pass: a muted warm plum (#7c5e8c / #b39bcc). Hue shifted
+ *       to ~282° (away from blue, toward magenta) and saturation
+ *       dropped to ~19%, so the color reads as sophisticated and
+ *       distinctly purple — closer to Stripe / Modern Treasury chart
+ *       palettes than the bright violet/indigo that the first swap
+ *       landed on.
+ *
+ *  Orange + muted plum is still split-complementary; the relationship
+ *  to the brand color is intact, just at a calmer volume so the
+ *  brand-orange series remains the prominent identity in every chart.
  *
  *  Configured via shadcn's ChartConfig: each series has a `theme`
  *  block that the ChartContainer compiles into scoped CSS variables
@@ -69,7 +86,7 @@ function aegisBenchMultiplier(sessionId: string): number {
 const chartConfig = {
   input: {
     label: 'Input',
-    theme: { light: '#171717', dark: '#fafafa' },
+    theme: { light: '#7c5e8c', dark: '#b39bcc' },
   },
   output: {
     label: 'Output',
@@ -77,7 +94,7 @@ const chartConfig = {
   },
   without_aegis: {
     label: 'Without Aegis',
-    theme: { light: '#171717', dark: '#fafafa' },
+    theme: { light: '#7c5e8c', dark: '#b39bcc' },
   },
   with_aegis: {
     label: 'With Aegis',
@@ -386,7 +403,7 @@ export default function TokenSpenditurePage() {
         >
           <div className="grid grid-cols-2 divide-y divide-[var(--stroke-soft-200)] lg:grid-cols-4 lg:divide-x lg:divide-y-0">
             <Stat label="Total tokens" value={summary.total} />
-            <Stat label="Input tokens" value={summary.input} dot="var(--neutral-strong-950)" />
+            <Stat label="Input tokens" value={summary.input} dot="var(--chart-plum)" />
             <Stat label="Output tokens" value={summary.output} dot="var(--primary-base)" />
             <Stat label="Sessions used" value={summary.sessions} />
           </div>
@@ -435,7 +452,7 @@ export default function TokenSpenditurePage() {
                   </p>
                 </div>
                 <div className="flex shrink-0 flex-wrap items-center gap-3 text-[11px]">
-                  <Legend label="Input" color="var(--neutral-strong-950)" />
+                  <Legend label="Input" color="var(--chart-plum)" />
                   <Legend label="Output" color="var(--primary-base)" />
                 </div>
               </div>
@@ -582,7 +599,7 @@ export default function TokenSpenditurePage() {
                   </p>
                 </div>
                 <div className="flex shrink-0 flex-wrap items-center gap-3 text-[11px]">
-                  <Legend label="Without Aegis" color="var(--neutral-strong-950)" />
+                  <Legend label="Without Aegis" color="var(--chart-plum)" />
                   <Legend label="With Aegis" color="var(--primary-base)" />
                 </div>
               </div>

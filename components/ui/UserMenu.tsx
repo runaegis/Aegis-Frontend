@@ -14,7 +14,8 @@ import {
   User as UserIcon,
 } from 'lucide-react';
 import { useUser } from '@/lib/hooks';
-import { getInitials } from '@/lib/utils';
+import { GenerativeAvatar } from '@/components/ui/GenerativeAvatar';
+import { UserAvatar } from '@/components/ui/UserAvatar';
 import { Badge } from '@/components/ui/Badge';
 import ThemeToggle from '@/components/ui/ThemeToggle';
 import {useRouter} from "next/navigation";
@@ -36,6 +37,25 @@ export function UserMenu({ pendingApprovals = 0, className }: UserMenuProps) {
   const popoverRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const router = useRouter();
+
+  // Track demo state so the topbar avatar reflects the current
+  // workspace identity. When in demo mode, use the demo variant
+  // (brand orange dithered pattern); otherwise use the user's
+  // own seeded pattern. Mirrors the same source-of-truth as the
+  // WorkspaceSwitcher (data-demo attribute on <html>).
+  const [demoOn, setDemoOn] = useState<boolean | null>(null);
+  useEffect(() => {
+    const update = () => {
+      setDemoOn(document.documentElement.dataset.demo === 'true');
+    };
+    update();
+    const observer = new MutationObserver(update);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-demo'],
+    });
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -78,17 +98,33 @@ export function UserMenu({ pendingApprovals = 0, className }: UserMenuProps) {
         ref={triggerRef}
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex h-7 w-7 items-center justify-center rounded-[8px] text-[11px] font-semibold transition-shadow hover:ring-2 hover:ring-[var(--primary-alpha-16)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary-alpha-24)]"
-        style={{
-          backgroundColor: 'rgba(250, 115, 25, 0.10)',
-          color: 'var(--primary-base)',
-        }}
+        className="flex h-7 w-7 items-center justify-center rounded-[8px] transition-shadow hover:ring-2 hover:ring-[var(--primary-alpha-16)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary-alpha-24)]"
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label="Open user menu"
         title={username}
       >
-        {user ? getInitials(username) : '?'}
+        {/* Avatar reflects the active workspace identity:
+            demo → GenerativeAvatar variant=demo (orange dots),
+            real → UserAvatar (custom upload OR seeded generative).
+            Same identity logic as the WorkspaceSwitcher so the
+            topbar + sidebar avatars always agree. */}
+        {demoOn === null ? (
+          <span className="h-7 w-7 rounded-[7px] bg-[var(--neutral-weak-50)]" />
+        ) : demoOn ? (
+          <GenerativeAvatar
+            seed="aegis-demo-workspace"
+            variant="demo"
+            size={28}
+            radius={7}
+          />
+        ) : (
+          <UserAvatar
+            seed={user?.username || user?.email || 'user'}
+            size={28}
+            radius={7}
+          />
+        )}
       </button>
 
       <AnimatePresence>
@@ -105,15 +141,25 @@ export function UserMenu({ pendingApprovals = 0, className }: UserMenuProps) {
           >
             {/* Identity header */}
             <div className="flex items-center gap-3 border-b border-[var(--stroke-soft-200)] p-3">
-              <div
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] text-[14px] font-semibold ring-1 ring-[var(--stroke-soft-200)]"
-                style={{
-                  backgroundColor: 'rgba(250, 115, 25, 0.10)',
-                  color: 'var(--primary-base)',
-                }}
-              >
-                {user ? getInitials(username) : '?'}
-              </div>
+              {/* 40px header avatar — larger size shows the dot
+                  pattern or uploaded photo more clearly, anchoring
+                  the menu with strong identity. */}
+              {demoOn === null ? (
+                <span className="h-10 w-10 shrink-0 rounded-[10px] bg-[var(--neutral-weak-50)]" />
+              ) : demoOn ? (
+                <GenerativeAvatar
+                  seed="aegis-demo-workspace"
+                  variant="demo"
+                  size={40}
+                  radius={10}
+                />
+              ) : (
+                <UserAvatar
+                  seed={user?.username || user?.email || 'user'}
+                  size={40}
+                  radius={10}
+                />
+              )}
               <div className="min-w-0 flex-1">
                 <p className="truncate text-[13px] font-semibold text-[var(--neutral-strong-950)]">
                   {username}
@@ -195,7 +241,7 @@ export function UserMenu({ pendingApprovals = 0, className }: UserMenuProps) {
             {/* Menu group 2 — external help */}
             <div className="p-1">
               <Item
-                href="https://docs.runaegis.com"
+                href="https://docs.runaegis.co"
                 external
                 icon={HelpCircle}
                 label="Documentation"

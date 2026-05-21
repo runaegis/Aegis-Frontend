@@ -9,6 +9,7 @@ import { IntegrationsSkeleton } from '@/components/ui/PageSkeletons';
 import { CodeChip } from '@/components/ui/CodeChip';
 import { JsonHighlight } from '@/components/ui/JsonHighlight';
 import { ToolLogo } from '@/components/ui/ToolLogo';
+import { useToast } from '@/components/ui/Toast';
 import { DUR, EASE, fadeUp, staggerContainer } from '@/lib/motion';
 
 type Tool = 'vscode-copilot' | 'cursor' | 'claude-code';
@@ -22,6 +23,7 @@ const TOOLS: { id: Tool; name: string; subtitle: string; configPath: string }[] 
 export default function IntegrationsPage() {
   const { user } = useUser();
   const reduce = useReducedMotion();
+  const toast = useToast();
   const [selectedTool, setSelectedTool] = useState<Tool>('vscode-copilot');
   const [copied, setCopied] = useState(false);
 
@@ -42,10 +44,24 @@ export default function IntegrationsPage() {
     );
   };
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(configFor(selectedTool));
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(configFor(selectedTool));
+      setCopied(true);
+      toast.success('Copied to clipboard', {
+        description: 'Paste it into your tool settings to finish wiring.',
+      });
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      // Clipboard API can fail (browser perms, non-HTTPS, etc.).
+      // Surface the failure so the user doesn't think they copied.
+      toast.error('Could not copy', {
+        description:
+          err instanceof Error
+            ? err.message
+            : 'Your browser blocked clipboard access. Try selecting the text manually.',
+      });
+    }
   };
 
   if (!user?.id) {
@@ -101,8 +117,8 @@ export default function IntegrationsPage() {
             className="space-y-6 lg:sticky lg:top-[72px]"
           >
             <div className="overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
-              <div className="border-b border-[var(--stroke-soft-200)] p-4">
-                <h2 className="text-[13.5px] font-semibold text-[var(--neutral-strong-950)]">
+              <div className="border-b border-[var(--stroke-soft-200)] px-5 py-3.5">
+                <h2 className="text-[14px] font-semibold tracking-[-0.01em] text-[var(--neutral-strong-950)]">
                   Choose your tool
                 </h2>
               </div>
@@ -156,8 +172,8 @@ export default function IntegrationsPage() {
             </div>
 
             <div className="overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
-              <div className="border-b border-[var(--stroke-soft-200)] p-4">
-                <h2 className="text-[13.5px] font-semibold text-[var(--neutral-strong-950)]">
+              <div className="border-b border-[var(--stroke-soft-200)] px-5 py-3.5">
+                <h2 className="text-[14px] font-semibold tracking-[-0.01em] text-[var(--neutral-strong-950)]">
                   Quick tips
                 </h2>
               </div>
@@ -187,8 +203,8 @@ export default function IntegrationsPage() {
           >
             {/* Getting started 3-step strip */}
             <div className="overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
-              <div className="border-b border-[var(--stroke-soft-200)] p-4">
-                <h2 className="text-[13.5px] font-semibold text-[var(--neutral-strong-950)]">
+              <div className="border-b border-[var(--stroke-soft-200)] px-5 py-3.5">
+                <h2 className="text-[14px] font-semibold tracking-[-0.01em] text-[var(--neutral-strong-950)]">
                   Getting started
                 </h2>
               </div>
@@ -201,10 +217,10 @@ export default function IntegrationsPage() {
 
             {/* Config snippet */}
             <div className="overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
-              <div className="flex items-center justify-between border-b border-[var(--stroke-soft-200)] p-4">
+              <div className="flex items-center justify-between border-b border-[var(--stroke-soft-200)] px-5 py-3.5">
                 <div className="flex items-center gap-2.5">
                   <ToolLogo id={active.id} size={22} />
-                  <h2 className="text-[13.5px] font-semibold text-[var(--neutral-strong-950)]">
+                  <h2 className="text-[14px] font-semibold tracking-[-0.01em] text-[var(--neutral-strong-950)]">
                     {active.name} setup
                   </h2>
                 </div>

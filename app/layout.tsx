@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ToastProvider } from "@/components/ui/Toast";
+import AgentationWidget from "@/components/dev/AgentationWidget";
 import "./globals.css";
 
 const geist = Geist({
@@ -119,12 +120,17 @@ export default function RootLayout({
             embedded contexts (iframes with cookies disabled, etc.). */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{if(!location.pathname.startsWith('/dashboard'))return;if(localStorage.getItem('aegis_theme')==='dark')document.documentElement.dataset.theme='dark';if(localStorage.getItem('aegis_sidebar_collapsed')==='true')document.documentElement.dataset.sidebarCollapsed='true';}catch(e){}})();`,
+            __html: `(function(){try{if(!location.pathname.startsWith('/dashboard'))return;if(localStorage.getItem('aegis_theme')==='dark')document.documentElement.dataset.theme='dark';if(localStorage.getItem('aegis_sidebar_collapsed')==='true')document.documentElement.dataset.sidebarCollapsed='true';var d=localStorage.getItem('aegis_demo');var url=new URLSearchParams(location.search);if(url.get('demo')==='1'||d==='true')document.documentElement.dataset.demo='true';}catch(e){}})();`,
           }}
         />
       </head>
       <body className="min-h-full bg-[var(--bg-app)] text-[var(--text-strong)] antialiased">
         <ToastProvider>{children}</ToastProvider>
+        {/* Floating annotation toolbar — dev-only. Renders null in
+            production via NODE_ENV guard. Lets you click any element
+            and leave a note that I'll pick up via the agentation
+            MCP bridge. */}
+        <AgentationWidget />
       </body>
     </html>
   );

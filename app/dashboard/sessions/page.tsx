@@ -26,7 +26,7 @@ import {
 } from '@/lib/utils';
 import { RelativeTime } from '@/components/ui/RelativeTime';
 import Topbar from '@/components/layout/Topbar';
-import AgentAvatar from '@/components/ui/AgentAvatar';
+import { AgentMark } from '@/components/ui/AgentMark';
 import DecisionBadge from '@/components/ui/DecisionBadge';
 import EmptyState from '@/components/ui/EmptyState';
 import ErrorBanner from '@/components/ui/ErrorBanner';
@@ -280,7 +280,7 @@ function SessionRow({
               'flex w-full items-center gap-3 px-4 py-[14px] text-left transition-colors hover:bg-[var(--primary-lighter)]/60 sm:gap-4 sm:px-6'
         }
       >
-        <AgentAvatar name={agentName} size="sm" />
+        <AgentMark name={agentName} size="sm" />
 
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2.5">
@@ -328,7 +328,9 @@ function SessionRow({
               <DecisionStat value={denies} color="var(--error)" label="deny" />
             </div>
           ) : (
-            <span className="text-[11.5px] text-[var(--neutral-soft-400)]">—</span>
+            <span className="text-[11.5px] italic text-[var(--neutral-soft-400)]">
+              No actions
+            </span>
           )}
         </div>
 

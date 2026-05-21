@@ -1,126 +1,98 @@
 'use client';
 
+/**
+ * Rooms index — the rooms list page.
+ *
+ * Re-architected from the prior 878-line single-page god-component
+ * into a focused index page. Each row in the list links to the
+ * room's dedicated sub-page tree (Overview / Tools / Members /
+ * Connect / Settings), where the heavy lifting happens.
+ *
+ * The page does three things:
+ *   1. Lists every room the user is a member of, with quick-scan
+ *      metadata (repo, role, last activity).
+ *   2. Surfaces a primary "Create room" CTA pointed at the most
+ *      common new-user path.
+ *   3. Offers a secondary "Join with code" affordance for users
+ *      arriving via an invite.
+ *
+ * Empty state teaches the mental model — what a room IS, what to
+ * do next — rather than just saying "no rooms yet."
+ *
+ * Create + Join still live inline on this page (collapsed forms
+ * that expand on click). The previous design surfaced both forms
+ * at full size on every visit, which read as overwhelming. Here
+ * the page leads with a clear primary CTA and reveals the form on
+ * demand.
+ */
+
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { motion, useReducedMotion } from 'motion/react';
 import {
-  Copy,
+  ChevronRight,
   DoorOpen,
-  Link2,
+  Lock,
   Plus,
+  Search,
+  Shield,
+  Unlock,
   Users,
 } from 'lucide-react';
-import Topbar from '@/components/layout/Topbar';
-import ErrorBanner from '@/components/ui/ErrorBanner';
-import { RoomsSkeleton } from '@/components/ui/PageSkeletons';
-import EmptyState from '@/components/ui/EmptyState';
-import { Button } from '@/components/ui/Button';
-import { Input, Select } from '@/components/ui/Input';
-import { CodeChip } from '@/components/ui/CodeChip';
-import AgentAvatar from '@/components/ui/AgentAvatar';
-import { Badge } from '@/components/ui/Badge';
-import { useToast } from '@/components/ui/Toast';
 import { api } from '@/lib/api';
 import { useAutoRefresh, useUser } from '@/lib/hooks';
-import { RoomSummary, RoomDetails, RoomInvite, RoomMember } from '@/lib/types'; 
-import { formatRelativeTime } from '@/lib/utils';
+import type { Repo, RoomSummary } from '@/lib/types';
+import Topbar from '@/components/layout/Topbar';
+import { Badge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
+import EmptyState from '@/components/ui/EmptyState';
+import ErrorBanner from '@/components/ui/ErrorBanner';
+import { GenerativeAvatar } from '@/components/ui/GenerativeAvatar';
+import { Input } from '@/components/ui/Input';
 import { RelativeTime } from '@/components/ui/RelativeTime';
-import { DUR, EASE, fadeUp, fadeUpSm, staggerContainer } from '@/lib/motion';
+import { RoomsSkeleton } from '@/components/ui/PageSkeletons';
+import { Skeleton } from '@/components/ui/Skeleton';
+import { useToast } from '@/components/ui/Toast';
+import { cn, getRoomRoleBadgeTone } from '@/lib/utils';
+import { fadeUp, fadeUpSm, staggerContainer } from '@/lib/motion';
 
-const getRoomId = (room: RoomSummary | RoomDetails): string =>
+const getRoomId = (room: RoomSummary): string =>
   String(room.id || room.room_id || '');
 
-const getInviteCode = (invite: RoomInvite): string =>
-  String(invite.invite_code || invite.code || invite.id || '');
-
-const TOOL_GROUPS: Record<string, string[]> = {
-  Repository: [
-    'create_or_update_file',
-    'get_file_contents',
-    'list_repository_files',
-    'push_files',
-    'search_repositories',
-    'get_repository',
-  ],
-  'Issues & PR': [
-    'create_issue',
-    'get_issue',
-    'issue_read:get_comments',
-    'issue_read:get_sub_issues',
-    'list_issues',
-    'create_pull_request',
-    'get_pull_request',
-    'pull_request_read:get_comments',
-    'pull_request_read:get_review_comments',
-    'pull_request_read:get_reviews',
-  ],
-  Search: ['search_code', 'search_issues'],
-  Git: ['get_latest_commit', 'list_branches', 'create_branch'],
-};
-
-const ROLE_LEVELS: Record<string, number> = {
-  DEVELOPER: 1,
-  ADMIN: 2,
-  OWNER: 3,
-};
-
-export default function RoomsPage() {
+export default function RoomsIndexPage() {
   const { user, isLoading: userLoading } = useUser();
-  const reduce = useReducedMotion();
+  const router = useRouter();
   const toast = useToast();
+  const reduce = useReducedMotion();
+
   const [rooms, setRooms] = useState<RoomSummary[]>([]);
-  const [selectedRoomId, setSelectedRoomId] = useState<string>('');
-  const [selectedRoom, setSelectedRoom] = useState<RoomDetails | null>(null);
-  const [members, setMembers] = useState<RoomMember[]>([]);
-  const [invites, setInvites] = useState<RoomInvite[]>([]);
-
-  const [newRepoId, setNewRepoId] = useState('');
-  const [joinCode, setJoinCode] = useState('');
-  const [inviteMaxUses, setInviteMaxUses] = useState('');
-  const [inviteExpiresAt, setInviteExpiresAt] = useState('');
-
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Inline-expanding forms — collapsed by default so the page reads
+  // calm. The Create form expands on the primary CTA click; the
+  // Join form on the secondary "join with code" link.
+  const [showCreate, setShowCreate] = useState(false);
+  const [showJoin, setShowJoin] = useState(false);
+  const [joinCode, setJoinCode] = useState('');
   const [submittingCreate, setSubmittingCreate] = useState(false);
   const [submittingJoin, setSubmittingJoin] = useState(false);
-  const [submittingInvite, setSubmittingInvite] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  // Success feedback flows through the global toast viewport — no more
-  // inline "success" state. Errors still surface in the inline banner
-  // because some failures need persistent visibility on this page.
-  const [tools, setTools] = useState<Record<string, boolean>>({});
-  const [integrationConfig, setIntegrationConfig] = useState<any>(null);
-  const [role, setRole] = useState<string>('DEVELOPER');
-  const [viewingRole, setViewingRole] = useState<string>('DEVELOPER');
 
-  const visibleRoles = useMemo(() => {
-    if (role === 'OWNER') {
-      return ['OWNER', 'ADMIN', 'DEVELOPER'];
-    }
-
-    if (role === 'ADMIN') {
-      return ['ADMIN', 'DEVELOPER'];
-    }
-
-    return ['DEVELOPER'];
-  }, [role]);
-
-  const canEditViewedRole = useMemo(() => {
-    return ROLE_LEVELS[role] >= ROLE_LEVELS[viewingRole];
-  }, [role, viewingRole]);
-
-  const canCreateInvites = useMemo(() => {
-    return role === 'OWNER' || role === 'ADMIN';
-  }, [role]);
-
+  // Repo picker state — populated the first time the Create form
+  // opens. Free-text input was a footgun (typos → broken rooms);
+  // a real picker constrained to the user's GitHub repos eliminates
+  // the class of error.
+  const [repos, setRepos] = useState<Repo[]>([]);
+  const [reposLoading, setReposLoading] = useState(false);
+  const [reposError, setReposError] = useState<string | null>(null);
+  const [repoQuery, setRepoQuery] = useState('');
+  const [selectedRepo, setSelectedRepo] = useState<string>('');
 
   const fetchRooms = useCallback(async () => {
     if (userLoading) return;
-
     if (!user) {
       setRooms([]);
-      setSelectedRoomId('');
-      setSelectedRoom(null);
-      setMembers([]);
-      setInvites([]);
       setLoading(false);
       return;
     }
@@ -128,210 +100,114 @@ export default function RoomsPage() {
     try {
       const data = await api.getMyRooms();
       setRooms(data);
-      if (data.length === 0) {
-        setSelectedRoomId('');
-        setSelectedRoom(null);
-        setMembers([]);
-        setInvites([]);
-      } else {
-        const hasSelected = data.some((room) => getRoomId(room) === selectedRoomId);
-        if (!selectedRoomId || !hasSelected) {
-          setSelectedRoomId(getRoomId(data[0]));
-        }
-      }
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
-  }, [ userLoading, user, selectedRoomId ]);
+  }, [user, userLoading]);
 
-  
   useEffect(() => {
-    fetchRooms();
+    void fetchRooms();
   }, [fetchRooms]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const run = async () => {
-      if (!selectedRoomId) {
-        setIntegrationConfig(null);
-        setSelectedRoom(null);
-        setMembers([]);
-        setInvites([]);
-        return;
-      }
-
-      try {
-        const [roomData, memberData, inviteData, integrationData] =
-          await Promise.all([
-            api.getRoomDetails(selectedRoomId),
-            api.getRoomMembers(selectedRoomId),
-            api.getRoomInvites(selectedRoomId),
-            api.getRoomIntegrationConfig(selectedRoomId),
-          ]);
-
-        if (cancelled) return;
-
-        setIntegrationConfig(integrationData);
-
-        const currentMember = memberData.find(
-          (m) => m.username === user?.username
-        );
-
-        const currentRole = currentMember?.role || 'DEVELOPER';
-
-        setRole(currentRole);
-
-        setSelectedRoom(roomData);
-        setMembers(memberData);
-        setInvites(inviteData);
-        setError(null);
-      } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : String(err));
-        }
-      }
-    };
-
-    run();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedRoomId, user?.username]);
-
-  useEffect(() => {
-  setError(null);
-  setTools({});
-}, [selectedRoomId]);
-
-  useEffect(() => {
-    if (!selectedRoomId || !role) return;
-
-    setViewingRole(role);
-  }, [selectedRoomId]);
-
-useEffect(() => {
-  if (!selectedRoomId || !viewingRole) {
-    setTools({});
-    return;
-  }
-
-  let cancelled = false;
-
-  api.getRoomTools(selectedRoomId, viewingRole)
-    .then((toolsData) => {
-      if (!cancelled) {
-        setTools(toolsData || {});
-      }
-    })
-    .catch((err) => {
-      console.error('[RoomsPage] Failed to load tools:', err);
-    });
-
-  return () => {
-    cancelled = true;
-  };
-}, [selectedRoomId, viewingRole]);
-
 
   const { lastUpdated } = useAutoRefresh(fetchRooms, 30000);
 
-  const selectedRoomLabel = useMemo(() => {
-    if (!selectedRoom) return selectedRoomId || 'Room';
-    return selectedRoom.repo_name || getRoomId(selectedRoom);
-  }, [selectedRoom, selectedRoomId]);
-
-  const roomIntegrationUrl = integrationConfig?.url || '';
-
-  const handleCreateRoom = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newRepoId.trim()) return;
-    setSubmittingCreate(true);
-        try {
-      const created = await api.createRoom(newRepoId.trim());
-      setNewRepoId('');
-      toast.success('Room created');
-      await fetchRooms();
-      const roomId = getRoomId(created);
-      if (roomId) setSelectedRoomId(roomId);
+  // Fetch repos lazily — only when the user actually opens the
+  // Create form. Avoids a needless GitHub API hit for every Rooms
+  // page visit.
+  const fetchRepos = useCallback(async () => {
+    if (!user?.id) return;
+    setReposLoading(true);
+    setReposError(null);
+    try {
+      const response = await api.getRepos(user.id);
+      setRepos(response?.repos || []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setReposError(err instanceof Error ? err.message : 'Could not load repos.');
+    } finally {
+      setReposLoading(false);
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (showCreate && repos.length === 0 && !reposLoading && !reposError) {
+      void fetchRepos();
+    }
+  }, [showCreate, repos.length, reposLoading, reposError, fetchRepos]);
+
+  // Filter repos: exclude ones already used by existing rooms (a
+  // single repo can only back one room), apply the search query.
+  const usedRepoNames = useMemo(
+    () => new Set(rooms.map((r) => r.repo_name).filter(Boolean)),
+    [rooms],
+  );
+  const filteredRepos = useMemo(() => {
+    const q = repoQuery.trim().toLowerCase();
+    return repos
+      .filter((r) => !usedRepoNames.has(r.full_name))
+      .filter((r) => !q || r.full_name.toLowerCase().includes(q))
+      .sort((a, b) => a.full_name.localeCompare(b.full_name));
+  }, [repos, repoQuery, usedRepoNames]);
+
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedRepo.trim()) return;
+    setSubmittingCreate(true);
+    try {
+      const created = await api.createRoom(selectedRepo.trim());
+      const id = getRoomId(created);
+      toast.success('Room created', {
+        description: 'Configure tools and connect an agent to get started.',
+      });
+      setSelectedRepo('');
+      setRepoQuery('');
+      setShowCreate(false);
+      // Land on Overview, not Connect. Two paths arrive here:
+      //   • Individual IC (bottoms-up) — wants to wire up their own
+      //     agent. They'll see the setup checklist and click Connect.
+      //   • Tech Lead (top-down) — wants to set policy + invite team
+      //     BEFORE letting anyone connect. They need the checklist
+      //     to remember Tools and Members exist.
+      // Overview + a 3-step "Set up this room" checklist serves both.
+      if (id) router.push(`/dashboard/rooms/${id}`);
+      else await fetchRooms();
+    } catch (err) {
+      toast.error('Could not create room', {
+        description: err instanceof Error ? err.message : 'Try again.',
+      });
     } finally {
       setSubmittingCreate(false);
     }
   };
 
-  const handleJoinRoom = async (e: React.FormEvent) => {
+  const handleJoin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!joinCode.trim()) return;
     setSubmittingJoin(true);
-        try {
+    try {
       await api.joinRoom(joinCode.trim());
+      toast.success('Joined room', {
+        description: 'You can now collaborate in this room.',
+      });
       setJoinCode('');
-      toast.success('Joined room');
+      setShowJoin(false);
       await fetchRooms();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      toast.error('Could not join room', {
+        description: err instanceof Error ? err.message : 'Check the invite code.',
+      });
     } finally {
       setSubmittingJoin(false);
     }
   };
 
-  const handleCreateInvite = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedRoomId) return;
-    setSubmittingInvite(true);
-        try {
-      const payload: { max_uses?: number; expires_at?: string } = {};
-      if (inviteMaxUses.trim()) payload.max_uses = Number(inviteMaxUses);
-      if (inviteExpiresAt.trim())
-        payload.expires_at = new Date(inviteExpiresAt).toISOString();
-      await api.createRoomInvite(selectedRoomId, payload);
-      const inviteData = await api.getRoomInvites(selectedRoomId);
-      setInvites(inviteData);
-      setInviteMaxUses('');
-      setInviteExpiresAt('');
-      toast.success('Invite created');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setSubmittingInvite(false);
-    }
-  };
-
-  const toggleTool = (tool: string, value: boolean) => {
-    const previousTools = tools;
-    const updated = { ...tools, [tool]: value };
-
-    setTools(updated);
-
-    api.updateRoomTools(selectedRoomId, viewingRole, updated)
-      .then(() => {
-        toast.success(`${tool} ${value ? 'allowed' : 'denied'}`);
-      })
-      .catch((err) => {
-        setTools(previousTools);
-        setError(err instanceof Error ? err.message : String(err));
-      });
-  };
-
-  const copyToClipboard = async (text: string, label: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      toast.success(`${label} copied`);
-    } catch {
-      setError(`Could not copy ${label.toLowerCase()}`);
-    }
-  };
-
-  if (userLoading || loading) {
+  // Loading shell.
+  if (userLoading || (loading && rooms.length === 0)) {
     return (
       <>
-        <Topbar title="Rooms" subtitle="Team workspaces for agents" />
+        <Topbar title="Rooms" subtitle="Per-repo agent permissions" />
         <div className="mx-auto max-w-[1320px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
           <RoomsSkeleton />
         </div>
@@ -343,536 +219,457 @@ useEffect(() => {
     <>
       <Topbar
         title="Rooms"
-        subtitle="Team workspaces for agents"
+        subtitle="Per-repo agent permissions"
         lastUpdated={lastUpdated}
         onRefresh={fetchRooms}
       />
       <div className="mx-auto max-w-[1320px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
         {error && (
-          <div className="mb-4">
-            <ErrorBanner
-              message={error}
-              onDismiss={() => setError(null)}
-              onRetry={fetchRooms}
-            />
+          <div className="mb-6">
+            <ErrorBanner message={error} onDismiss={() => setError(null)} onRetry={fetchRooms} />
           </div>
         )}
-        {/* Success feedback is now rendered by the global toast viewport. */}
 
-        <motion.header
-          className="mb-6"
-          variants={staggerContainer(0.05, 0.04)}
+        <motion.div
+          variants={staggerContainer(0.05)}
           initial={reduce ? false : 'hidden'}
           animate="show"
+          className="space-y-6"
         >
-          <motion.p
-            variants={fadeUp}
-            className="mb-2 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-[var(--neutral-soft-400)]"
-          >
-            Rooms
-          </motion.p>
-          <motion.h1
-            variants={fadeUp}
-            className="text-[26px] font-semibold leading-[1.1] tracking-[-0.03em] text-[var(--neutral-strong-950)]"
-          >
-            Team workspaces for agents
-          </motion.h1>
-          <motion.p
-            variants={fadeUp}
-            className="mt-2 text-[13.5px] text-[var(--neutral-sub-600)]"
-          >
-            Create a room per repo, invite teammates, define what each role can do.
-          </motion.p>
-        </motion.header>
+          {/* Page header — sets the mental model in one line. */}
+          <motion.header variants={fadeUp}>
+            <p className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-[var(--neutral-soft-400)]">
+              Governance
+            </p>
+            <h1 className="mt-2 text-[26px] font-semibold leading-[1.1] tracking-[-0.03em] text-[var(--neutral-strong-950)]">
+              Rooms
+            </h1>
+            <p className="mt-2 max-w-[640px] text-[13.5px] leading-[1.55] text-[var(--neutral-sub-600)]">
+              Scope what AI agents can do per repository. Pick a repo, set
+              tool policies for your team, connect an agent. Branch
+              protection for the AI era.
+            </p>
+          </motion.header>
 
-        {/* Create + Join */}
-        <motion.div
-          className="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-2"
-          initial={reduce ? false : { opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: DUR.slow, ease: EASE.out, delay: 0.16 }}
-        >
-          <form
-            onSubmit={handleCreateRoom}
-            className="overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]"
-          >
-            <div className="flex items-center gap-2 border-b border-[var(--stroke-soft-200)] p-4">
-              <Plus
-                className="h-4 w-4 shrink-0"
-                style={{ color: 'var(--primary-base)' }}
-                strokeWidth={2}
-              />
-              <h2 className="text-[14px] font-semibold tracking-[-0.01em] text-[var(--neutral-strong-950)]">
-                Create room
-              </h2>
-            </div>
-            <div className="space-y-3 p-5">
-              <Field label="Repository Name">
+          {/* Primary + secondary CTAs. Only show when there are
+              rooms (the empty state has its own CTA stack). */}
+          {rooms.length > 0 && (
+            <motion.div variants={fadeUp} className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="primary"
+                onClick={() => {
+                  setShowCreate((v) => !v);
+                  setShowJoin(false);
+                }}
+                leadingIcon={<Plus className="h-3.5 w-3.5" strokeWidth={2.25} />}
+              >
+                New room
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setShowJoin((v) => !v);
+                  setShowCreate(false);
+                }}
+              >
+                Join with code
+              </Button>
+              <span className="ml-1 text-[11.5px] text-[var(--neutral-soft-400)]">
+                {rooms.length.toLocaleString()}{' '}
+                {rooms.length === 1 ? 'room' : 'rooms'}
+              </span>
+            </motion.div>
+          )}
+
+          {/* Inline Create form — repo-picker, not free-text. The
+              prior free-text input was a footgun: a typo produced a
+              broken room with no path to fix. A picker constrained
+              to repos the user has actually connected eliminates
+              the class of error AND teaches the user that rooms are
+              1:1 with repos. */}
+          {showCreate && (
+            <motion.form
+              onSubmit={handleCreate}
+              variants={fadeUp}
+              className="rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]"
+            >
+              <div className="border-b border-[var(--stroke-soft-200)] px-4 py-3.5">
+                <p className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[var(--neutral-soft-400)]">
+                  Create a room
+                </p>
+                <p className="mt-1 text-[12px] text-[var(--neutral-sub-600)]">
+                  Pick a repository. Aegis will scope agents to its
+                  branch and members.
+                </p>
+              </div>
+
+              {/* Search input — the picker is searchable because the
+                  median user will have dozens of repos. */}
+              <div className="border-b border-[var(--stroke-soft-200)] px-4 py-3">
                 <Input
-                  value={newRepoId}
-                  onChange={(e) => setNewRepoId(e.target.value)}
-                  placeholder="repo_name"
+                  value={repoQuery}
+                  onChange={(e) => setRepoQuery(e.target.value)}
+                  placeholder="Search your repositories…"
+                  leadingIcon={
+                    <Search
+                      className="h-3.5 w-3.5 text-[var(--neutral-soft-400)]"
+                      strokeWidth={2}
+                    />
+                  }
+                  autoFocus
                 />
-              </Field>
-              <div className="flex justify-end">
-                <Button
-                  type="submit"
-                  variant="primary"
-                  disabled={submittingCreate || !newRepoId.trim()}
-                >
-                  {submittingCreate ? 'Creating…' : 'Create room'}
-                </Button>
               </div>
-            </div>
-          </form>
 
-          <form
-            onSubmit={handleJoinRoom}
-            className="overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]"
-          >
-            <div className="flex items-center gap-2 border-b border-[var(--stroke-soft-200)] p-4">
-              <DoorOpen
-                className="h-4 w-4 shrink-0"
-                style={{ color: 'var(--primary-base)' }}
-                strokeWidth={2}
-              />
-              <h2 className="text-[14px] font-semibold tracking-[-0.01em] text-[var(--neutral-strong-950)]">
-                Join room
-              </h2>
-            </div>
-            <div className="space-y-3 p-5">
-              <Field label="Invite code">
-                <Input
-                  value={joinCode}
-                  onChange={(e) => setJoinCode(e.target.value)}
-                  placeholder="Paste invite code"
-                />
-              </Field>
-              <div className="flex justify-end">
-                <Button
-                  type="submit"
-                  variant="secondary"
-                  disabled={submittingJoin || !joinCode.trim()}
-                >
-                  {submittingJoin ? 'Joining…' : 'Join room'}
-                </Button>
-              </div>
-            </div>
-          </form>
-        </motion.div>
-
-        {rooms.length === 0 ? (
-          <div className="overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
-            <EmptyState
-              icon={<Users className="h-5 w-5" />}
-              title="No rooms yet"
-              description="Create your first room or join one with an invite code."
-            />
-          </div>
-        ) : (
-          <motion.div
-            className="grid grid-cols-1 gap-6 xl:grid-cols-[280px_minmax(0,1fr)]"
-            initial={reduce ? false : { opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: DUR.slow, ease: EASE.out, delay: 0.24 }}
-          >
-            {/* Room picker */}
-            <aside className="overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
-              <div className="flex items-center justify-between p-4">
-                <h2 className="text-[14px] font-semibold tracking-[-0.01em] text-[var(--neutral-strong-950)]">
-                  Your rooms
-                </h2>
-                <span className="inline-flex h-[18px] items-center justify-center rounded-[5px] bg-[var(--neutral-weak-50)] px-[6px] text-[10.5px] font-bold tabular-nums text-[var(--neutral-sub-600)]">
-                  {rooms.length.toLocaleString()}
-                </span>
-              </div>
-              <ul className="divide-y divide-[var(--stroke-soft-200)] border-t border-[var(--stroke-soft-200)]">
-                {rooms.map((room) => {
-                  const id = getRoomId(room);
-                  const active = id === selectedRoomId;
-                  return (
-                    <li key={id}>
-                      <button
-                        onClick={() => setSelectedRoomId(id)}
-                        className={[
-                          'flex w-full items-center gap-2.5 px-4 py-3 text-left transition-colors',
-                          active
-                            ? 'bg-[var(--primary-alpha-10)]'
-                            : 'hover:bg-[var(--neutral-weak-50)]',
-                        ].join(' ')}
+              {/* Repo list — fixed height, scrollable. Each row
+                  shows the repo name + visibility + a generative
+                  avatar so the user can tell repos apart at a
+                  glance. */}
+              <div className="max-h-[280px] overflow-y-auto">
+                {reposLoading ? (
+                  <div className="space-y-1 p-3">
+                    {Array.from({ length: 4 }).map((_, i) => (
+                      <Skeleton key={i} className="h-12 w-full rounded-[8px]" />
+                    ))}
+                  </div>
+                ) : reposError ? (
+                  <div className="px-4 py-6">
+                    <ErrorBanner
+                      message={reposError}
+                      onDismiss={() => setReposError(null)}
+                      onRetry={fetchRepos}
+                    />
+                  </div>
+                ) : filteredRepos.length === 0 ? (
+                  <div className="px-4 py-8 text-center">
+                    <p className="text-[12.5px] text-[var(--neutral-sub-600)]">
+                      {repoQuery
+                        ? 'No repositories match that search.'
+                        : repos.length === 0
+                          ? 'No repositories connected yet.'
+                          : 'Every repository already has a room.'}
+                    </p>
+                    {!repoQuery && repos.length === 0 && (
+                      <Link
+                        href="/dashboard/settings"
+                        className="mt-2 inline-block text-[12px] font-semibold text-[var(--primary-base)] hover:underline"
                       >
-                        <div className="min-w-0 flex-1">
-                          <p
-                            className="truncate text-[13px] font-medium"
-                            style={{
-                              color: active
-                                ? 'var(--primary-base)'
-                                : 'var(--neutral-strong-950)',
-                            }}
+                        Connect GitHub repos →
+                      </Link>
+                    )}
+                  </div>
+                ) : (
+                  <ul role="radiogroup" aria-label="Choose a repository">
+                    {filteredRepos.map((repo) => {
+                      const isSelected = selectedRepo === repo.full_name;
+                      return (
+                        <li key={repo.repo_id}>
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={isSelected}
+                            onClick={() => setSelectedRepo(repo.full_name)}
+                            className={cn(
+                              'flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors',
+                              isSelected
+                                ? 'bg-[var(--primary-alpha-10)]'
+                                : 'hover:bg-[var(--neutral-weak-50)]',
+                            )}
                           >
-                            {room.repo_name || id}
-                          </p>
-                          <p className="truncate text-[10.5px] text-[var(--neutral-soft-400)]">
-                            {id}
-                          </p>
-                        </div>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            </aside>
-
-            {/* Selected room */}
-            <div className="space-y-6">
-              {/* Room header + integration URL + invite generation */}
-              <div className="overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
-                <div className="flex items-start justify-between gap-3 border-b border-[var(--stroke-soft-200)] p-4">
-                  <div>
-                    <h2 className="text-[14px] font-semibold tracking-[-0.01em] text-[var(--neutral-strong-950)]">
-                      {selectedRoomLabel}
-                    </h2>
-                    <p className="mt-0.5 text-[11.5px] text-[var(--neutral-soft-400)]">
-                      Room ID: {selectedRoomId}
-                    </p>
-                  </div>
-                  <Badge tone="primary" uppercase>
-                    {role}
-                  </Badge>
-                </div>
-
-                <div className="p-5 space-y-5">
-                  <div>
-                    <p className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.07em] text-[var(--neutral-soft-400)]">
-                      Integration URL
-                    </p>
-                    <div className="flex flex-col gap-2 sm:flex-row">
-                      <input
-                        value={roomIntegrationUrl}
-                        readOnly
-                        className="h-9 flex-1 rounded-[8px] border border-[var(--stroke-sub-300)] bg-[var(--neutral-weak-50)] px-3 text-[11.5px] text-[var(--neutral-strong-950)]"
-                      />
-                      <Button
-                        variant="secondary"
-                        onClick={() =>
-                          copyToClipboard(roomIntegrationUrl, 'Integration URL')
-                        }
-                        disabled={!roomIntegrationUrl}
-                        leadingIcon={<Copy className="h-3.5 w-3.5" strokeWidth={2} />}
-                      >
-                        Copy
-                      </Button>
-                    </div>
-                  </div>
-                
-                {canCreateInvites ? (
-                  <form
-                    onSubmit={handleCreateInvite}
-                    // `items-end` on the grid container so all three grid
-                    // cells align their END edge — the button (which has
-                    // no label) lines up with the bottom of the two input
-                    // fields, instead of floating below them.
-                    className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:items-end"
-                  >
-                    <Field label="Max uses">
-                      <Input
-                        type="number"
-                        min={1}
-                        value={inviteMaxUses}
-                        onChange={(e) => setInviteMaxUses(e.target.value)}
-                        placeholder="Optional"
-                      />
-                    </Field>
-                    <Field label="Expires at">
-                      <input
-                        type="datetime-local"
-                        value={inviteExpiresAt}
-                        onChange={(e) => setInviteExpiresAt(e.target.value)}
-                        className="h-8 w-full rounded-[8px] border border-[var(--stroke-sub-300)] bg-white px-3 text-[12.5px] text-[var(--neutral-strong-950)] focus:border-[var(--primary-base)] focus:outline-none focus:ring-[3px] focus:ring-[var(--primary-alpha-16)]"
-                      />
-                    </Field>
-                    <div className="flex items-end">
-                      <Button
-                        type="submit"
-                        variant="primary"
-                        disabled={submittingInvite || !selectedRoomId}
-                        fullWidth
-                      >
-                        {submittingInvite ? 'Generating…' : 'Generate invite'}
-                      </Button>
-                    </div>
-                  </form> 
-                ) : ( 
-                  <div className="rounded-[10px] border border-[var(--stroke-soft-200)] bg-[var(--neutral-weak-50)] p-4 text-sm text-[var(--neutral-soft-400)]">
-                    Only admins and owners can generate invite links.
-                  </div>
-                )}
-                </div>
-              </div>
-
-              {/* Tool policies matrix */}
-              <div className="overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
-                <div className="flex items-center justify-between border-b border-[var(--stroke-soft-200)] p-4">
-                  <h3 className="text-[14px] font-semibold tracking-[-0.01em] text-[var(--neutral-strong-950)]">
-                    Tool policies
-                  </h3>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[11px] uppercase tracking-[0.07em] text-[var(--neutral-soft-400)]">
-                      View role
-                    </span>
-                    <Select
-                      value={viewingRole}
-                      onChange={(e) => setViewingRole(e.target.value)}
-                    >
-                      {visibleRoles.map((r) => (
-                        <option key={r} value={r}>
-                          {r}
-                        </option>
-                      ))}
-                    </Select>
-                  </div>
-                </div>
-                <div className="space-y-5 p-5">
-                  {Object.entries(TOOL_GROUPS).map(([group, toolList]) => (
-                    <div key={group}>
-                      <h4 className="mb-2 text-[10.5px] font-semibold uppercase tracking-[0.07em] text-[var(--neutral-soft-400)]">
-                        {group}
-                      </h4>
-                      <div className="overflow-hidden rounded-[10px] border border-[var(--stroke-soft-200)]">
-                        <ul className="divide-y divide-[var(--stroke-soft-200)]">
-                          {toolList.map((tool) => {
-                            const isAllowed = tools[tool] === true;
-                            const isDenied =
-                              tools[tool] === false || tools[tool] === undefined;
-                            return (
-                              <li
-                                key={tool}
-                                className="flex items-center justify-between gap-3 px-4 py-2.5"
-                              >
-                                <span className="text-[11.5px] text-[var(--neutral-strong-950)]">
-                                  {tool}
-                                </span>
-                                <div className="flex items-center gap-2">
-                                  {!canEditViewedRole && (
-                                    <span className="text-[10px] uppercase tracking-[0.07em] text-[var(--neutral-soft-400)]">
-                                      Read only
-                                    </span>
-                                  )}
-                                  <button
-                                   type='button'
-                                    disabled={!canEditViewedRole}
-                                    onClick={() => toggleTool(tool, true)}
-                                    className={[
-                                      'inline-flex h-6 items-center rounded-[6px] px-2 text-[11px] font-semibold',
-                                      isAllowed
-                                        ? 'hover:brightness-110'
-                                        : 'hover:bg-[var(--neutral-weak-50)]',
-                                    ].join(' ')}
-                                    style={
-                                      isAllowed
-                                        ? {
-                                            backgroundColor: 'var(--success)',
-                                            color: '#fff',
-                                          }
-                                        : {
-                                            border: '1px solid var(--stroke-sub-300)',
-                                            color: 'var(--neutral-sub-600)',
-                                            backgroundColor: '#fff',
-                                          }
-                                    }
-                                  >
-                                    Allow
-                                  </button>
-                                  <button
-                                  type = 'button'
-                                   disabled={!canEditViewedRole}
-                                    onClick={() => toggleTool(tool, false)}
-                                    className={[
-                                      'inline-flex h-6 items-center rounded-[6px] px-2 text-[11px] font-semibold',
-                                      isDenied
-                                        ? 'hover:brightness-110'
-                                        : 'hover:bg-[var(--neutral-weak-50)]',
-                                    ].join(' ')}
-                                    style={
-                                      isDenied
-                                        ? {
-                                            backgroundColor: 'var(--error)',
-                                            color: '#fff',
-                                          }
-                                        : {
-                                            border: '1px solid var(--stroke-sub-300)',
-                                            color: 'var(--neutral-sub-600)',
-                                            backgroundColor: '#fff',
-                                          }
-                                    }
-                                  >
-                                    Deny
-                                  </button>
-                                </div>
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Members + Invites */}
-              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-                <div className="overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
-                  <div className="flex items-center justify-between border-b border-[var(--stroke-soft-200)] p-4">
-                    <div className="flex items-center gap-2">
-                      <Users
-                        className="h-4 w-4"
-                        style={{ color: 'var(--primary-base)' }}
-                        strokeWidth={2}
-                      />
-                      <h3 className="text-[14px] font-semibold tracking-[-0.01em] text-[var(--neutral-strong-950)]">
-                        Members
-                      </h3>
-                      <span className="inline-flex h-[18px] items-center justify-center rounded-[5px] bg-[var(--neutral-weak-50)] px-[6px] text-[10.5px] font-bold tabular-nums text-[var(--neutral-sub-600)]">
-                        {members.length.toLocaleString()}
-                      </span>
-                    </div>
-                  </div>
-                  {members.length === 0 ? (
-                    <p className="p-6 text-[12.5px] text-[var(--neutral-soft-400)]">
-                      No members yet.
-                    </p>
-                  ) : (
-                    <motion.ul
-                      className="divide-y divide-[var(--stroke-soft-200)]"
-                      variants={staggerContainer(0.03, 0)}
-                      initial={reduce ? false : 'hidden'}
-                      animate="show"
-                    >
-                      {members.map((member, idx) => (
-                        <motion.li
-                          key={`${member.user_id}-${idx}`}
-                          variants={fadeUpSm}
-                          className="flex items-center gap-3 px-4 py-3"
-                        >
-                          <AgentAvatar
-                            name={member.username || member.user_id}
-                            size="sm"
-                          />
-                          <div className="min-w-0 flex-1">
-                            <p className="text-[13px] font-medium text-[var(--neutral-strong-950)]">
-                              {member.username || member.user_id}
-                            </p>
-                            <p className="text-[10.5px] text-[var(--neutral-soft-400)]">
-                              {member.user_id}
-                            </p>
-                          </div>
-                          <Badge tone="info" uppercase>
-                            {member.role || 'member'}
-                          </Badge>
-                          {member.joined_at && (
-                            <RelativeTime
-                              timestamp={member.joined_at}
-                              className="hidden text-[11px] text-[var(--neutral-soft-400)] sm:inline"
+                            <GenerativeAvatar
+                              seed={repo.full_name}
+                              variant="user"
+                              size={32}
+                              radius={8}
                             />
-                          )}
-                        </motion.li>
-                      ))}
-                    </motion.ul>
-                  )}
-                </div>
-
-                <div className="overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
-                  <div className="flex items-center justify-between border-b border-[var(--stroke-soft-200)] p-4">
-                    <div className="flex items-center gap-2">
-                      <Link2
-                        className="h-4 w-4"
-                        style={{ color: 'var(--primary-base)' }}
-                        strokeWidth={2}
-                      />
-                      <h3 className="text-[14px] font-semibold tracking-[-0.01em] text-[var(--neutral-strong-950)]">
-                        Invites
-                      </h3>
-                      <span className="inline-flex h-[18px] items-center justify-center rounded-[5px] bg-[var(--neutral-weak-50)] px-[6px] text-[10.5px] font-bold tabular-nums text-[var(--neutral-sub-600)]">
-                        {invites.length.toLocaleString()}
-                      </span>
-                    </div>
-                  </div>
-                  {invites.length === 0 ? (
-                    <p className="p-6 text-[12.5px] text-[var(--neutral-soft-400)]">
-                      No invites created yet.
-                    </p>
-                  ) : (
-                    <motion.ul
-                      className="divide-y divide-[var(--stroke-soft-200)]"
-                      variants={staggerContainer(0.03, 0)}
-                      initial={reduce ? false : 'hidden'}
-                      animate="show"
-                    >
-                      {invites.map((invite, idx) => {
-                        const code = getInviteCode(invite);
-                        return (
-                          <motion.li
-                            key={`${code}-${idx}`}
-                            variants={fadeUpSm}
-                            className="flex items-start justify-between gap-3 px-4 py-3"
-                          >
                             <div className="min-w-0 flex-1">
-                              <CodeChip>{code}</CodeChip>
-                              <p className="mt-1.5 text-[11.5px] text-[var(--neutral-soft-400)]">
-                                <span>
-                                  {invite.used_count || 0}
-                                </span>
-                                {typeof invite.max_uses === 'number' && (
+                              <p
+                                className={cn(
+                                  'truncate font-mono text-[12.5px]',
+                                  isSelected
+                                    ? 'text-[var(--primary-base)]'
+                                    : 'text-[var(--neutral-strong-950)]',
+                                )}
+                              >
+                                {repo.full_name}
+                              </p>
+                              <p className="mt-0.5 flex items-center gap-1 text-[11px] text-[var(--neutral-soft-400)]">
+                                {repo.is_private ? (
                                   <>
-                                    {' / '}
-                                    <span>
-                                      {invite.max_uses}
-                                    </span>
+                                    <Lock className="h-3 w-3" strokeWidth={2} />
+                                    Private
                                   </>
-                                )}{' '}
-                                uses
-                                {invite.expires_at && (
+                                ) : (
                                   <>
-                                    {' · expires '}
-                                    <span>
-                                      {new Date(invite.expires_at).toLocaleString()}
-                                    </span>
+                                    <Unlock
+                                      className="h-3 w-3"
+                                      strokeWidth={2}
+                                    />
+                                    Public
                                   </>
                                 )}
                               </p>
                             </div>
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              onClick={() => copyToClipboard(code, 'Invite code')}
-                              leadingIcon={
-                                <Copy className="h-3 w-3" strokeWidth={2} />
-                              }
+                            <div
+                              className={cn(
+                                'flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 transition-colors',
+                                isSelected
+                                  ? 'border-[var(--primary-base)] bg-[var(--primary-base)]'
+                                  : 'border-[var(--stroke-sub-300)]',
+                              )}
+                              aria-hidden
                             >
-                              Copy
-                            </Button>
-                          </motion.li>
-                        );
-                      })}
-                    </motion.ul>
+                              {isSelected && (
+                                <span className="block h-1.5 w-1.5 rounded-full bg-white" />
+                              )}
+                            </div>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+
+              {/* Footer — actions live here so the user always sees
+                  them without scrolling. Selected repo echoed on the
+                  left so the user confirms before pressing Create. */}
+              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--stroke-soft-200)] px-4 py-3">
+                <p className="min-w-0 truncate text-[11.5px] text-[var(--neutral-soft-400)]">
+                  {selectedRepo ? (
+                    <>
+                      Selected{' '}
+                      <span className="font-mono text-[var(--neutral-strong-950)]">
+                        {selectedRepo}
+                      </span>
+                    </>
+                  ) : (
+                    'Select a repository to continue.'
                   )}
+                </p>
+                <div className="flex gap-1.5">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => {
+                      setShowCreate(false);
+                      setSelectedRepo('');
+                      setRepoQuery('');
+                    }}
+                    disabled={submittingCreate}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    variant="primary"
+                    disabled={submittingCreate || !selectedRepo}
+                  >
+                    {submittingCreate ? 'Creating…' : 'Create room'}
+                  </Button>
                 </div>
               </div>
-            </div>
-          </motion.div>
-        )}
+            </motion.form>
+          )}
+
+          {/* Inline Join form */}
+          {showJoin && (
+            <motion.form
+              onSubmit={handleJoin}
+              variants={fadeUp}
+              className="rounded-[12px] border border-[var(--stroke-soft-200)] bg-white p-4 shadow-[0_1px_2px_rgba(23,23,23,0.04)]"
+            >
+              <p className="mb-1 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[var(--neutral-soft-400)]">
+                Join a room
+              </p>
+              <p className="mb-3 text-[12px] text-[var(--neutral-sub-600)]">
+                Paste the invite code a teammate shared with you.
+              </p>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                <Input
+                  value={joinCode}
+                  onChange={(e) => setJoinCode(e.target.value)}
+                  placeholder="aeg-..."
+                  autoFocus
+                />
+                <div className="flex gap-1.5">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => {
+                      setShowJoin(false);
+                      setJoinCode('');
+                    }}
+                    disabled={submittingJoin}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    variant="secondary"
+                    disabled={submittingJoin || !joinCode.trim()}
+                  >
+                    {submittingJoin ? 'Joining…' : 'Join room'}
+                  </Button>
+                </div>
+              </div>
+            </motion.form>
+          )}
+
+          {/* Rooms list or empty state */}
+          {rooms.length === 0 ? (
+            <motion.div
+              variants={fadeUp}
+              className="overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white p-2 shadow-[0_1px_2px_rgba(23,23,23,0.04)]"
+            >
+              <EmptyState
+                icon={<DoorOpen className="h-5 w-5" />}
+                title="Set up your first room"
+                description="Rooms scope what AI agents can do on each of your repos. Pick a repo, choose tool policies for your team, connect an agent."
+                action={
+                  <div className="flex flex-wrap items-center justify-center gap-2">
+                    <Button
+                      variant="primary"
+                      onClick={() => {
+                        setShowCreate(true);
+                        setShowJoin(false);
+                      }}
+                      leadingIcon={
+                        <Plus className="h-3.5 w-3.5" strokeWidth={2.25} />
+                      }
+                    >
+                      Create from a repo
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      onClick={() => {
+                        setShowJoin(true);
+                        setShowCreate(false);
+                      }}
+                    >
+                      Got an invite? Join with code
+                    </Button>
+                  </div>
+                }
+              />
+              {/* Three-feature reassurance strip — teaches what a
+                  room actually unlocks. Appears below the empty
+                  state so the description doesn't get long. */}
+              <div className="grid grid-cols-1 gap-3 border-t border-[var(--stroke-soft-200)] p-5 sm:grid-cols-3">
+                <FeatureNote
+                  icon={<Shield className="h-3.5 w-3.5" strokeWidth={2} />}
+                  title="Tool policies"
+                  body="Allow or deny each MCP tool per role. Roles inherit a hierarchy: OWNER > ADMIN > DEVELOPER."
+                />
+                <FeatureNote
+                  icon={<Users className="h-3.5 w-3.5" strokeWidth={2} />}
+                  title="Team membership"
+                  body="Invite teammates with role-scoped invite codes that expire and limit uses."
+                />
+                <FeatureNote
+                  icon={<Plus className="h-3.5 w-3.5" strokeWidth={2} />}
+                  title="MCP endpoint"
+                  body="Every room ships with an MCP URL — point Cursor or Claude Code at it to enforce the policy."
+                />
+              </div>
+            </motion.div>
+          ) : (
+            <motion.ul
+              variants={staggerContainer(0.03, 0.04)}
+              initial={reduce ? false : 'hidden'}
+              animate="show"
+              className="overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]"
+            >
+              {rooms.map((room) => {
+                const id = getRoomId(room);
+                return (
+                  <motion.li
+                    key={id}
+                    variants={fadeUpSm}
+                    className="group border-b border-[var(--stroke-soft-200)] last:border-b-0"
+                  >
+                    <Link
+                      href={`/dashboard/rooms/${id}`}
+                      className="flex items-center gap-4 px-5 py-4 transition-colors hover:bg-[var(--neutral-weak-50)]"
+                    >
+                      {/* Generative avatar — deterministic from the
+                          repo name, so users learn to recognize each
+                          room by its color signature. Falls back to
+                          the room id if the repo name is missing. */}
+                      <GenerativeAvatar
+                        seed={room.repo_name || id}
+                        variant="user"
+                        size={40}
+                        radius={10}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[14px] font-semibold tracking-[-0.005em] text-[var(--neutral-strong-950)]">
+                          {room.repo_name || id}
+                        </p>
+                        <p className="mt-0.5 truncate text-[11.5px] text-[var(--neutral-soft-400)]">
+                          ID{' '}
+                          <span className="font-mono text-[var(--neutral-sub-600)]">
+                            {id}
+                          </span>
+                          {room.created_at && (
+                            <>
+                              {' · created '}
+                              <RelativeTime
+                                timestamp={room.created_at}
+                                className="inline"
+                              />
+                            </>
+                          )}
+                        </p>
+                      </div>
+                      {room.role && (
+                        <Badge
+                          tone={getRoomRoleBadgeTone(room.role)}
+                          uppercase
+                          className="text-[10.5px]"
+                        >
+                          {room.role}
+                        </Badge>
+                      )}
+                      <ChevronRight
+                        className="h-4 w-4 shrink-0 text-[var(--neutral-soft-400)] transition-transform group-hover:translate-x-0.5 group-hover:text-[var(--neutral-strong-950)]"
+                        strokeWidth={2}
+                        aria-hidden
+                      />
+                    </Link>
+                  </motion.li>
+                );
+              })}
+            </motion.ul>
+          )}
+        </motion.div>
       </div>
     </>
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+// ─── Feature note (empty-state reassurance strip) ───────────────────
+function FeatureNote({
+  icon,
+  title,
+  body,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  body: string;
+}) {
   return (
-    <div>
-      <label className="mb-1.5 block text-[12px] font-medium text-[var(--neutral-sub-600)]">
-        {label}
-      </label>
-      {children}
+    <div className="flex items-start gap-2.5">
+      <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-[6px] bg-[var(--neutral-weak-50)] text-[var(--neutral-sub-600)]">
+        {icon}
+      </span>
+      <div className="min-w-0">
+        <p className="text-[12px] font-semibold tracking-[-0.005em] text-[var(--neutral-strong-950)]">
+          {title}
+        </p>
+        <p className="mt-0.5 text-[11px] leading-[1.45] text-[var(--neutral-soft-400)]">
+          {body}
+        </p>
+      </div>
     </div>
   );
 }

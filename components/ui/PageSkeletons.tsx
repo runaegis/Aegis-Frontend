@@ -662,59 +662,40 @@ export function RoomsSkeleton() {
   );
 }
 
-// ─── /dashboard/room-logs ──────────────────────────────────────────────────
+// ─── /dashboard/rooms/[id]/activity ────────────────────────────────────────
+//
+// Used while the room's per-user audit log loads. The room layout
+// already renders the Topbar + breadcrumb + tab strip, so the skeleton
+// only fills the activity card itself (no page header, no room picker).
 
-export function RoomLogsSkeleton() {
+export function RoomActivitySkeleton() {
   return (
     <div>
-      <PageHeader />
-
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[280px_minmax(0,1fr)]">
-        {/* Room picker (left rail) */}
-        <aside className="overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
-          <div className="border-b border-[var(--stroke-soft-200)] p-4">
-            <Skeleton className="h-[12px] w-20 rounded-[3px]" />
+      <section className="overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
+        <div className="flex items-center justify-between border-b border-[var(--stroke-soft-200)] p-4">
+          <Skeleton className="h-[14px] w-44 rounded-[4px]" />
+          <Skeleton className="h-[12px] w-24 rounded-[3px]" />
+        </div>
+        <SkeletonTable
+          columns={[
+            { width: 'flex-1 min-w-[160px]' }, // User
+            { width: 'w-[140px]' },             // Tool
+            { width: 'w-[140px]' },             // Branch
+            { width: 'w-[110px]' },             // Risk (stacked chips)
+            { width: 'w-[100px]' },             // Decision
+            { width: 'w-[100px]' },             // Time
+            { width: 'w-6' },                   // chevron
+          ]}
+          rows={9}
+        />
+        <div className="flex items-center justify-between border-t border-[var(--stroke-soft-200)] px-4 py-3">
+          <Skeleton className="h-[11px] w-40 rounded-[3px]" />
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-7 w-20 rounded-[7px]" />
+            <Skeleton className="h-7 w-20 rounded-[7px]" />
           </div>
-          <ul className="divide-y divide-[var(--stroke-soft-200)]">
-            {[0, 1, 2, 3, 4].map((i) => (
-              <li key={i} className="flex items-center gap-2.5 px-4 py-3">
-                <Skeleton variant="circle" className="h-7 w-7" />
-                <div className="min-w-0 flex-1 space-y-1">
-                  <Skeleton className="h-[12px] w-28 rounded-[4px]" />
-                  <Skeleton className="h-[10px] w-20 rounded-[3px]" />
-                </div>
-              </li>
-            ))}
-          </ul>
-        </aside>
-
-        {/* Activity log */}
-        <section className="overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
-          <div className="flex items-center justify-between border-b border-[var(--stroke-soft-200)] p-4">
-            <Skeleton className="h-[14px] w-44 rounded-[4px]" />
-            <Skeleton className="h-[12px] w-24 rounded-[3px]" />
-          </div>
-          <SkeletonTable
-            columns={[
-              { width: 'flex-1 min-w-[160px]' }, // User
-              { width: 'w-[140px]' },             // Tool
-              { width: 'w-[100px]' },             // Decision
-              { width: 'w-[90px]' },              // Policy
-              { width: 'w-[90px]' },              // Risk
-              { width: 'w-[100px]' },             // Time
-              { width: 'w-6' },                   // chevron
-            ]}
-            rows={9}
-          />
-          <div className="flex items-center justify-between border-t border-[var(--stroke-soft-200)] px-4 py-3">
-            <Skeleton className="h-[11px] w-40 rounded-[3px]" />
-            <div className="flex items-center gap-2">
-              <Skeleton className="h-7 w-20 rounded-[7px]" />
-              <Skeleton className="h-7 w-20 rounded-[7px]" />
-            </div>
-          </div>
-        </section>
-      </div>
+        </div>
+      </section>
     </div>
   );
 }

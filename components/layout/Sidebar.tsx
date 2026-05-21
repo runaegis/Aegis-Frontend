@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import {api} from '@/lib/api';
 import {
   LayoutDashboard,
   Activity,
@@ -14,10 +13,8 @@ import {
   FileText,
   Clock,
   Coins,
-  History,
   Plug,
   Settings,
-  LogOut,
   Menu,
   X,
   PanelLeftClose,
@@ -25,9 +22,8 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { useUser } from '@/lib/hooks';
-import { getInitials } from '@/lib/utils';
 import { AegisLogo } from '@/components/ui/AegisLogo';
-import { useRouter } from 'next/navigation';
+import { WorkspaceSwitcher } from '@/components/ui/WorkspaceSwitcher';
 
 /**
  * Sidebar collapse state.
@@ -98,7 +94,6 @@ const NAV_GROUPS: NavGroup[] = [
       { name: 'Runs', href: '/dashboard/runs', icon: Activity },
       { name: 'Sessions', href: '/dashboard/sessions', icon: Layers },
       { name: 'Rooms', href: '/dashboard/rooms', icon: Users },
-      { name: 'Room Logs', href: '/dashboard/room-logs', icon: History },
     ],
   },
   {
@@ -125,20 +120,13 @@ const BOTTOM_ITEMS: NavItem[] = [
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const { user } = useUser();
   const [mobileOpen, setMobileOpen] = useState(false);
   const { collapsed, toggle } = useSidebarCollapsed();
-  const router = useRouter();
 
   const isActive = (href: string) => {
     if (href === '/dashboard') return pathname === '/dashboard';
     return pathname === href || pathname.startsWith(`${href}/`);
   };
-
-  const handleLogout = async () => {
-    await api.logOut();
-    router.replace('/auth');
-  }; 
 
   // Nav-row link. `data-sidebar-center` is consumed by globals.css
   // to center the icon when the rail collapses. The label span is
@@ -298,40 +286,19 @@ export default function Sidebar() {
         </div>
       </nav>
 
-      {/* User row. Avatar always visible; identity column + logout
-          button hide when collapsed. The row itself centers its
-          content when collapsed via data-sidebar-center, so the
-          avatar lands middle of the rail. */}
+      {/* Workspace + account row.
+          The WorkspaceSwitcher consolidates what was previously two
+          separate concerns (workspace switching + user identity +
+          sign-out) into one bottom-anchored control. Click → drop-up
+          menu with workspace options + Settings + Sign out.
+          Collapsed sidebar shows only the 32px workspace mark
+          centered; the menu pops out rightward when clicked. */}
       <div className="border-t border-[var(--stroke-soft-200)] px-2 py-[10px]">
         <div
           data-sidebar-center={desktop ? '' : undefined}
-          className="flex items-center gap-2.5 px-2 py-1.5"
+          className="w-full"
         >
-          <div
-            className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full text-[11px] font-semibold"
-            style={{
-              backgroundColor: 'rgba(250, 115, 25, 0.10)',
-              color: 'var(--primary-base)',
-            }}
-          >
-            {user ? getInitials(user.username) : '?'}
-          </div>
-          <div className="min-w-0 flex-1" data-sidebar-hide={desktop ? '' : undefined}>
-            <p className="truncate text-[12.5px] font-medium text-[var(--neutral-strong-950)]">
-              {user?.username || 'Not connected'}
-            </p>
-            <p className="truncate text-[11px] text-[var(--neutral-soft-400)]">
-              {user?.email || 'Sign in to continue'}
-            </p>
-          </div>
-          <button
-            onClick={handleLogout}
-            data-sidebar-hide={desktop ? '' : undefined}
-            className="rounded-md p-1 text-[var(--neutral-soft-400)] transition-colors duration-200 ease-[cubic-bezier(0.2,0.8,0.2,1)] hover:bg-[var(--neutral-weak-50)] hover:text-[var(--error)]"
-            aria-label="Log out"
-          >
-            <LogOut className="h-3.5 w-3.5" />
-          </button>
+          <WorkspaceSwitcher />
         </div>
       </div>
     </>

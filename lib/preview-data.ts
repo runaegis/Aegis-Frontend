@@ -7,12 +7,15 @@
 
 import { api } from './api';
 import type {
+  AggregatedSessionAction,
   MCPApproval,
   Metrics,
+  PaginatedResponse,
   Repo,
   RoomDetails,
   RoomInvite,
   RoomMember,
+  RoomSessionAction,
   RoomSummary,
   Session,
   SessionAction,
@@ -124,6 +127,63 @@ const DECISIONS = [
   { value: 'DENY',             weight: 14 },
 ] as const;
 
+// ── Policy + blast-radius pickers ─────────────────────────────────────────
+//
+// Backend policy values are either `pass` (no policy fired) or the *name*
+// of the policy that fired (e.g. `PROTECTED_MERGE`). Demo data correlates
+// the policy choice with the decision so prospects see realistic patterns:
+// DENY rows always show a named policy, ALLOW rows mostly show `pass`,
+// REQUIRE_APPROVAL leans into the gating policies (Protected merge,
+// Branch policy, Freeze window).
+
+const HARD_POLICIES = [
+  'PROTECTED_MERGE',
+  'PROTECTED_BRANCH',
+  'SECRET_SCAN',
+  'FREEZE_WINDOW',
+] as const;
+
+const SOFT_POLICIES = [
+  'BRANCH_POLICY',
+  'MISSING_FIELDS',
+  'LARGE_DIFF',
+] as const;
+
+function policyForDecision(decision: string): string {
+  const r = rand();
+  switch (decision) {
+    case 'ALLOW':
+      // Mostly pass, occasional informational soft policy that still allowed.
+      return r < 0.7 ? 'pass' : pick(SOFT_POLICIES);
+    case 'REWRITE':
+      // The rewrite is usually triggered by a soft policy (e.g. missing
+      // fields auto-filled) or a hard policy that we could rewrite around.
+      return r < 0.65 ? pick(SOFT_POLICIES) : pick(HARD_POLICIES);
+    case 'REQUIRE_APPROVAL':
+      // Approval is almost always gated by a hard policy.
+      return r < 0.8 ? pick(HARD_POLICIES) : pick(SOFT_POLICIES);
+    case 'DENY':
+      // Denied actions almost always tripped a hard policy.
+      return r < 0.85 ? pick(HARD_POLICIES) : pick(SOFT_POLICIES);
+    default:
+      return 'pass';
+  }
+}
+
+// Blast radius distributions per decision. Indexed-pick using cumulative
+// weights so the math stays in one place.
+const BLAST_WEIGHTS: Record<string, ReadonlyArray<{ value: string; weight: number }>> = {
+  ALLOW:            [{ value: 'Low', weight: 70 }, { value: 'Medium', weight: 25 }, { value: 'High', weight: 5  }],
+  REWRITE:          [{ value: 'Low', weight: 50 }, { value: 'Medium', weight: 40 }, { value: 'High', weight: 10 }],
+  REQUIRE_APPROVAL: [{ value: 'Low', weight: 5  }, { value: 'Medium', weight: 40 }, { value: 'High', weight: 40 }, { value: 'Critical', weight: 15 }],
+  DENY:             [{ value: 'Low', weight: 5  }, { value: 'Medium', weight: 20 }, { value: 'High', weight: 35 }, { value: 'Critical', weight: 40 }],
+};
+
+function blastRadiusForDecision(decision: string): string {
+  const table = BLAST_WEIGHTS[decision] ?? BLAST_WEIGHTS.ALLOW;
+  return pickW(table);
+}
+
 const APPROVAL_STATUSES = [
   { value: 'pending',  weight: 6 },
   { value: 'approved', weight: 3 },
@@ -170,6 +230,11 @@ function makeRun(seq: number): SessionAction {
     timestamp,
     user_id: 'preview-user',
     execution_time: Math.floor(80 + rand() * rand() * 6500),
+    // Risk signal — correlated with decision so demo mode shows the same
+    // patterns prospects would see in a real workspace. PolicyChip +
+    // BlastRadiusChip read these on the Runs / Sessions / Room Logs pages.
+    policy: policyForDecision(decision),
+    blast_redius: blastRadiusForDecision(decision),
   };
 }
 
@@ -298,17 +363,17 @@ const PREVIEW_ROOM_DETAILS: Record<string, RoomDetails> = Object.fromEntries(
 
 const PREVIEW_MEMBERS: Record<string, RoomMember[]> = {
   room_dash: [
-    { id: 'm1', user_id: 'preview-user', username: 'preview',  role: 'OWNER',     joined_at: new Date(NOW - 12 * ONE_DAY).toISOString() },
+    { id: 'm1', user_id: 'preview-user', username: 'demo',  role: 'OWNER',     joined_at: new Date(NOW - 12 * ONE_DAY).toISOString() },
     { id: 'm2', user_id: 'u_kai',        username: 'kai',      role: 'DEVELOPER', joined_at: new Date(NOW - 10 * ONE_DAY).toISOString() },
     { id: 'm3', user_id: 'u_sora',       username: 'sora',     role: 'REVIEWER',  joined_at: new Date(NOW -  9 * ONE_DAY).toISOString() },
     { id: 'm4', user_id: 'u_lin',        username: 'lin',      role: 'VIEWER',    joined_at: new Date(NOW -  6 * ONE_DAY).toISOString() },
   ],
   room_mcp: [
-    { id: 'm5', user_id: 'preview-user', username: 'preview',  role: 'OWNER',     joined_at: new Date(NOW - 30 * ONE_DAY).toISOString() },
+    { id: 'm5', user_id: 'preview-user', username: 'demo',  role: 'OWNER',     joined_at: new Date(NOW - 30 * ONE_DAY).toISOString() },
     { id: 'm6', user_id: 'u_amir',       username: 'amir',     role: 'DEVELOPER', joined_at: new Date(NOW - 28 * ONE_DAY).toISOString() },
   ],
   room_api: [
-    { id: 'm7', user_id: 'preview-user', username: 'preview',  role: 'OWNER',     joined_at: new Date(NOW - 5 * ONE_DAY).toISOString() },
+    { id: 'm7', user_id: 'preview-user', username: 'demo',  role: 'OWNER',     joined_at: new Date(NOW - 5 * ONE_DAY).toISOString() },
   ],
 };
 
@@ -322,6 +387,92 @@ const PREVIEW_INVITES: Record<string, RoomInvite[]> = {
   ],
   room_api: [],
 };
+
+// ── Per-room activity (audit log used by the room's Activity tab) ─────────
+//
+// Each entry is a RoomSessionAction — the same shape as a SessionAction
+// but with `room_id` + `username` resolved server-side. We pin the repo
+// to the room's repo so it's coherent (a row in `room_dash` always says
+// "aegis/dashboard", not a random repo) and pick the user from the room's
+// member list so usernames are believable for the team that lives there.
+//
+// Volume is tuned per room so the demo feels lived-in:
+//   room_dash (busiest, 4 members) → ~50 actions
+//   room_mcp  (medium, 2 members)  → ~24 actions
+//   room_api  (newest, 1 member)   → ~9 actions
+
+function makeRoomAction(
+  roomId: string,
+  repo: string,
+  members: RoomMember[],
+  seq: number,
+): RoomSessionAction {
+  // Re-pick the underlying randoms so each room action gets its own
+  // random tool/decision/timing rather than inheriting from RUNS.
+  const ageDays = rand() ** 1.6 * 14;
+  const timestamp = new Date(NOW - ageDays * ONE_DAY).toISOString();
+  const agent = pick(AGENTS);
+  const tool = pick(TOOLS);
+  const branch = pick(BRANCHES);
+  const decision = pickW(DECISIONS);
+  const sessionId = pick(SESSION_IDS);
+  const member = pick(members);
+
+  const args =
+    tool === 'create_pull_request'
+      ? { repo, title: 'Open PR for fix', base: 'main', head: branch }
+      : tool === 'create_or_update_file'
+      ? { repo, path: 'src/index.ts', branch, message: 'chore: update' }
+      : tool === 'search_code'
+      ? { q: 'evaluatePolicy', repo }
+      : { repo, branch };
+
+  return {
+    id: uuid(),
+    session_id: sessionId,
+    agent_name: agent,
+    tool_name: tool,
+    arguments: args,
+    action_summary: pick(ACTION_PHRASES),
+    result: decision,
+    decision,
+    target_repo: repo,
+    target_branch: branch,
+    sequence_order: seq,
+    timestamp,
+    user_id: member.user_id ?? member.username ?? 'preview-user',
+    execution_time: Math.floor(80 + rand() * rand() * 6500),
+    policy: policyForDecision(decision),
+    blast_redius: blastRadiusForDecision(decision),
+    room_id: roomId,
+    username: member.username,
+  };
+}
+
+// Build all rooms' activity once at module init so re-renders are stable.
+const PREVIEW_ROOM_ACTIONS: Record<string, RoomSessionAction[]> = (() => {
+  const out: Record<string, RoomSessionAction[]> = {};
+  // Volume tuned per room — busier rooms get richer logs.
+  const VOLUMES: Record<string, number> = {
+    room_dash: 50,
+    room_mcp: 24,
+    room_api: 9,
+  };
+  for (const room of PREVIEW_ROOMS) {
+    const id = room.room_id!;
+    const repo = room.repo_name;
+    const members = PREVIEW_MEMBERS[id] ?? [];
+    const count = VOLUMES[id] ?? 12;
+    const actions = Array.from({ length: count }, (_, i) =>
+      makeRoomAction(id, repo, members, i + 1),
+    ).sort(
+      // Newest first — matches the order the table renders by default.
+      (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+    );
+    out[id] = actions;
+  }
+  return out;
+})();
 
 // Default tool policy per role — mostly true, a few false to add nuance.
 const PREVIEW_ROOM_TOOLS: Record<string, Record<string, boolean>> = {
@@ -375,9 +526,74 @@ export function installPreviewApi() {
 
   api.healthCheck = async () => ({ ok: true, mode: 'preview' });
 
+  // Sign-out — real impl swallows network errors but still pings the
+  // backend. In preview we skip that ping entirely and just clear the
+  // local user cache, matching the real cleanup behavior. The
+  // Sidebar / UserMenu / Settings sign-out flows continue to redirect
+  // to /auth after this resolves.
+  api.logOut = async () => {
+    try {
+      localStorage.removeItem('aegis_user');
+      localStorage.removeItem('aegis_onboarding_step');
+    } catch {
+      // ignore — localStorage may be unavailable in embedded contexts
+    }
+  };
+
   api.getRuns           = async () => RUNS;
   api.getSessions       = async () => SESSIONS;
   api.getMetrics        = async () => METRICS;
+
+  // Paginated variants — these are what `DashboardDataProvider` calls
+  // on mount for every dashboard route. Without these mocks, the
+  // provider's `sessionActions` stays empty across navigations and
+  // every page downstream (/runs, /sessions, /audit, etc.) renders
+  // empty even though preview mode is on. The Dashboard home page is
+  // the one exception because it reads from `api.getRuns` directly,
+  // bypassing the paginated context — that's why ONLY Dashboard
+  // appeared populated before this fix.
+  api.getSessionActionsPage = async (_userId, page = 1, page_size = 20) => {
+    const start = (page - 1) * page_size;
+    const items = RUNS.slice(start, start + page_size);
+    return {
+      items,
+      total: RUNS.length,
+      page,
+      page_size,
+      pages: Math.max(1, Math.ceil(RUNS.length / page_size)),
+    };
+  };
+
+  // Aggregated sessions — same paginated shape but with the session-level
+  // aggregate plus the constituent runs inlined (`sessions` array). The
+  // Sessions page renders the parent row from the aggregate and the
+  // expanded child rows from `sessions[]`.
+  api.getAggregatedSessions = async (_userId, page = 1, page_size = 20) => {
+    const aggregated: AggregatedSessionAction[] = SESSIONS.map((s) => {
+      const sessionRuns = RUNS.filter((r) => r.session_id === s.session_id);
+      const execTimes = sessionRuns.map((r) => r.execution_time ?? 0);
+      const tools = Array.from(new Set(sessionRuns.map((r) => r.tool_name)));
+      return {
+        session_id: s.session_id,
+        user_id: 'preview-user',
+        action_count: sessionRuns.length,
+        started_at: s.started_at ?? sessionRuns[sessionRuns.length - 1]?.timestamp ?? new Date().toISOString(),
+        ended_at: s.last_action_at ?? sessionRuns[0]?.timestamp ?? new Date().toISOString(),
+        total_execution_time: execTimes.reduce((a, b) => a + b, 0),
+        tools_used: tools,
+        sessions: sessionRuns,
+      };
+    });
+    const start = (page - 1) * page_size;
+    const items = aggregated.slice(start, start + page_size);
+    return {
+      items,
+      total: aggregated.length,
+      page,
+      page_size,
+      pages: Math.max(1, Math.ceil(aggregated.length / page_size)),
+    };
+  };
   api.getSessionActions = async (sessionId: string) =>
     RUNS.filter((r) => r.session_id === sessionId).sort(
       (a, b) => (a.sequence_order ?? 0) - (b.sequence_order ?? 0),
@@ -431,25 +647,89 @@ export function installPreviewApi() {
     PREVIEW_ROOM_DETAILS[roomId] ?? PREVIEW_ROOMS[0];
   api.getRoomMembers = async (roomId: string) => PREVIEW_MEMBERS[roomId] ?? [];
   api.getRoomInvites = async (roomId: string) => PREVIEW_INVITES[roomId] ?? [];
+  // Activity tab inside a room. Returns paginated `RoomSessionAction[]`
+  // pinned to that room — same shape as the real endpoint
+  // `GET /sessions_by_room_id/{room_id}` Jenil shipped.
+  api.getSessionsByRoomId = async (
+    roomId: string,
+    page = 1,
+    pageSize = 20,
+  ): Promise<PaginatedResponse<RoomSessionAction>> => {
+    const all = PREVIEW_ROOM_ACTIONS[roomId] ?? [];
+    const total = all.length;
+    const pages = Math.max(1, Math.ceil(total / pageSize));
+    const safePage = Math.min(Math.max(1, page), pages);
+    const start = (safePage - 1) * pageSize;
+    const items = all.slice(start, start + pageSize);
+    return { items, total, page: safePage, page_size: pageSize, pages };
+  };
   api.getRoomTools = async (_roomId: string, role: string) =>
     PREVIEW_ROOM_TOOLS[role] ?? PREVIEW_ROOM_TOOLS.DEVELOPER;
   api.updateRoomTools = async () => ({ success: true });
-  api.createRoom = async (repoId: string) => ({
-    id: `room_${Date.now()}`,
-    room_id: `room_${Date.now()}`,
-    repo_name: repoId,
-    owner_username: 'preview-user',
-    created_at: new Date().toISOString(),
+  // Room MCP integration URL — rendered into the copyable Integration
+  // field on the rooms page. Without this mock the Promise.all on
+  // /dashboard/rooms rejects and the whole detail panel goes empty.
+  // Format mirrors the real shape: a stable per-room slug + opaque token.
+  api.getRoomIntegrationConfig = async (roomId: string) => ({
+    url: `https://mcp.runaegis.co/r/${roomId}/aeg_${roomId.replace('room_', '')}_preview_token`,
   });
-  api.createRoomInvite = async (_roomId, payload) => ({
-    id: `inv_${Date.now()}`,
-    invite_code: `aeg-${Math.random().toString(36).slice(2, 8)}`,
-    room_id: _roomId,
-    max_uses: payload.max_uses ?? null,
-    used_count: 0,
-    expires_at: payload.expires_at ?? null,
-    created_at: new Date().toISOString(),
-  });
+  // Create a room AND seed it correctly into the in-memory mock store
+  // so the user-just-created flow works end-to-end:
+  //   • getMyRooms() returns the new room (so the RoomSwitcher + index
+  //     show it immediately)
+  //   • getRoomDetails(newId) returns the right repo (not PREVIEW_ROOMS[0]
+  //     fallback)
+  //   • getRoomMembers(newId) returns the creator as OWNER (so the demo
+  //     user shows as OWNER in the room header, NOT the DEVELOPER fallback
+  //     RoomContext was resolving to)
+  //   • role: 'OWNER' on the returned summary so RoomContext picks it up
+  //     immediately without a refetch race
+  // Net effect: creating a new room surfaces all OWNER-only affordances
+  // (Generate invite, etc.) the same way the seeded demo rooms do.
+  api.createRoom = async (repoId: string) => {
+    const newId = `room_${Date.now()}`;
+    const createdAt = new Date().toISOString();
+    const newRoom: RoomSummary = {
+      id: newId,
+      room_id: newId,
+      repo_name: repoId,
+      owner_username: 'demo',
+      role: 'OWNER',
+      created_at: createdAt,
+    };
+    PREVIEW_ROOMS.push(newRoom);
+    PREVIEW_ROOM_DETAILS[newId] = { ...newRoom };
+    PREVIEW_MEMBERS[newId] = [
+      {
+        id: `m_${Date.now()}`,
+        user_id: 'preview-user',
+        username: 'demo',
+        role: 'OWNER',
+        joined_at: createdAt,
+      },
+    ];
+    PREVIEW_INVITES[newId] = [];
+    PREVIEW_ROOM_ACTIONS[newId] = [];
+    return newRoom;
+  };
+  // Create an invite AND persist it into PREVIEW_INVITES so a refetch
+  // of getRoomInvites(roomId) actually returns the new row. Without
+  // the push, the Members tab's "Active invites" list stayed empty
+  // after Generate, even though the toast claimed success.
+  api.createRoomInvite = async (_roomId, payload) => {
+    const newInvite: RoomInvite = {
+      id: `inv_${Date.now()}`,
+      invite_code: `aeg-${Math.random().toString(36).slice(2, 8)}`,
+      room_id: _roomId,
+      max_uses: payload.max_uses ?? null,
+      used_count: 0,
+      expires_at: payload.expires_at ?? null,
+      created_at: new Date().toISOString(),
+    };
+    if (!PREVIEW_INVITES[_roomId]) PREVIEW_INVITES[_roomId] = [];
+    PREVIEW_INVITES[_roomId].unshift(newInvite);
+    return newInvite;
+  };
   api.joinRoom = async () => ({ success: true });
 
   api.getFreezeWindows = async () => PREVIEW_FREEZE_WINDOWS;
@@ -472,13 +752,13 @@ export function installPreviewApi() {
   api.saveUser = async (u) => ({
     ...u,
     id: 'preview-user',
-    email: 'preview@runaegis.com',
+    email: 'preview@runaegis.co',
     created_at: new Date().toISOString(),
   });
   api.getUserDetails = async () => ({
     id: 'preview-user',
-    username: 'preview',
-    email: 'preview@runaegis.com',
+    username: 'demo',
+    email: 'preview@runaegis.co',
     github_user_id: 0,
   });
   api.getOnboardingStep = async () => ({ onboarding_step: 6 });
