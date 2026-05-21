@@ -385,10 +385,16 @@ export default function RoomMembersPage() {
                     className="h-8 w-full rounded-[8px] border border-[var(--stroke-sub-300)] bg-white px-2.5 text-[12.5px] text-[var(--neutral-strong-950)] focus:border-[var(--primary-base)] focus:outline-none focus:ring-[3px] focus:ring-[var(--primary-alpha-16)]"
                   />
                 </div>
+                {/* size="md" (h-8) instead of size="sm" (h-7) so the
+                    buttons share their bottom-AND-top baseline with the
+                    h-8 inputs in the columns to the left. With "sm",
+                    items-end aligned bottoms but the 4px height delta
+                    made the buttons read as "starting below" the
+                    inputs. */}
                 <div className="flex items-end gap-1.5">
                   <Button
                     type="button"
-                    size="sm"
+                    size="md"
                     variant="secondary"
                     onClick={() => {
                       setShowInviteForm(false);
@@ -401,7 +407,7 @@ export default function RoomMembersPage() {
                   </Button>
                   <Button
                     type="submit"
-                    size="sm"
+                    size="md"
                     variant="primary"
                     disabled={submittingInvite}
                   >

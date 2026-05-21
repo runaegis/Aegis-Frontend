@@ -962,18 +962,26 @@ function RepositoriesSection({
                       </p>
                     </div>
                     <div className="flex items-center gap-1.5">
+                      {/* Read = success green (granted read-only access,
+                          low-risk). Write = brand primary orange (the
+                          more powerful grant; matches the rest of the
+                          Aegis active-state language). Previously Read
+                          was generic info blue and Write was warning
+                          amber — "Write is a warning" framed the action
+                          as dangerous when it's just granting more
+                          permission. */}
                       <PermPill
                         label="Read"
                         active={!!repos[i].can_read}
                         onClick={() => setPermission(i, 'read')}
-                        color="var(--information)"
+                        color="var(--success)"
                       />
                       <PermPill
                         label="Write"
                         active={!!repos[i].can_write}
                         onClick={() => setPermission(i, 'write')}
                         disabled={!repos[i].can_read}
-                        color="var(--warning)"
+                        color="var(--primary-base)"
                       />
                     </div>
                   </div>
