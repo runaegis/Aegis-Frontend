@@ -62,9 +62,9 @@ export function formatDuration(startTime: string, endTime: string): string {
 export function formatExecutionTimeMs(
   value: number | string | bigint | null | undefined
 ): string {
-  if (value === null || value === undefined) return '—';
+  if (value === null || value === undefined) return '';
   const ms = typeof value === 'bigint' ? Number(value) : Number(value);
-  if (!Number.isFinite(ms) || ms < 0) return '—';
+  if (!Number.isFinite(ms) || ms < 0) return '';
   if (ms < 1000) return `${Math.round(ms)}ms`;
 
   const totalSec = Math.round(ms / 1000);
@@ -226,7 +226,14 @@ const GITHUB_HOST = 'github.com';
 
 export type PolicyStatus = 'pass' | 'enforced' | 'unknown';
 
-/** Normalize free-form backend `policy` strings (e.g. "pass", "policy enforced") to a known status. */
+/**
+ * Normalize free-form backend `policy` strings to a known status.
+ *
+ * The backend emits either `"pass"` (no policy triggered) or the *name* of
+ * the policy that triggered (e.g. `"PROTECTED_MERGE"`, `"BRANCH_POLICY"`,
+ * `"MISSING_FIELDS"`). Any non-pass / non-empty value means a policy fired,
+ * which is `enforced`.
+ */
 export function normalizePolicy(policy?: string | null): PolicyStatus {
   if (!policy) return 'unknown';
   const v = policy.toLowerCase().trim();
@@ -234,18 +241,18 @@ export function normalizePolicy(policy?: string | null): PolicyStatus {
   if (v === 'pass' || v === 'passed' || v === 'ok' || v === 'allow' || v === 'allowed') {
     return 'pass';
   }
-  if (
-    v.includes('enforc') ||
-    v === 'fail' ||
-    v === 'failed' ||
-    v === 'deny' ||
-    v === 'denied' ||
-    v === 'block' ||
-    v === 'blocked'
-  ) {
-    return 'enforced';
-  }
-  return 'unknown';
+  // Any other non-empty value = a named policy fired = enforced.
+  return 'enforced';
+}
+
+/**
+ * Humanize backend policy identifiers. `PROTECTED_MERGE` → `Protected merge`.
+ * Single-word lowercase values get title-cased (`pass` → `Pass`).
+ */
+function humanizePolicyLabel(raw: string): string {
+  const cleaned = raw.trim().replace(/[_-]+/g, ' ').toLowerCase();
+  if (!cleaned) return raw;
+  return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
 }
 
 export type PolicyDisplay = {
@@ -257,8 +264,12 @@ export type PolicyDisplay = {
 export function formatPolicy(policy?: string | null): PolicyDisplay {
   const status = normalizePolicy(policy);
   if (status === 'pass') return { status, label: 'Pass', tone: 'success' };
-  if (status === 'enforced') return { status, label: 'Enforced', tone: 'warning' };
-  return { status, label: policy?.trim() || 'Unknown', tone: 'neutral' };
+  if (status === 'enforced') {
+    // Use the actual policy name (humanized) so reviewers can see WHICH
+    // policy fired — not just that something did.
+    return { status, label: humanizePolicyLabel(policy ?? 'Enforced'), tone: 'warning' };
+  }
+  return { status, label: 'Unknown', tone: 'neutral' };
 }
 
 // ── Blast radius ──────────────────────────────────────────────────────────
@@ -315,7 +326,28 @@ export function formatBlastRadius(value?: string | null): BlastRadiusDisplay {
   }
 }
 
-/** Read blast radius from a `SessionAction`-shaped object — tolerant of typo & corrected key. */
+// ── Room roles ────────────────────────────────────────────────────────────
+
+/**
+ * Tone for a room-role Badge. OWNER gets the brand primary (orange) to
+ * signal highest authority + reinforce the Aegis identity wherever an
+ * OWNER badge appears. ADMIN sits between (warning amber). DEVELOPER is
+ * the baseline (info blue). Anything unknown falls back to neutral gray.
+ *
+ * Returns a string instead of `BadgeTone` so `utils.ts` stays free of
+ * component imports — callers cast/use it directly with `tone={...}`.
+ */
+export type RoomRoleBadgeTone = 'primary' | 'warning' | 'info' | 'neutral';
+
+export function getRoomRoleBadgeTone(role?: string | null): RoomRoleBadgeTone {
+  const r = role?.toUpperCase().trim();
+  if (r === 'OWNER') return 'primary';
+  if (r === 'ADMIN') return 'warning';
+  if (r === 'DEVELOPER') return 'info';
+  return 'neutral';
+}
+
+/** Read blast radius from a `SessionAction`-shaped object, tolerant of typo & corrected key. */
 export function readBlastRadius(input: {
   blast_redius?: string | null;
   blast_radius?: string | null;

@@ -21,8 +21,7 @@ import {
 } from '@/lib/utils';
 import { RelativeTime } from '@/components/ui/RelativeTime';
 import Topbar from '@/components/layout/Topbar';
-import AgentAvatar from '@/components/ui/AgentAvatar';
-import { ToolLogo, getAgentToolId } from '@/components/ui/ToolLogo';
+import { AgentMark } from '@/components/ui/AgentMark';
 import DecisionBadge, { decisionColor } from '@/components/ui/DecisionBadge';
 import EmptyState from '@/components/ui/EmptyState';
 import ErrorBanner from '@/components/ui/ErrorBanner';
@@ -353,7 +352,7 @@ function RunRow({
               style={{ backgroundColor: decisionColor(run.decision) }}
               aria-hidden
             />
-            <AgentToolMark name={run.agent_name || ''} />
+            <AgentMark name={run.agent_name || ''} size="xs" />
             <span className="truncate text-[13.5px] font-semibold text-[var(--neutral-strong-950)]">
               {run.agent_name || 'Unknown'}
             </span>
@@ -368,9 +367,7 @@ function RunRow({
         <TD>
           {run.target_branch ? (
             <CodeChip>{run.target_branch}</CodeChip>
-          ) : (
-            <span className="text-[var(--neutral-soft-400)]">—</span>
-          )}
+          ) : null}
         </TD>
         <TD className="whitespace-nowrap">
           <PolicyChip policy={run.policy} showEmpty />
@@ -390,9 +387,10 @@ function RunRow({
               timestamp={run.timestamp}
               className="whitespace-nowrap text-[12px] text-[var(--neutral-soft-400)]"
             />
-            {run.execution_time !== undefined && run.execution_time !== null && (
-              <CodeChip>{formatExecutionTimeMs(run.execution_time)}</CodeChip>
-            )}
+            {(() => {
+              const exec = formatExecutionTimeMs(run.execution_time);
+              return exec ? <CodeChip>{exec}</CodeChip> : null;
+            })()}
           </div>
         </TD>
         <TD className="w-8 text-right">
@@ -415,9 +413,15 @@ function RunRow({
               <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.05em] text-[var(--neutral-soft-400)]">
                 Full Summary
               </p>
-              <p className="text-[13px] text-[var(--neutral-strong-950)]">
-                {run.action_summary || '—'}
-              </p>
+              {run.action_summary ? (
+                <p className="text-[13px] text-[var(--neutral-strong-950)]">
+                  {run.action_summary}
+                </p>
+              ) : (
+                <p className="text-[13px] italic text-[var(--neutral-soft-400)]">
+                  No summary provided
+                </p>
+              )}
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <p className="mr-1 text-[10px] font-semibold uppercase tracking-[0.05em] text-[var(--neutral-soft-400)]">
                   Risk
@@ -474,27 +478,6 @@ function RunRow({
       )}
       </AnimatePresence>
     </>
-  );
-}
-
-// ── Agent mark — shows the matching integration logo inside the same
-//    small circle footprint as AgentAvatar(xs), and falls back to the
-//    initials avatar when the agent name doesn't map to a known tool.
-function AgentToolMark({ name }: { name: string }) {
-  const toolId = getAgentToolId(name);
-
-  if (!toolId) {
-    return <AgentAvatar name={name} size="xs" />;
-  }
-
-  return (
-    <span
-      className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white ring-1 ring-[var(--stroke-soft-200)]"
-      title={name}
-      aria-label={name}
-    >
-      <ToolLogo id={toolId} size={14} />
-    </span>
   );
 }
 

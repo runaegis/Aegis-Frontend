@@ -18,6 +18,7 @@ import {
   extractPullRequestUrl,
   formatExecutionTimeMs,
   formatFullTimestamp,
+  getRoomRoleBadgeTone,
   readBlastRadius,
 } from '@/lib/utils';
 import { DUR, EASE, fadeUp, fadeUpSm, staggerContainer } from '@/lib/motion';
@@ -298,7 +299,11 @@ export default function RoomLogsPage() {
                             </p>
                           </div>
                           {room.role && (
-                            <Badge tone="info" uppercase className="shrink-0">
+                            <Badge
+                              tone={getRoomRoleBadgeTone(room.role)}
+                              uppercase
+                              className="shrink-0"
+                            >
                               {room.role}
                             </Badge>
                           )}
@@ -425,7 +430,7 @@ function RoomHeader({
             {total === 1 ? 'action' : 'actions'}
           </span>
           {room?.role && (
-            <Badge tone="info" uppercase>
+            <Badge tone={getRoomRoleBadgeTone(room.role)} uppercase>
               {room.role}
             </Badge>
           )}
@@ -483,7 +488,9 @@ function RoomActionRow({
                     <ToolLogo id={toolId} size={9} />
                   </span>
                 ) : null}
-                <span className="truncate">{action.agent_name || '—'}</span>
+                <span className="truncate">
+                  {action.agent_name || 'Unknown agent'}
+                </span>
               </p>
             </div>
           </div>
@@ -496,9 +503,7 @@ function RoomActionRow({
             <CodeChip className="max-w-[220px]">
               <span className="truncate">{action.target_branch}</span>
             </CodeChip>
-          ) : (
-            <span className="text-[var(--neutral-soft-400)]">—</span>
-          )}
+          ) : null}
         </TD>
         <TD className="whitespace-nowrap">
           <PolicyChip policy={action.policy} showEmpty />
@@ -518,10 +523,10 @@ function RoomActionRow({
               timestamp={action.timestamp}
               className="whitespace-nowrap text-[12px] text-[var(--neutral-soft-400)]"
             />
-            {action.execution_time !== undefined &&
-              action.execution_time !== null && (
-                <CodeChip>{formatExecutionTimeMs(action.execution_time)}</CodeChip>
-              )}
+            {(() => {
+              const exec = formatExecutionTimeMs(action.execution_time);
+              return exec ? <CodeChip>{exec}</CodeChip> : null;
+            })()}
           </div>
         </TD>
         <TD className="w-8 text-right">
@@ -544,9 +549,15 @@ function RoomActionRow({
                 <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.05em] text-[var(--neutral-soft-400)]">
                   Full summary
                 </p>
-                <p className="text-[13px] text-[var(--neutral-strong-950)]">
-                  {action.action_summary || '—'}
-                </p>
+                {action.action_summary ? (
+                  <p className="text-[13px] text-[var(--neutral-strong-950)]">
+                    {action.action_summary}
+                  </p>
+                ) : (
+                  <p className="text-[13px] italic text-[var(--neutral-soft-400)]">
+                    No summary provided
+                  </p>
+                )}
                 {Array.isArray(action.action_pointers) &&
                   action.action_pointers.length > 0 && (
                     <ul className="mt-3 space-y-1 text-[12px] text-[var(--neutral-sub-600)]">
@@ -563,7 +574,11 @@ function RoomActionRow({
                   )}
               </div>
               <div className="grid grid-cols-2 gap-3 text-[12px] md:grid-cols-4">
-                <Meta label="Repository" value={action.target_repo || '—'} />
+                <Meta
+                  label="Repository"
+                  value={action.target_repo || 'Not recorded'}
+                  muted={!action.target_repo}
+                />
                 <Meta label="Sequence" value={`#${action.sequence_order}`} />
                 <Meta
                   label="Session"
@@ -603,11 +618,14 @@ function Meta({
   value,
   href,
   mono,
+  muted,
 }: {
   label: string;
   value: string;
   href?: string;
   mono?: boolean;
+  /** Render the value in a dim italic style — for "not recorded" placeholders. */
+  muted?: boolean;
 }) {
   return (
     <div className="min-w-0">
@@ -630,7 +648,10 @@ function Meta({
       ) : (
         <p
           className={[
-            'mt-0.5 truncate text-[var(--neutral-strong-950)]',
+            'mt-0.5 truncate',
+            muted
+              ? 'italic text-[var(--neutral-soft-400)]'
+              : 'text-[var(--neutral-strong-950)]',
             mono
               ? '[font-family:var(--font-geist-mono),ui-monospace,monospace]'
               : '',
