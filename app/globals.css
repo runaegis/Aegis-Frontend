@@ -42,9 +42,27 @@
 
   /* Chart-only muted plum. Distinct from --feature (bright AlignUI
      purple, used in Rewrite badges) because chart fills need lower
-     saturation to read well at scale. Pairs with the brand orange
-     in Token Spenditure's two-series comparison charts. */
-  --chart-plum:        #7c5e8c;
+     saturation to read well at scale.
+
+     Iteration history:
+       v1: monochrome (#171717) — black bars dominated.
+       v2: AlignUI feature purple (#7d52f4) — read as too-bright blue.
+       v3: muted plum (#7c5e8c) — better but mismatched with brand temp.
+       v4: deep slate (#1e293b) — Cursor/Mercury palette, but the
+       slate-vs-brand-orange contrast made the charts feel grim.
+       v5: soft cornflower (#74C4FF) — Stock Unlock match. Too pastel.
+     v6: periwinkle (#6268F8) — vibrant but still light next to amber.
+     v7 (now): deep indigo (#4338CA, Tailwind indigo-700) — same role
+       (secondary series) but a noticeably deeper, more weighty blue
+       that anchors the chart against the amber primary. Token name
+       kept (--chart-plum) for backwards compat. */
+  --chart-plum:        #4338CA;
+  /* Chart primary-series amber. Light = soft amber (#F8A748) paired
+     with --chart-plum's indigo. Dark = Aegis brand orange (#fa7319)
+     for a more confident pop against the dark page bg. Used by chart
+     fills (via chartConfig) AND any outside-chart series indicators
+     (Legend dots, Stat strip dots) so the palette stays in sync. */
+  --chart-amber:       #F8A748;
 
   --information:       #335cff;
   --info-lighter:      #ebefff;
@@ -78,7 +96,7 @@
   /* Table header surface — slightly lifted from card body. Dark mode
      overrides to a different shade for better separation against the
      dark card surface. */
-  --table-header-bg: var(--neutral-weak-50);
+  --table-header-bg: #F7F7F7;
 
   /* Keycap chips (kbd) — used in the command palette footer hints,
      tooltips, and anywhere we want a "press this key" affordance.
@@ -165,9 +183,14 @@
   --feature-lighter:   rgba(140, 113, 246, 0.14);
   --feature-dark:      #a78bfa;  /* lifted lilac — REWRITE badge legibility */
 
-  /* Dark-mode chart plum — lifted to soft mauve so it reads on the
-     dark page bg without burning like the previous near-white did. */
-  --chart-plum:        #b39bcc;
+  /* Dark-mode chart secondary — lighter periwinkle (one step brighter
+     than light-mode's deep indigo #4338CA). Deep indigo on a dark page
+     bg loses contrast; the lifted version stays readable. */
+  --chart-plum:        #6268F8;
+  /* Dark-mode chart primary — Aegis brand orange. Brighter and more
+     saturated than the light-mode amber, gives the primary series a
+     confident pop on the dark page bg. */
+  --chart-amber:       #fa7319;
 
   --information:       #4d82ff;
   --info-lighter:      rgba(77, 130, 255, 0.14);
@@ -349,12 +372,27 @@ body::-webkit-scrollbar {
   display: none;                /* WebKit */
 }
 
-/* Scrollbar — thin, neutral, applied to any element that opts into
-   visible scrollbars (skipped at document level by the rules above). */
-::-webkit-scrollbar { width: 8px; height: 8px; }
+/* Scrollbar — sleek, neutral, applied to any element that opts into
+   visible scrollbars (skipped at document level by the rules above).
+   6px feels right alongside our 12-13px body text — anything thicker
+   reads as desktop-OS chrome inside what's meant to be a polished
+   in-page rail. Thumb starts at very subtle alpha and brightens on
+   hover so the affordance only competes for attention when the user
+   actively engages with it. Firefox uses `thin` (the OS-thinnest
+   variant) and our two custom thumb colors. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--neutral-soft-200) transparent;
+}
+::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--neutral-soft-200); border-radius: 4px; }
+::-webkit-scrollbar-thumb {
+  background: var(--neutral-soft-200);
+  border-radius: 999px;
+  transition: background-color 120ms ease;
+}
 ::-webkit-scrollbar-thumb:hover { background: var(--neutral-sub-300); }
+::-webkit-scrollbar-corner { background: transparent; }
 
 /* Scrollbar — fully hidden for elements marked `data-scrollable`.
    Zero layout space reclaimed → the inset content card's topbar
@@ -744,11 +782,16 @@ input:-webkit-autofill {
    `--primary-lighter`). One affordance, one color family. */
 
 /* ─── Tool logos: dark-mode inversion ────────────────────────────────
-   Some tool logos ship as monochromatic dark PNGs (Cursor's mark) and
-   disappear against near-black surfaces. Invert them in dark; colored
-   logos (VS Code blue) stay untouched. Add new tool IDs to this list
-   as needed. The data-tool-id attribute is set in ToolLogo.tsx. */
-[data-theme="dark"] img[data-tool-id="cursor"] {
+   Some tool logos ship as monochromatic dark PNGs and disappear
+   against near-black surfaces. Invert them in dark; colored logos
+   (VS Code blue, Claude orange, Copilot gradient, Replit orange)
+   stay untouched. Add new tool IDs to this list as needed.
+   The data-tool-id attribute is set in ToolLogo.tsx. */
+[data-theme="dark"] img[data-tool-id="cursor"],
+[data-theme="dark"] img[data-tool-id="openai"],
+[data-theme="dark"] img[data-tool-id="windsurf"],
+[data-theme="dark"] img[data-tool-id="aider"],
+[data-theme="dark"] img[data-tool-id="devin"] {
   filter: invert(1) hue-rotate(180deg);
 }
 

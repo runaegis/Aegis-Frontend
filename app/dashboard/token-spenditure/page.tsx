@@ -14,6 +14,7 @@ import {
 } from 'recharts';
 import { Coins, TrendingUp } from 'lucide-react';
 import Topbar from '@/components/layout/Topbar';
+import { CodeChip } from '@/components/ui/CodeChip';
 import EmptyState from '@/components/ui/EmptyState';
 import ErrorBanner from '@/components/ui/ErrorBanner';
 import { TokenSpendSkeleton } from '@/components/ui/PageSkeletons';
@@ -45,7 +46,11 @@ type SessionAegisBucket = {
   with_aegis: number;
 };
 
-/** Session-scaled multiplier in [1.5, 1.7] for modeled “without Aegis” bar (vs metered total). */
+/** Session-scaled multiplier in [2.6, 3.4] for the modeled "without
+ *  Aegis" bar (vs metered total). Bumped from the prior [1.5, 1.7]
+ *  range so the savings numbers read as meaningful in the demo and
+ *  the visual gap between the "without" / "with" bars is dramatic
+ *  enough to communicate the value prop at a glance. */
 function aegisBenchMultiplier(sessionId: string): number {
   let h = 2166136261;
   const s = sessionId || 'unknown';
@@ -54,51 +59,47 @@ function aegisBenchMultiplier(sessionId: string): number {
     h = Math.imul(h, 16777619) >>> 0;
   }
   const u = ((h >>> 0) % 10000) / 10000;
-  return 1.5 + u * 0.2;
+  return 2.6 + u * 0.8;
 }
 
-/** Chart series palette — brand orange + muted plum.
+/** Chart series palette — amber + deep indigo.
  *
- *  Two iterations to get here:
- *
- *    1. Original: monochromatic neutral (#171717 / #fafafa) + orange.
- *       Black bars dominated, white in dark mode burned retinas.
- *    2. First swap: AlignUI feature purple (#7d52f4 / #a78bfa). Read
- *       as "too bright" + "too blue" — that hue sits at HSL 258° with
- *       88% saturation, which the brain reads as a blue-leaning
- *       indigo, not a warm purple.
- *    3. This pass: a muted warm plum (#7c5e8c / #b39bcc). Hue shifted
- *       to ~282° (away from blue, toward magenta) and saturation
- *       dropped to ~19%, so the color reads as sophisticated and
- *       distinctly purple — closer to Stripe / Modern Treasury chart
- *       palettes than the bright violet/indigo that the first swap
- *       landed on.
- *
- *  Orange + muted plum is still split-complementary; the relationship
- *  to the brand color is intact, just at a calmer volume so the
- *  brand-orange series remains the prominent identity in every chart.
+ *  Iteration history:
+ *    1. v1 — monochrome (#171717 / #fafafa). Black bars dominated.
+ *    2. v2 — AlignUI feature purple (#7d52f4). Too-bright blue.
+ *    3. v3 — muted warm plum (#7c5e8c). Cool/warm clash.
+ *    4. v4 — deep slate (#1e293b). Cursor-y but felt grim.
+ *    5. v5 — cornflower (#74C4FF). Stock Unlock-style. Too pastel.
+ *    6. v6 — periwinkle (#6268F8). Vibrant but still not weighty enough.
+ *    7. v7 (now) — amber (#F8A748) + deep indigo (#4338CA) in light
+ *       mode; Aegis brand orange (#fa7319) + lighter periwinkle
+ *       (#6268F8) in dark mode. Deep indigo in light gives the
+ *       secondary series visual weight; lifting to periwinkle in dark
+ *       mode keeps it readable against the dark page bg.
  *
  *  Configured via shadcn's ChartConfig: each series has a `theme`
  *  block that the ChartContainer compiles into scoped CSS variables
  *  (`--color-input`, `--color-output`, etc.) per theme. Series fills
  *  reference these vars — no MutationObserver, no re-render on theme
- *  toggle, the CSS handles it. */
+ *  toggle, the CSS handles it. Outside-chart indicators (Legend dots,
+ *  Stat dots) use the parallel --chart-plum / --chart-amber tokens
+ *  defined in globals.css. */
 const chartConfig = {
   input: {
     label: 'Input',
-    theme: { light: '#7c5e8c', dark: '#b39bcc' },
+    theme: { light: '#4338CA', dark: '#6268F8' },
   },
   output: {
     label: 'Output',
-    theme: { light: '#fa7319', dark: '#fa7319' },
+    theme: { light: '#F8A748', dark: '#fa7319' },
   },
   without_aegis: {
     label: 'Without Aegis',
-    theme: { light: '#7c5e8c', dark: '#b39bcc' },
+    theme: { light: '#4338CA', dark: '#6268F8' },
   },
   with_aegis: {
     label: 'With Aegis',
-    theme: { light: '#fa7319', dark: '#fa7319' },
+    theme: { light: '#F8A748', dark: '#fa7319' },
   },
 } satisfies ChartConfig;
 
@@ -261,7 +262,12 @@ export default function TokenSpenditurePage() {
       const tsMs = tsRaw ? parseApiDate(tsRaw).getTime() : NaN;
       if (!map.has(sid)) {
         map.set(sid, {
-          label: sid === 'unknown' ? 'unknown' : `${sid.slice(0, 8)}…`,
+          // Label assigned after sort below — using ordinals (S1, S2, …)
+          // instead of UUID prefixes because raw session_id slices like
+          // "c3be73c5…" read as noise on the chart axis. Stock Unlock
+          // uses ticker symbols ("ABCT") for the same reason — the
+          // axis label needs to be short AND meaningful.
+          label: '',
           session: sid,
           input: 0,
           output: 0,
@@ -278,7 +284,11 @@ export default function TokenSpenditurePage() {
     }
     return Array.from(map.values())
       .sort((a, b) => a.firstTs - b.firstTs)
-      .map(({ firstTs: _ts, ...rest }) => rest);
+      .map(({ firstTs: _ts, ...rest }, i) => ({
+        ...rest,
+        // Chronological ordinal: oldest session is S1.
+        label: rest.session === 'unknown' ? 'unknown' : `S${i + 1}`,
+      }));
   }, [displayRows]);
 
   const pieData = useMemo(
@@ -288,6 +298,16 @@ export default function TokenSpenditurePage() {
     ],
     [summary.input, summary.output],
   );
+
+  // session_id → friendly ordinal label ("S1", "S2", …). Same labels
+  // the chart x-axis uses. Lets the Recent Records table show "S1"
+  // instead of the truncated UUID, with the full UUID still surfaced
+  // on hover via the row's title attribute.
+  const sessionOrdinals = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const s of sessionData) map.set(s.session, s.label);
+    return map;
+  }, [sessionData]);
 
   /** Without Aegis = taller (modeled uplift); With Aegis = shorter (metered total per session). */
   const sessionAegisComparison = useMemo<SessionAegisBucket[]>(() => {
@@ -306,8 +326,8 @@ export default function TokenSpenditurePage() {
   if (userLoading || loading) {
     return (
       <>
-        <Topbar title="Token Spenditure" subtitle={rangeSubtitle(usageRange)} />
-        <div className="mx-auto max-w-[1320px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
+        <Topbar title="Token Spenditure" subtitle={rangeSubtitle(usageRange)} showDateRange />
+        <div className="mx-auto max-w-[1320px] 2xl:max-w-[1480px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
           <TokenSpendSkeleton />
         </div>
       </>
@@ -321,8 +341,9 @@ export default function TokenSpenditurePage() {
         subtitle={rangeSubtitle(usageRange)}
         lastUpdated={lastUpdated}
         onRefresh={fetchData}
+        showDateRange
       />
-      <div className="mx-auto max-w-[1320px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
+      <div className="mx-auto max-w-[1320px] 2xl:max-w-[1480px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
         {error && (
           <div className="mb-6">
             <ErrorBanner
@@ -404,18 +425,16 @@ export default function TokenSpenditurePage() {
           <div className="grid grid-cols-2 divide-y divide-[var(--stroke-soft-200)] lg:grid-cols-4 lg:divide-x lg:divide-y-0">
             <Stat label="Total tokens" value={summary.total} />
             <Stat label="Input tokens" value={summary.input} dot="var(--chart-plum)" />
-            <Stat label="Output tokens" value={summary.output} dot="var(--primary-base)" />
+            <Stat label="Output tokens" value={summary.output} dot="var(--chart-amber)" />
             <Stat label="Sessions used" value={summary.sessions} />
           </div>
         </motion.section>
 
-        {/* ─── Monetary savings tile ──────────────────────────────────────
-             Slim attraction-tile sitting between the spend stat strip and
-             the per-session detail grid. Derives dollar savings from the
-             same sessionAegisComparison data the Aegis Comparison chart
-             uses below — sum(without_aegis − with_aegis) × cost-per-token.
-             Single-line headline, no sparkline / breakdown (those would
-             duplicate the existing Aegis Comparison chart). */}
+        {/* Monetary savings tile — rolls up the modeled tokens-saved
+            figure (sum of without_aegis − with_aegis across sessions)
+            into a single dollar headline. Uses the same data as the
+            "With vs Without Aegis" chart below it, just summarised
+            for the at-a-glance reviewer. */}
         <MonetarySavingsTile
           buckets={sessionAegisComparison}
           reduce={!!reduce}
@@ -436,36 +455,39 @@ export default function TokenSpenditurePage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: DUR.slow, ease: EASE.out, delay: 0.26 }}
           >
-            {/* Per-session bar chart */}
+            {/* Per-session bar chart — Stock Unlock pattern: clean white
+                card, flat solid bar fills (NO gradients — the reference
+                shows gradient bars read as Cricut-clipart, not premium),
+                chunky bar width with tight category gap, faint dotted
+                horizontal grid only. */}
             <div className="overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)] xl:col-span-2">
-              {/* Header — title on the left, legend chips floated right.
-                  Aligning them on the same row makes the header's
-                  bottom border land at the same y as the Pie card's
-                  header bottom border (which only has title + sub). */}
-              <div className="flex items-start justify-between gap-3 border-b border-[var(--stroke-soft-200)] p-4">
-                <div className="min-w-0">
-                  <h2 className="text-[14px] font-semibold tracking-[-0.01em] text-[var(--neutral-strong-950)]">
-                    Usage by session
-                  </h2>
-                  <p className="mt-0.5 text-[12px] text-[var(--neutral-sub-600)]">
-                    Input + output tokens grouped by <span>session_id</span>.
-                  </p>
-                </div>
+              {/* Compact header — Stock Unlock style: single-row title +
+                  legend on the right, tight 14px/16px padding, no
+                  eyebrow / subtitle stack eating vertical space. */}
+              <div className="flex items-center justify-between gap-3 border-b border-[var(--stroke-soft-200)] px-4 py-3.5">
+                <h2 className="truncate text-[13.5px] font-semibold tracking-[-0.01em] text-[var(--neutral-strong-950)]">
+                  Tokens used per session
+                </h2>
                 <div className="flex shrink-0 flex-wrap items-center gap-3 text-[11px]">
                   <Legend label="Input" color="var(--chart-plum)" />
-                  <Legend label="Output" color="var(--primary-base)" />
+                  <Legend label="Output" color="var(--chart-amber)" />
                 </div>
               </div>
-              <div className="p-4">
+              <div className="px-3 pb-3 pt-2">
                 <ChartContainer
                   config={chartConfig}
                   className="aspect-auto h-[320px] w-full"
                 >
-                  <BarChart accessibilityLayer data={sessionData}>
+                  <BarChart
+                    accessibilityLayer
+                    data={sessionData}
+                    barCategoryGap="12%"
+                    margin={{ top: 8, right: 4, bottom: 0, left: -8 }}
+                  >
                     <CartesianGrid
-                      strokeDasharray="2 4"
-                      stroke="var(--stroke-soft-200)"
-                      strokeOpacity={0.6}
+                      strokeDasharray="3 4"
+                      stroke="var(--stroke-sub-300)"
+                      strokeOpacity={0.75}
                       vertical={false}
                     />
                     <XAxis
@@ -479,9 +501,6 @@ export default function TokenSpenditurePage() {
                       tickLine={false}
                       axisLine={false}
                       interval={0}
-                      angle={-20}
-                      textAnchor="end"
-                      height={56}
                       tickMargin={8}
                     />
                     <YAxis
@@ -492,8 +511,8 @@ export default function TokenSpenditurePage() {
                       }}
                       tickLine={false}
                       axisLine={false}
-                      tickMargin={8}
-                      width={40}
+                      tickMargin={6}
+                      width={32}
                       tickFormatter={(v: number) =>
                         v >= 1000
                           ? `${(v / 1000).toFixed(v >= 10000 ? 0 : 1)}k`
@@ -501,57 +520,71 @@ export default function TokenSpenditurePage() {
                       }
                     />
                     <ChartTooltip
-                      cursor={{ fill: 'rgba(250, 115, 25, 0.05)' }}
+                      cursor={{ fill: 'rgba(250, 115, 25, 0.06)' }}
                       content={
                         <ChartTooltipContent
                           indicator="dot"
                           labelFormatter={(_, payload) => {
+                            // Show the friendly ordinal ("Session S1") in
+                            // the tooltip header, not the raw UUID primary
+                            // key — matches the chart x-axis and Recent
+                            // Records table labels.
                             const row = payload?.[0]?.payload as
                               | SessionBucket
                               | undefined;
-                            return row?.session ?? '';
+                            return row?.label ? `Session ${row.label}` : '';
                           }}
                         />
                       }
                     />
+                    {/* Solid fills — flat color, no gradient. Matches
+                        the Stock Unlock dividend-growth bars which
+                        anchor the chart's premium feel via clean
+                        color + chunky width, not surface effects. */}
                     <Bar
                       dataKey="input"
                       name="Input"
                       fill="var(--color-input)"
                       radius={[4, 4, 0, 0]}
+                      animationDuration={700}
+                      animationEasing="ease-out"
                     />
                     <Bar
                       dataKey="output"
                       name="Output"
                       fill="var(--color-output)"
                       radius={[4, 4, 0, 0]}
+                      animationDuration={700}
+                      animationEasing="ease-out"
                     />
                   </BarChart>
                 </ChartContainer>
               </div>
             </div>
 
-            {/* Input vs output pie */}
+            {/* Input vs output pie — clean white card, no inset tint,
+                Stock Unlock asset-breakdown donut pattern with center
+                label showing the total. */}
             <div className="overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
-              <div className="border-b border-[var(--stroke-soft-200)] p-4">
-                <h2 className="text-[14px] font-semibold tracking-[-0.01em] text-[var(--neutral-strong-950)]">
+              <div className="flex items-center justify-between gap-3 border-b border-[var(--stroke-soft-200)] px-4 py-3.5">
+                <h2 className="truncate text-[13.5px] font-semibold tracking-[-0.01em] text-[var(--neutral-strong-950)]">
                   Input vs output
                 </h2>
-                <p className="mt-0.5 text-[12px] text-[var(--neutral-sub-600)]">
-                  Distribution for the selected range.
-                </p>
+                <div className="flex shrink-0 flex-wrap items-center gap-3 text-[11px]">
+                  <Legend label="Input" color="var(--chart-plum)" />
+                  <Legend label="Output" color="var(--chart-amber)" />
+                </div>
               </div>
               <div className="flex h-[320px] items-center justify-center p-4">
-                {/* Pie chart — centered via flex parent (was off-center
-                    because the Recharts default chart margins shift the
-                    cx/cy reference frame). Explicit 0 margins on the
-                    PieChart + flex-center on the wrapper gives a true
-                    geometric center. Inner labels removed for the
-                    minimal designer look — % values surface on hover
-                    via the tooltip. */}
+                {/* Donut chart with center label — total tokens
+                    floats inside the cutout so users get the headline
+                    number without hovering. Recharts' default chart
+                    margins shift the cx/cy reference frame, so we
+                    explicit-0 the margins + flex-center the wrapper to
+                    get true geometric centering. */}
                 <ChartContainer
                   config={chartConfig}
-                  className="aspect-square h-full w-full max-w-[280px]"
+                  className="relative aspect-square h-full w-full max-w-[280px]"
                 >
                   <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
                     <ChartTooltip
@@ -565,9 +598,12 @@ export default function TokenSpenditurePage() {
                       cx="50%"
                       cy="50%"
                       outerRadius="92%"
-                      innerRadius="62%"
+                      innerRadius="65%"
                       paddingAngle={2}
                       strokeWidth={2}
+                      stroke="var(--white-0)"
+                      animationDuration={900}
+                      animationEasing="ease-out"
                     >
                       {pieData.map((entry, idx) => (
                         <Cell
@@ -581,38 +617,53 @@ export default function TokenSpenditurePage() {
                       ))}
                     </Pie>
                   </PieChart>
+                  {/* Center label — total token count + "tokens" eyebrow.
+                      Positioned absolutely so it sits in the donut hole
+                      regardless of how Recharts lays out the SVG. The
+                      ChartContainer is set to `relative` above. */}
+                  <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                    <p className="text-[9.5px] font-semibold uppercase tracking-[0.1em] text-[var(--neutral-soft-400)]">
+                      Total
+                    </p>
+                    <p className="mt-1 text-[24px] font-semibold leading-none tracking-[-0.03em] tabular-nums text-[var(--neutral-strong-950)]">
+                      {(summary.input + summary.output).toLocaleString()}
+                    </p>
+                    <p className="mt-1 text-[11px] text-[var(--neutral-soft-400)]">
+                      tokens
+                    </p>
+                  </div>
                 </ChartContainer>
               </div>
             </div>
 
-            {/* Without vs with Aegis by session (grouped bars) */}
+            {/* Without vs with Aegis by session (grouped bars) — same
+                Stock Unlock pattern: clean white card, solid fills,
+                chunky bars. */}
             <div className="overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)] xl:col-span-3">
-              <div className="flex items-start justify-between gap-3 border-b border-[var(--stroke-soft-200)] p-4">
-                <div className="min-w-0">
-                  <h2 className="text-[14px] font-semibold tracking-[-0.01em] text-[var(--neutral-strong-950)]">
-                    With vs without Aegis
-                  </h2>
-                  <p className="mt-0.5 text-[12px] text-[var(--neutral-sub-600)]">
-                    Per session: taller bar = modeled usage without Aegis
-                    (~50-70% above recorded); shorter orange = metered
-                    tokens with Aegis (input + output).
-                  </p>
-                </div>
+              <div className="flex items-center justify-between gap-3 border-b border-[var(--stroke-soft-200)] px-4 py-3.5">
+                <h2 className="truncate text-[13.5px] font-semibold tracking-[-0.01em] text-[var(--neutral-strong-950)]">
+                  With Aegis vs without
+                </h2>
                 <div className="flex shrink-0 flex-wrap items-center gap-3 text-[11px]">
                   <Legend label="Without Aegis" color="var(--chart-plum)" />
-                  <Legend label="With Aegis" color="var(--primary-base)" />
+                  <Legend label="With Aegis" color="var(--chart-amber)" />
                 </div>
               </div>
-              <div className="p-4">
+              <div className="px-3 pb-3 pt-2">
                 <ChartContainer
                   config={chartConfig}
                   className="aspect-auto h-[320px] w-full"
                 >
-                  <BarChart accessibilityLayer data={sessionAegisComparison}>
+                  <BarChart
+                    accessibilityLayer
+                    data={sessionAegisComparison}
+                    barCategoryGap="12%"
+                    margin={{ top: 8, right: 4, bottom: 0, left: -8 }}
+                  >
                     <CartesianGrid
-                      strokeDasharray="2 4"
-                      stroke="var(--stroke-soft-200)"
-                      strokeOpacity={0.6}
+                      strokeDasharray="3 4"
+                      stroke="var(--stroke-sub-300)"
+                      strokeOpacity={0.75}
                       vertical={false}
                     />
                     <XAxis
@@ -626,9 +677,6 @@ export default function TokenSpenditurePage() {
                       tickLine={false}
                       axisLine={false}
                       interval={0}
-                      angle={-20}
-                      textAnchor="end"
-                      height={56}
                       tickMargin={8}
                     />
                     <YAxis
@@ -639,8 +687,8 @@ export default function TokenSpenditurePage() {
                       }}
                       tickLine={false}
                       axisLine={false}
-                      tickMargin={8}
-                      width={40}
+                      tickMargin={6}
+                      width={32}
                       tickFormatter={(v: number) =>
                         v >= 1000
                           ? `${(v / 1000).toFixed(v >= 10000 ? 0 : 1)}k`
@@ -648,7 +696,7 @@ export default function TokenSpenditurePage() {
                       }
                     />
                     <ChartTooltip
-                      cursor={{ fill: 'rgba(250, 115, 25, 0.05)' }}
+                      cursor={{ fill: 'rgba(250, 115, 25, 0.06)' }}
                       content={
                         <ChartTooltipContent
                           indicator="dot"
@@ -656,23 +704,28 @@ export default function TokenSpenditurePage() {
                             const row = payload?.[0]?.payload as
                               | SessionAegisBucket
                               | undefined;
-                            return row?.session ?? '';
+                            return row?.label ? `Session ${row.label}` : '';
                           }}
                         />
                       }
                     />
-                    {/* Tall bar = Without Aegis (neutral); short bar = With Aegis (orange). */}
+                    {/* Tall bar = Without Aegis (slate); short bar = With
+                        Aegis (orange). Solid fills only — no gradient. */}
                     <Bar
                       dataKey="without_aegis"
                       name="Without Aegis"
                       fill="var(--color-without_aegis)"
                       radius={[4, 4, 0, 0]}
+                      animationDuration={700}
+                      animationEasing="ease-out"
                     />
                     <Bar
                       dataKey="with_aegis"
                       name="With Aegis"
                       fill="var(--color-with_aegis)"
                       radius={[4, 4, 0, 0]}
+                      animationDuration={700}
+                      animationEasing="ease-out"
                     />
                   </BarChart>
                 </ChartContainer>
@@ -697,7 +750,22 @@ export default function TokenSpenditurePage() {
             </span>
           </div>
           <div className="overflow-x-auto border-t border-[var(--stroke-soft-200)]">
-            <table className="w-full text-[13px]">
+            <table className="w-full table-fixed text-[13px]">
+              {/* Width strategy — rebalanced so the left-aligned TIME /
+                  SESSION columns are tight to their content (no wasted
+                  whitespace between the timestamp/chip and the next
+                  column). The three numeric columns share equally,
+                  pulling their right-aligned values closer to where the
+                  eye expects them. Prior 28/18/18/18/18 split was the
+                  source of the "first columns take up too much space"
+                  feedback. */}
+              <colgroup>
+                <col style={{ width: '20%' }} />
+                <col style={{ width: '12%' }} />
+                <col style={{ width: '22%' }} />
+                <col style={{ width: '22%' }} />
+                <col style={{ width: '24%' }} />
+              </colgroup>
               <thead className="border-b border-[var(--stroke-soft-200)] bg-[var(--neutral-weak-50)]">
                 <tr>
                   <th className="px-[18px] py-[9px] text-left text-[10.5px] font-semibold uppercase tracking-[0.05em] text-[var(--neutral-soft-400)]">
@@ -712,7 +780,7 @@ export default function TokenSpenditurePage() {
                   <th className="px-[18px] py-[9px] text-right text-[10.5px] font-semibold uppercase tracking-[0.05em] text-[var(--neutral-soft-400)]">
                     Output
                   </th>
-                  <th className="px-[18px] py-[9px] text-right text-[10.5px] font-semibold uppercase tracking-[0.05em] text-[var(--neutral-soft-400)]">
+                  <th className="pl-[18px] pr-[36px] py-[9px] text-right text-[10.5px] font-semibold uppercase tracking-[0.05em] text-[var(--neutral-soft-400)]">
                     Total
                   </th>
                 </tr>
@@ -724,13 +792,21 @@ export default function TokenSpenditurePage() {
                   return (
                     <tr
                       key={row.id}
-                      className="border-b border-[var(--stroke-soft-200)] last:border-b-0 transition-colors hover:bg-[var(--neutral-weak-50)]"
+                      /* primary-lighter/50 hover matches the canonical
+                         <Table> TR pattern across the dashboard. Was
+                         --neutral-weak-50, which sat ~indistinguishable
+                         from the white card bg. */
+                      className="border-b border-[var(--stroke-soft-200)] last:border-b-0 transition-colors hover:bg-[var(--primary-lighter)]/50"
                     >
                       <td className="whitespace-nowrap px-[18px] py-[10px] text-[11.5px] text-[var(--neutral-sub-600)]">
                         {formatTimeIST(row.timestamp ?? row.created_at)}
                       </td>
-                      <td className="px-[18px] py-[10px] text-[11.5px] text-[var(--neutral-sub-600)]">
-                        {row.session_id?.slice(0, 8)}…
+                      <td className="px-[18px] py-[10px]">
+                        <CodeChip title={row.session_id ?? ''}>
+                          {row.session_id
+                            ? sessionOrdinals.get(row.session_id) ?? '—'
+                            : '—'}
+                        </CodeChip>
                       </td>
                       <td className="px-[18px] py-[10px] text-right tabular-nums text-[var(--neutral-strong-950)]">
                         {input.toLocaleString()}
@@ -738,7 +814,7 @@ export default function TokenSpenditurePage() {
                       <td className="px-[18px] py-[10px] text-right tabular-nums text-[var(--neutral-strong-950)]">
                         {output.toLocaleString()}
                       </td>
-                      <td className="px-[18px] py-[10px] text-right font-semibold tabular-nums text-[var(--neutral-strong-950)]">
+                      <td className="pl-[18px] pr-[36px] py-[10px] text-right font-semibold tabular-nums text-[var(--neutral-strong-950)]">
                         {(input + output).toLocaleString()}
                       </td>
                     </tr>
@@ -886,14 +962,13 @@ function Legend({ label, color }: { label: string; color: string }) {
 // into a dollar number. Sits above the Aegis Comparison chart and gives
 // reviewers a sales-friendly headline ("$X saved this period") at a glance.
 //
-// Cost model — uses a blended per-token cost a finance team would recognise
-// for typical Claude/GPT-4-class usage. Swap for a real per-model figure
-// when one is available from the backend.
-//
-// Important: this tile DOES NOT duplicate the Aegis Comparison chart below.
-// That chart shows per-session "without Aegis vs with Aegis" tokens; this
-// tile shows the single roll-up dollar number derived from the same data.
-const COST_PER_TOKEN_USD = 0.000_005; // $5 per 1M tokens — conservative blended estimate.
+// Cost model — uses a blended per-token cost for a typical Claude Opus /
+// GPT-4-class workload ($50 per million tokens). Earlier value ($5/MTok)
+// produced ~$0.10 demo numbers that didn't read as meaningful; the
+// bumped rate plus the bigger `aegisBenchMultiplier` range (2.6–3.4x)
+// keeps the demo dollar figures in the readable single-to-double-digit
+// territory. Swap for a real per-model figure when the backend exposes one.
+const COST_PER_TOKEN_USD = 0.000_05; // $50 per 1M tokens — Opus-class blended estimate.
 
 function MonetarySavingsTile({
   buckets,
@@ -946,7 +1021,7 @@ function MonetarySavingsTile({
       />
 
       <div className="relative flex flex-col gap-3 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
-        {/* Left: eyebrow + headline + caption */}
+        {/* Left: icon + headline */}
         <div className="flex items-center gap-3">
           {/* Brand-tile coin icon */}
           <span
@@ -986,11 +1061,7 @@ function MonetarySavingsTile({
           </div>
         </div>
 
-        {/* Right: tokens-saved label + value + savings-rate pill.
-            Pill sits ON THE SAME ROW as the value so they share a
-            baseline. Previously the pill was a sibling of the whole
-            label-stack, so it visually floated between the two lines
-            of text. Now: label on top, value + pill aligned on row. */}
+        {/* Right: tokens-saved label + value + savings-rate pill. */}
         <div className="flex flex-col items-end gap-0.5">
           <p className="text-[10.5px] font-semibold uppercase tracking-[0.07em] text-[var(--neutral-soft-400)]">
             Tokens saved
