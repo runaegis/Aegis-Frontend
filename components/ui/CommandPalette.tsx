@@ -28,6 +28,7 @@ import {
   ArrowRight,
   Bell,
   BookOpen,
+  Boxes,
   Clock,
   Coins,
   ExternalLink,
@@ -149,8 +150,9 @@ export function CommandPalette() {
       { label: 'Policies', href: '/dashboard/policies', icon: BookOpen, keywords: ['rules', 'governance'] },
       { label: 'Audit Trail', href: '/dashboard/audit', icon: FileText, keywords: ['events', 'log', 'history'] },
       { label: 'Freeze Windows', href: '/dashboard/freeze-window', icon: Clock, keywords: ['schedule', 'pause'] },
+      { label: 'Connectors', href: '/dashboard/connectors', icon: Boxes, keywords: ['integrations', 'catalog', 'slack', 'linear', 'jira', 'terraform', 'postgres', 'roadmap'] },
       { label: 'Token Spenditure', href: '/dashboard/token-spenditure', icon: Coins, keywords: ['usage', 'cost', 'billing'] },
-      { label: 'Integrations', href: '/dashboard/integrations', icon: Plug, keywords: ['cursor', 'vscode', 'claude code', 'mcp', 'connect'] },
+      { label: 'Connect agent', href: '/dashboard/rooms', icon: Plug, keywords: ['cursor', 'vscode', 'claude code', 'mcp', 'connect', 'integration', 'integrations'] },
       { label: 'Settings', href: '/dashboard/settings', icon: Settings, keywords: ['account', 'preferences'] },
     ];
 
@@ -398,7 +400,15 @@ export function CommandPalette() {
                               onMouseEnter={() => setActiveIndex(flatIdx)}
                               onClick={() => cmd.perform()}
                               className={cn(
-                                'group flex w-full items-center gap-2.5 rounded-[7px] px-2 py-2 text-left text-[13px] font-medium tracking-[-0.005em] transition-colors',
+                                // 200ms emphasized-decelerate matches the
+                                // rest of the dashboard's motion language
+                                // (sortable table headers, tabs, buttons).
+                                // Tailwind's default `transition-colors`
+                                // is 150ms ease-in — felt jittery when
+                                // sweeping the cursor through the list
+                                // because the bg tweened on one timing
+                                // while the icon color snapped instantly.
+                                'group flex w-full items-center gap-2.5 rounded-[7px] px-2 py-2 text-left text-[13px] font-medium tracking-[-0.005em] transition-colors duration-200 ease-[cubic-bezier(0.2,0.8,0.2,1)]',
                                 isActive
                                   ? 'bg-[var(--neutral-weak-50)] text-[var(--neutral-strong-950)]'
                                   : 'text-[var(--neutral-sub-600)]',
@@ -406,7 +416,10 @@ export function CommandPalette() {
                             >
                               <Icon
                                 className={cn(
-                                  'h-3.5 w-3.5 shrink-0',
+                                  // Same 200ms curve as the parent button
+                                  // so the icon-color tween lands in sync
+                                  // with the bg tween instead of snapping.
+                                  'h-3.5 w-3.5 shrink-0 transition-colors duration-200 ease-[cubic-bezier(0.2,0.8,0.2,1)]',
                                   isActive
                                     ? 'text-[var(--neutral-strong-950)]'
                                     : 'text-[var(--neutral-soft-400)]',
@@ -419,12 +432,19 @@ export function CommandPalette() {
                                   {cmd.hint}
                                 </span>
                               )}
-                              {isActive && (
-                                <ArrowRight
-                                  className="h-3 w-3 shrink-0 text-[var(--neutral-soft-400)]"
-                                  strokeWidth={2}
-                                />
-                              )}
+                              {/* Always rendered — toggle opacity so the
+                                  arrow fades in/out smoothly on hover.
+                                  Conditional mount/unmount made the row
+                                  reflow horizontally as the cursor moved
+                                  between items, which read as a jitter. */}
+                              <ArrowRight
+                                className={cn(
+                                  'h-3 w-3 shrink-0 text-[var(--neutral-soft-400)] transition-opacity duration-200 ease-[cubic-bezier(0.2,0.8,0.2,1)]',
+                                  isActive ? 'opacity-100' : 'opacity-0',
+                                )}
+                                strokeWidth={2}
+                                aria-hidden
+                              />
                             </button>
                           );
                         })}

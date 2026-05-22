@@ -1,14 +1,20 @@
 'use client';
 
 /**
- * Onboarding — five-step flow taking a new user from "just signed up" to
- * "agent connected and governed."
+ * Onboarding — four-step flow taking a new user from "just signed up" to
+ * "ready to create their first Room."
  *
- *  ① Connect    GitHub creds (username, user-id, PAT)
+ *  ① Connect    paste a GitHub PAT — we auto-fetch username + ID via the
+ *               GitHub `/user` endpoint so the user doesn't have to dig
+ *               through `api.github.com/users/*` JSON to find their numeric ID
  *  ② Sync       discover repos with that PAT
  *  ③ Permissions  per-repo Allow / Approval / Deny
- *  ④ Agent      drop the MCP config into Claude / Cursor / Windsurf
- *  ⑤ Done       confirmation + first-action count, then → /dashboard
+ *  ④ Done       confirmation + first-repo count, then → /dashboard
+ *
+ * Agent connection used to live as a fifth step here, but that's now
+ * per-Room (each Room's Connect tab auto-fills the room-specific MCP URL).
+ * Keeping it here duplicated UI and shipped a non-working `/sse?user_id=…`
+ * URL that didn't match the room-scoped backend pattern.
  *
  * Visual pattern (Linear / Vercel / Stripe Connect):
  *  - Sticky top bar with brand mark
@@ -16,14 +22,10 @@
  *  - Centered content card per step
  *  - Soft inset warm gradient on the page bg to tie into the dashboard
  *
- * Backend wiring: untouched. Uses the engineer's:
- *   - `moveToStep(nextStep)` helper for step transitions (also updates
- *      server-side via api.updateOnboardingStep — no authToken arg
- *      because the app now relies on HTTPonly cookies via apiFetch).
- *   - `transitionLoading` + `pageError` state for cross-step feedback.
- *   - `recoverUser` + `fetchInitialStep` bootstrap useEffects.
- *   - Original handleStep1 / handleSync / handleSavePermissions with the
- *      action-count polling loop on step 4. No localStorage reads.
+ * Backend wiring: untouched. The backend still tracks `onboarding_step` as
+ * an integer. We map UI step N → backend step N (1..4). Anyone left on
+ * legacy backend step 5 (old "Done") is routed straight to /dashboard by
+ * the bootstrap below.
  */
 
 import { Fragment, useState, useEffect, useRef } from 'react';
@@ -36,7 +38,6 @@ import {
   useTransform,
 } from 'motion/react';
 import {
-  Activity,
   AlertCircle,
   Check,
   ChevronLeft,
@@ -46,23 +47,19 @@ import {
   Key,
   Loader2,
   LogOut,
-  Plug,
   RefreshCw,
   ShieldCheck,
   Sparkles,
-  Zap,
   type LucideIcon,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { api } from '@/lib/api';
 import { useUser, useOnboardingStep, useEmail } from '@/lib/hooks';
 import { Repo } from '@/lib/types';
-import CopyButton from '@/components/ui/CopyButton';
 import { AegisLogo } from '@/components/ui/AegisLogo';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { CodeChip } from '@/components/ui/CodeChip';
-import { JsonHighlight } from '@/components/ui/JsonHighlight';
 import { fadeUp, staggerContainer } from '@/lib/motion';
 
 // ─── Step metadata ──────────────────────────────────────────────────────────
@@ -73,14 +70,13 @@ interface StepDef {
   icon: LucideIcon;
 }
 
-// All five glyphs come from `lucide-react` — same icon family used
+// All four glyphs come from `lucide-react` — same icon family used
 // everywhere else in the dashboard.
 const STEPS: StepDef[] = [
   { number: 1, label: 'Connect', icon: GitBranch },
   { number: 2, label: 'Sync', icon: RefreshCw },
   { number: 3, label: 'Permissions', icon: ShieldCheck },
-  { number: 4, label: 'Agent', icon: Plug },
-  { number: 5, label: 'Done', icon: Sparkles },
+  { number: 4, label: 'Done', icon: Sparkles },
 ];
 
 // ─── Page ───────────────────────────────────────────────────────────────────
@@ -93,8 +89,9 @@ export default function OnboardingPage() {
   const { email } = useEmail();
 
   // ── Step 1 state ──
-  const [username, setUsername] = useState(user?.username || '');
-  const [githubId, setGithubId] = useState(String(user?.github_user_id || ''));
+  // PAT is the only thing we ask for now. Username + numeric GitHub ID
+  // come from `GET https://api.github.com/user` once the user submits
+  // the token (see handleStep1).
   const [token, setToken] = useState('');
   const [step1Loading, setStep1Loading] = useState(false);
   const [step1Error, setStep1Error] = useState('');
@@ -104,17 +101,9 @@ export default function OnboardingPage() {
   const [syncing, setSyncing] = useState(false);
   const [synced, setSynced] = useState(false);
 
-  // ── Step 4 state ──
-  const [activeTab, setActiveTab] = useState('claude');
-  const [verified, setVerified] = useState(false);
-  const [checking, setChecking] = useState(false);
-
   // ── Cross-step feedback ──
   const [pageError, setPageError] = useState('');
   const [transitionLoading, setTransitionLoading] = useState(false);
-
-  // ── Step 5 state ──
-  const [actionCount, setActionCount] = useState(0);
 
   // ─── Step-transition helper ──────────────────────────────────────────────
   // Persists the new step server-side, updates local store, surfaces a
@@ -137,8 +126,9 @@ export default function OnboardingPage() {
 
   // ─── User-hydration recovery ─────────────────────────────────────────────
   // If we land on this page without a hydrated user (e.g. a hard refresh
-  // mid-flow), pull the current user details from the server and restore
-  // the form inputs they already provided.
+  // mid-flow), pull the current user details from the server. Only the PAT
+  // needs to be restored to local state — handleSync reads username + ID
+  // off the hydrated `user` object.
   useEffect(() => {
     const recoverUser = async () => {
       if (user) return;
@@ -146,8 +136,6 @@ export default function OnboardingPage() {
         const freshUser = await api.getUserDetails();
         setUser(freshUser);
         if (step > 1) {
-          setUsername(freshUser.username || '');
-          setGithubId(String(freshUser.github_user_id || ''));
           setToken(freshUser.access_token || '');
         }
       } catch {
@@ -162,6 +150,13 @@ export default function OnboardingPage() {
   // server. If they've already completed onboarding, route them straight to
   // the dashboard. If they're somewhere mid-flow, restore their place AND
   // pre-load the repos list when applicable so the page renders correctly.
+  //
+  // Legacy-step note: this used to be a 5-step flow with `Agent` as step 4
+  // and `Done` as step 5. Users left on backend step 5 are already complete
+  // (they finished the old flow), so we route them to the dashboard. Users
+  // left on backend step 4 (old "Agent") just see the new step 4 ("Done")
+  // and click through — they already finished permissions, which was the
+  // last step that mattered.
   useEffect(() => {
     const fetchInitialStep = async () => {
       try {
@@ -170,7 +165,7 @@ export default function OnboardingPage() {
         const response = await api.getOnboardingStep();
         const currentStep = response.onboarding_step;
 
-        if (currentStep > 5) {
+        if (currentStep > 4) {
           router.replace('/dashboard');
           return;
         }
@@ -196,29 +191,69 @@ export default function OnboardingPage() {
   // ─── Step handlers (LOGIC UNCHANGED) ────────────────────────────────────
 
   const handleStep1 = async () => {
-    if (!username || !githubId || !token) {
-      setStep1Error('All fields are required.');
+    const trimmed = token.trim();
+    if (!trimmed) {
+      setStep1Error('Personal access token is required.');
       return;
     }
     setStep1Loading(true);
     setStep1Error('');
     try {
-      const githubUserIdNum = parseInt(githubId, 10);
-      if (isNaN(githubUserIdNum)) {
-        setStep1Error('GitHub User ID must be a number.');
-        setStep1Loading(false);
-        return;
+      // In demo/preview mode the mock layer doesn't intercept direct
+      // `fetch()` calls to api.github.com — so a fake PAT would 401 here
+      // and trap designers on step 1. Skip the real lookup and use canned
+      // identity that matches the demo user the mocked api.saveUser
+      // returns. Real users always run the real lookup.
+      const isDemo =
+        typeof document !== 'undefined' &&
+        document.documentElement.dataset.demo === 'true';
+
+      let ghLogin: string;
+      let ghId: number;
+
+      if (isDemo) {
+        ghLogin = 'demo-user';
+        ghId = 0;
+      } else {
+        // Resolve the user's GitHub identity (login + numeric id) from
+        // the PAT itself instead of asking the user to dig through
+        // GitHub's public user API for their numeric ID. The `/user`
+        // endpoint returns both in a single CORS-enabled call.
+        const ghRes = await fetch('https://api.github.com/user', {
+          headers: {
+            Authorization: `Bearer ${trimmed}`,
+            Accept: 'application/vnd.github+json',
+          },
+        });
+        if (ghRes.status === 401) {
+          setStep1Error(
+            "That token didn't work. Double-check it was copied in full and has the scopes listed below.",
+          );
+          return;
+        }
+        if (!ghRes.ok) {
+          setStep1Error('Could not reach GitHub. Try again in a moment.');
+          return;
+        }
+        const ghUser = (await ghRes.json()) as { login?: string; id?: number };
+        if (!ghUser.login || typeof ghUser.id !== 'number') {
+          setStep1Error('GitHub did not return a username or ID. Try a different token.');
+          return;
+        }
+        ghLogin = ghUser.login;
+        ghId = ghUser.id;
       }
+
       const response = await api.saveUser({
-        github_user_id: githubUserIdNum,
-        username,
-        github_pat: token,
+        github_user_id: ghId,
+        username: ghLogin,
+        github_pat: trimmed,
         email,
       });
       setUser(response);
       await moveToStep(2);
     } catch {
-      setStep1Error('Failed to save. Please try again.');
+      setStep1Error('Could not verify the token. Check your network and try again.');
     } finally {
       setStep1Loading(false);
     }
@@ -227,8 +262,19 @@ export default function OnboardingPage() {
   const handleSync = async () => {
     setSyncing(true);
     try {
-      if (!githubId || !token) throw new Error('User not initialized');
-      const syncResponse = await api.syncRepos(Number(githubId), token);
+      // PAT lives in either local state (just-typed) or on the hydrated
+      // user object (recovered after refresh). github_user_id comes off
+      // user — we stamped it there at the end of step 1.
+      //
+      // Use a typeof check rather than `!githubUserId` because the demo
+      // mock returns `0` as the canned ID — a valid number but falsy,
+      // which would incorrectly trigger the "User not initialized" guard.
+      const pat = token || user?.access_token || '';
+      const githubUserId = user?.github_user_id;
+      if (typeof githubUserId !== 'number' || !pat) {
+        throw new Error('User not initialized');
+      }
+      const syncResponse = await api.syncRepos(githubUserId, pat);
       if (!syncResponse.success) {
         throw new Error(syncResponse.message || 'Sync failed');
       }
@@ -297,26 +343,6 @@ export default function OnboardingPage() {
     }
   };
 
-  // Poll for the first agent action after the MCP config is shown.
-  useEffect(() => {
-    if (step !== 4 || verified) return;
-    const interval = setInterval(async () => {
-      setChecking(true);
-      try {
-        const uname = user?.username || username;
-        const uid = user?.id;
-        if (!uname || !uid) return;
-        const result = await api.getRecentActionCount(uid, uname);
-        if (result[0] && Number(result[0].count) > 0) setVerified(true);
-      } catch {
-        /* ignore */
-      } finally {
-        setChecking(false);
-      }
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [step, verified, user?.username, user?.id, username]);
-
   const handleLogout = async () => {
     // HTTPonly cookies — server clears via /auth/logout if needed.
     // For now, just route to /auth which will re-auth.
@@ -324,23 +350,8 @@ export default function OnboardingPage() {
     router.replace('/auth');
   };
 
-  // ─── MCP config + per-tab installation copy ──────────────────────────────
-
-  const mcpConfig = JSON.stringify(
-    {
-      mcpServers: {
-        'aegis-github': {
-          url: 'https://app.runaegis.co/sse',
-          headers: {
-            user_id: String(user?.github_user_id || githubId || '{USER_GITHUB_ID}'),
-          },
-        },
-      },
-    },
-    null,
-    2,
-  );
-
+  // ─── Permission tier shared between the bulk-apply chips and the
+  //     legend strip at the top of the permissions step. ────────────
   const permOptions = [
     { value: 'allow', label: 'Allow', color: 'var(--success)', dark: 'var(--success-dark)' },
     {
@@ -351,13 +362,6 @@ export default function OnboardingPage() {
     },
     { value: 'deny', label: 'Deny', color: 'var(--error)', dark: 'var(--error-dark)' },
   ] as const;
-
-  const tabs = [
-    { id: 'claude', label: 'Claude Code' },
-    { id: 'cursor', label: 'Cursor' },
-    { id: 'windsurf', label: 'Windsurf' },
-    { id: 'custom', label: 'Other' },
-  ];
 
   const currentStep = STEPS.find((s) => s.number === step) ?? STEPS[0];
 
@@ -414,23 +418,20 @@ export default function OnboardingPage() {
               {step === 1 && 'Connect your GitHub'}
               {step === 2 && 'Discover your repositories'}
               {step === 3 && 'Set per-repo permissions'}
-              {step === 4 && 'Connect your agent'}
-              {step === 5 && 'Aegis is governing your agents'}
+              {step === 4 && 'Aegis is ready'}
             </motion.h1>
             <motion.p
               variants={fadeUp}
               className="mx-auto mt-2 max-w-[460px] text-balance text-[13.5px] leading-[1.55] text-[var(--neutral-sub-600)]"
             >
               {step === 1 &&
-                'Aegis needs read-only access to your repos to govern what your agents can do.'}
+                'Paste a personal access token — we’ll pull your username and GitHub ID directly so you don’t have to look them up.'}
               {step === 2 &&
                 'We use your token to fetch the repos you own or have access to.'}
               {step === 3 &&
                 'Choose how Aegis should treat each repo. You can change these any time from Settings.'}
               {step === 4 &&
-                'Drop the MCP config into your coding agent of choice. Aegis will start governing as soon as it sees a request.'}
-              {step === 5 &&
-                "You're live. Every action your agents take from now on is logged, gated by policy, and reviewable."}
+                'Your account is wired up. Create your first Room to connect an agent and start governing actions.'}
             </motion.p>
           </motion.div>
 
@@ -466,39 +467,16 @@ export default function OnboardingPage() {
             {step === 1 && (
               <motion.div variants={fadeUp} className="space-y-4 p-4 sm:p-6">
                 {step1Error && <ErrorCallout message={step1Error} />}
-                <Field label="GitHub username">
-                  <Input
-                    type="text"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    placeholder="octocat"
-                    autoComplete="username"
-                  />
-                </Field>
                 <Field
-                  label="GitHub user ID"
-                  hint={
-                    <>
-                      Find yours at{' '}
-                      <code className="rounded-[4px] bg-[var(--neutral-weak-50)] px-1 py-0.5 text-[11px] [font-family:var(--font-geist-mono),ui-monospace,monospace] text-[var(--neutral-sub-600)]">
-                        api.github.com/users/YOUR_USERNAME
-                      </code>
-                    </>
-                  }
+                  label="Personal access token"
+                  hint="We’ll call GitHub’s /user endpoint with this token to pull your username and ID — no extra fields needed."
                 >
-                  <Input
-                    type="text"
-                    value={githubId}
-                    onChange={(e) => setGithubId(e.target.value)}
-                    placeholder="12345678"
-                  />
-                </Field>
-                <Field label="Personal access token">
                   <Input
                     type="password"
                     value={token}
                     onChange={(e) => setToken(e.target.value)}
-                    placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+                    placeholder="ghp_xxxxxxxxxxxxxxxxxxxx or github_pat_xxxxxxxx"
+                    autoComplete="off"
                   />
                 </Field>
 
@@ -517,7 +495,7 @@ export default function OnboardingPage() {
                   }
                   className="!h-10 !text-[13.5px] mt-1"
                 >
-                  {step1Loading ? 'Saving…' : 'Continue'}
+                  {step1Loading ? 'Verifying token…' : 'Continue'}
                 </Button>
               </motion.div>
             )}
@@ -573,27 +551,32 @@ export default function OnboardingPage() {
                         {repos.length} {repos.length === 1 ? 'repository' : 'repositories'} found
                       </span>
                     </div>
+                    {/* Bare discovery list — the right side intentionally
+                        empty. Earlier iterations stamped a static "ALLOW"
+                        chip next to each row to suggest a default, but
+                        every reviewer read it as an interactive control
+                        and got confused when clicking did nothing.
+                        Permissioning belongs to step 3; this step is just
+                        "your token worked, here's what we found." */}
                     <div className="max-h-72 overflow-y-auto rounded-[10px] border border-[var(--stroke-soft-200)] divide-y divide-[var(--stroke-soft-200)]">
                       {repos.map((repo) => (
                         <div
                           key={repo.name}
-                          className="flex items-center justify-between gap-3 px-3.5 py-2.5"
+                          className="flex items-center gap-2 px-3.5 py-2.5"
                         >
-                          <div className="flex min-w-0 items-center gap-2">
-                            <GitBranch
-                              className="h-3.5 w-3.5 shrink-0 text-[var(--neutral-soft-400)]"
-                              strokeWidth={2}
-                            />
-                            <span className="truncate text-[13px] text-[var(--neutral-strong-950)]">
-                              {repo.name}
-                            </span>
-                          </div>
-                          <span className="text-[11.5px] font-semibold uppercase tracking-[0.07em] text-[var(--success-dark)]">
-                            Allow
+                          <GitBranch
+                            className="h-3.5 w-3.5 shrink-0 text-[var(--neutral-soft-400)]"
+                            strokeWidth={2}
+                          />
+                          <span className="truncate text-[13px] text-[var(--neutral-strong-950)]">
+                            {repo.name}
                           </span>
                         </div>
                       ))}
                     </div>
+                    <p className="mt-3 text-[11.5px] text-[var(--neutral-soft-400)]">
+                      You&rsquo;ll set per-repo Allow / Approval / Deny in the next step.
+                    </p>
                   </>
                 )}
 
@@ -717,85 +700,36 @@ export default function OnboardingPage() {
               </motion.div>
             )}
 
-            {/* Step 4 — Agent */}
+            {/* Step 4 — Done. Agent setup used to live as its own step
+                here, but it now belongs inside each Room's Connect tab
+                where we can auto-fill the room-specific MCP URL. Routing
+                the user to /dashboard/rooms gets them to the next real
+                action (create a Room → connect an agent) without making
+                them re-paste a fake config in onboarding.
+
+                Completing onboarding is an implicit "I want my real
+                workspace" choice — record that by flipping aegis_demo
+                to 'false' so:
+                  • the demo welcome modal doesn't re-ask them on
+                    /dashboard/rooms (they already chose real by doing
+                    real onboarding)
+                  • a user who arrived via "Sign up to use your
+                    workspace" in the WorkspaceSwitcher doesn't bounce
+                    back into the demo workspace they were exploring */}
             {step === 4 && (
-              <motion.div variants={fadeUp} className="p-4 sm:p-6">
-                <div className="mb-4 inline-flex rounded-[10px] border border-[var(--stroke-soft-200)] bg-[var(--neutral-weak-50)] p-1">
-                  {tabs.map((tab) => (
-                    <button
-                      key={tab.id}
-                      type="button"
-                      onClick={() => setActiveTab(tab.id)}
-                      className={`inline-flex h-7 items-center rounded-[7px] px-3 text-[12px] font-medium transition-all ${
-                        activeTab === tab.id
-                          ? 'bg-white text-[var(--neutral-strong-950)] shadow-[0_1px_2px_rgba(23,23,23,0.06)]'
-                          : 'text-[var(--neutral-sub-600)] hover:text-[var(--neutral-strong-950)]'
-                      }`}
-                    >
-                      {tab.label}
-                    </button>
-                  ))}
-                </div>
-
-                <ConfigBlock code={mcpConfig} />
-
-                <InstallCallout
-                  activeTab={activeTab}
-                  githubId={String(user?.github_user_id || githubId)}
-                />
-
-                <ConnectionStatus verified={verified} checking={checking} />
-
-                <div className="mt-5 flex items-center justify-between gap-2">
-                  <Button
-                    variant="secondary"
-                    onClick={async () => {
-                      await moveToStep(3);
-                    }}
-                    disabled={transitionLoading}
-                    leadingIcon={<ChevronLeft className="h-3.5 w-3.5" strokeWidth={2.25} />}
-                    className="!h-10 !text-[13.5px] !px-5"
-                  >
-                    Back
-                  </Button>
-                  <Button
-                    variant="primary"
-                    onClick={async () => {
-                      await moveToStep(5);
-                    }}
-                    disabled={transitionLoading}
-                    trailingIcon={<ChevronRight className="h-3.5 w-3.5" strokeWidth={2.25} />}
-                    className="!h-10 !text-[13.5px] !px-5"
-                  >
-                    Continue
-                  </Button>
-                </div>
-
-                {!verified && (
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      await moveToStep(5);
-                    }}
-                    disabled={transitionLoading}
-                    className="mt-3 w-full text-center text-[12px] font-medium text-[var(--neutral-soft-400)] transition-colors hover:text-[var(--neutral-strong-950)] disabled:opacity-50"
-                  >
-                    Skip for now
-                  </button>
-                )}
-              </motion.div>
-            )}
-
-            {/* Step 5 — Done */}
-            {step === 5 && (
               <DoneStep
-                actionCount={actionCount}
                 repoCount={repos.length}
                 reduce={!!reduce}
-                setActionCount={setActionCount}
-                userId={user?.id}
-                username={user?.username || username}
-                onContinue={() => router.replace('/dashboard')}
+                username={user?.username || ''}
+                onContinue={() => {
+                  try {
+                    localStorage.setItem('aegis_demo', 'false');
+                  } catch {
+                    // ignore — localStorage may be unavailable in
+                    // embedded contexts
+                  }
+                  router.replace('/dashboard/rooms');
+                }}
               />
             )}
           </motion.section>
@@ -905,182 +839,6 @@ function StepIndicator({
   );
 }
 
-// ─── MCP config code block (Integrations-page pattern) ─────────────────────
-function ConfigBlock({ code }: { code: string }) {
-  const lines = code.split('\n');
-  return (
-    <div className="overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
-      <div className="flex items-center justify-between border-b border-[var(--stroke-soft-200)] bg-[var(--neutral-weak-50)] px-4 py-2">
-        <div className="flex items-center gap-2.5">
-          <span className="flex items-center gap-1" aria-hidden>
-            <span className="h-2 w-2 rounded-full" style={{ backgroundColor: '#fb3748' }} />
-            <span className="h-2 w-2 rounded-full" style={{ backgroundColor: '#f6b51e' }} />
-            <span className="h-2 w-2 rounded-full" style={{ backgroundColor: '#1fc16b' }} />
-          </span>
-          <CodeChip>mcp_config.json</CodeChip>
-          <span className="text-[10.5px] font-semibold uppercase tracking-[0.07em] text-[var(--neutral-soft-400)]">
-            JSON
-          </span>
-        </div>
-        <CopyButton text={code} />
-      </div>
-      <div className="overflow-x-auto bg-white">
-        <div className="flex">
-          <div
-            className="select-none border-r border-[var(--stroke-soft-200)] bg-[var(--neutral-weak-50)] py-4 pl-4 pr-3 text-right text-[11.5px] leading-[1.7] text-[var(--neutral-soft-400)] [font-family:var(--font-geist-mono),ui-monospace,monospace]"
-            aria-hidden
-          >
-            {lines.map((_, i) => (
-              <div key={i}>{i + 1}</div>
-            ))}
-          </div>
-          <pre className="flex-1 overflow-x-auto px-4 py-4 text-[12px] leading-[1.7] [font-family:var(--font-geist-mono),ui-monospace,monospace]">
-            <code>
-              <JsonHighlight code={code} />
-            </code>
-          </pre>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── How-to-install callout ─────────────────────────────────────────────────
-type InstallStep = React.ReactNode;
-const INSTALL_STEPS: Record<string, InstallStep[]> = {
-  claude: [
-    'Open Claude Code settings',
-    'Navigate to MCP Servers',
-    'Add the config above',
-    'Restart Claude Code',
-  ],
-  cursor: [
-    <>Open Settings → Features → MCP</>,
-    <>Click <strong>Add MCP Server</strong></>,
-    'Paste the config above',
-  ],
-  windsurf: [
-    <>
-      Open{' '}
-      <code className="rounded-[4px] bg-[var(--neutral-weak-50)] px-1 py-0.5 text-[11px] [font-family:var(--font-geist-mono),ui-monospace,monospace] text-[var(--neutral-strong-950)]">
-        ~/.codeium/windsurf/mcp_config.json
-      </code>
-    </>,
-    <>
-      Add the <CodeChip>aegis-github</CodeChip> server
-    </>,
-  ],
-};
-
-function InstallCallout({
-  activeTab,
-  githubId,
-}: {
-  activeTab: string;
-  githubId: string;
-}) {
-  return (
-    <div className="mt-4 overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
-      <div className="flex items-center gap-2.5 border-b border-[var(--stroke-soft-200)] bg-[var(--neutral-weak-50)] p-4">
-        <OnboardingIcon icon={Plug} size="sm" />
-        <span className="text-[12px] font-semibold tracking-[-0.005em] text-[var(--neutral-strong-950)]">
-          How to install
-        </span>
-      </div>
-      <div className="p-5">
-        {activeTab === 'custom' ? (
-          <p className="text-[12.5px] leading-[1.55] text-[var(--neutral-sub-600)]">
-            Point your MCP server URL to{' '}
-            <CodeChip>https://app.runaegis.co/sse</CodeChip> with header{' '}
-            <CodeChip>user_id: {githubId}</CodeChip>.
-          </p>
-        ) : (
-          <ol className="space-y-2.5">
-            {(INSTALL_STEPS[activeTab] ?? []).map((node, i) => (
-              <li key={i} className="flex items-start gap-3">
-                <span
-                  aria-hidden
-                  className="mt-[1px] inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-[rgba(250,115,25,0.22)] text-[11px] font-bold tabular-nums"
-                  style={{
-                    backgroundColor: 'rgba(250, 115, 25, 0.10)',
-                    color: 'var(--primary-base)',
-                  }}
-                >
-                  {i + 1}
-                </span>
-                <span className="text-[12.5px] leading-[1.55] text-[var(--neutral-sub-600)]">
-                  {node}
-                </span>
-              </li>
-            ))}
-          </ol>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ─── Connection status ──────────────────────────────────────────────────────
-function ConnectionStatus({
-  verified,
-  checking,
-}: {
-  verified: boolean;
-  checking: boolean;
-}) {
-  return (
-    <div className="mt-4 overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
-      <div className="flex items-center gap-3 p-4">
-        {verified ? (
-          <>
-            <OnboardingIcon icon={Check} size="sm" tone="success" />
-            <div className="min-w-0 flex-1">
-              <p className="text-[13px] font-semibold text-[var(--neutral-strong-950)]">
-                Agent connected
-              </p>
-              <p className="mt-0.5 text-[12px] leading-[1.4] text-[var(--neutral-sub-600)]">
-                Aegis is seeing requests from your agent.
-              </p>
-            </div>
-          </>
-        ) : (
-          <>
-            <span
-              aria-hidden
-              className="relative inline-flex h-5 w-5 shrink-0 items-center justify-center"
-            >
-              <span
-                className={`absolute inset-0 rounded-full ${checking ? 'animate-ping' : ''}`}
-                style={{
-                  backgroundColor: 'var(--primary-base)',
-                  opacity: checking ? 0.45 : 0,
-                }}
-              />
-              <span
-                className="relative inline-flex h-[15px] w-[15px] items-center justify-center rounded-full"
-                style={{ backgroundColor: 'rgba(250, 115, 25, 0.18)' }}
-              >
-                <span
-                  className="inline-block h-[7px] w-[7px] rounded-full"
-                  style={{ backgroundColor: 'var(--primary-base)' }}
-                />
-              </span>
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="text-[13px] font-semibold text-[var(--neutral-strong-950)]">
-                Waiting for first agent action
-              </p>
-              <p className="mt-0.5 text-[12px] leading-[1.4] text-[var(--neutral-sub-600)]">
-                Once your agent hits an MCP tool, this will turn green.
-              </p>
-            </div>
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
 // ─── Unified icon component ────────────────────────────────────────────────
 type IconTone = 'primary' | 'success' | 'info';
 type IconSize = 'sm' | 'md' | 'lg' | 'xl';
@@ -1164,22 +922,21 @@ function OnboardingIcon({
   );
 }
 
-// ─── Step 5 success screen ─────────────────────────────────────────────────
+// ─── Step 4 success screen ─────────────────────────────────────────────────
+// Used to also show "first agent action" polling because the old step 4 had
+// the user paste an MCP config inline. With agent setup moved to the per-Room
+// Connect tab, that polling has nothing to wait on — so this step now just
+// confirms account readiness and routes the user to /dashboard/rooms where
+// the next real action (create a Room → connect an agent) happens.
 function DoneStep({
-  actionCount,
   repoCount,
   reduce,
   onContinue,
-  setActionCount,
-  userId,
   username,
 }: {
-  actionCount: number;
   repoCount: number;
   reduce: boolean;
   onContinue: () => void;
-  setActionCount: (n: number) => void;
-  userId?: string;
   username?: string;
 }) {
   // Confetti pop on mount
@@ -1212,26 +969,6 @@ function DoneStep({
     return () => window.clearTimeout(t);
   }, [reduce]);
 
-  // Fetch a fresh count when this step mounts, matching the engineer's
-  // pattern (best-effort, ignore failures).
-  useEffect(() => {
-    if (!userId || !username) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const result = await api.getRecentActionCount(userId, username);
-        if (!cancelled && result[0]) {
-          setActionCount(Number(result[0].count) || 0);
-        }
-      } catch {
-        /* ignore */
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [userId, username, setActionCount]);
-
   return (
     <motion.div
       variants={fadeUp}
@@ -1247,17 +984,16 @@ function DoneStep({
       </motion.div>
 
       <h2 className="text-[24px] font-semibold leading-[1.15] tracking-[-0.02em] text-[var(--neutral-strong-950)]">
-        Aegis is active
+        {username ? `Welcome, ${username}` : "You're set up"}
       </h2>
-      <p className="mx-auto mt-2 max-w-[400px] text-balance text-[13.5px] leading-[1.5] text-[var(--neutral-sub-600)]">
-        Your agents are now governed. Every action is logged, every dangerous
-        move is gated by policy, every approval stays with you.
+      <p className="mx-auto mt-2 max-w-[420px] text-balance text-[13.5px] leading-[1.5] text-[var(--neutral-sub-600)]">
+        Your GitHub account is connected and repos are permissioned. Next:
+        create a Room to bind an agent and start governing tool calls.
       </p>
 
-      <div className="mx-auto mt-7 grid max-w-[420px] grid-cols-3 gap-2.5">
-        <MetricCard value={actionCount} label="Actions" reduce={reduce} delay={0} />
-        <MetricCard value={repoCount} label="Repos" reduce={reduce} delay={0.08} />
-        <MetricCard value={0} label="Incidents" reduce={reduce} delay={0.16} />
+      <div className="mx-auto mt-7 grid max-w-[300px] grid-cols-2 gap-2.5">
+        <MetricCard value={repoCount} label="Repos" reduce={reduce} delay={0} />
+        <MetricCard value={0} label="Rooms" reduce={reduce} delay={0.08} />
       </div>
 
       <div className="mt-7">
@@ -1267,7 +1003,7 @@ function DoneStep({
           trailingIcon={<ChevronRight className="h-3.5 w-3.5" strokeWidth={2.25} />}
           className="!h-10 !text-[13.5px] !px-5"
         >
-          Open dashboard
+          Create your first Room
         </Button>
       </div>
     </motion.div>

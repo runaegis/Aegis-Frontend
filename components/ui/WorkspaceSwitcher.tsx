@@ -130,6 +130,24 @@ export function WorkspaceSwitcher() {
   const userTitle = user?.username ?? 'My workspace';
   const userSubtitle = user?.email ?? 'Personal';
 
+  // "Demo + no real account" detection. Real GitHub user IDs start at 1+,
+  // so a 0/undefined id means the user is exploring the demo without
+  // having signed up yet (entered via `/dashboard?demo=1`, marketing URL,
+  // or the welcome modal pre-auth). For those users, the "Switch to my
+  // workspace" row would just bounce them to /auth without explanation —
+  // we relabel it to make the sign-up requirement honest.
+  const hasRealAccount = (user?.github_user_id ?? 0) > 0;
+  const showUnauthLabel = !!demoOn && !hasRealAccount;
+
+  const handleSignUpFromDemo = () => {
+    setOpen(false);
+    // Don't flip `aegis_demo` here — if the user bails on the auth page,
+    // they should return to the demo workspace they were exploring.
+    // The flip happens at the end of onboarding (onboarding/page.tsx)
+    // once the user actually commits to a real account.
+    router.push('/auth');
+  };
+
   // Active workspace state for the trigger button.
   const activeTitle = demoOn ? 'Demo workspace' : userTitle;
   const activeSubtitle = demoOn ? 'Sample data' : userSubtitle;
@@ -208,10 +226,10 @@ export function WorkspaceSwitcher() {
             />
             <WorkspaceRow
               mark={<UserAvatar seed={userSeed} size={32} />}
-              title={userTitle}
-              subtitle={userSubtitle}
+              title={showUnauthLabel ? 'Sign up to use your workspace' : userTitle}
+              subtitle={showUnauthLabel ? 'Real data · GitHub required' : userSubtitle}
               active={!demoOn}
-              onClick={() => switchTo('real')}
+              onClick={showUnauthLabel ? handleSignUpFromDemo : () => switchTo('real')}
             />
           </div>
 

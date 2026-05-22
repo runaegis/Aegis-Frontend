@@ -14,7 +14,7 @@
  * EXPORTS — one per dashboard route:
  *   DashboardHomeSkeleton, RunsSkeleton, SessionsSkeleton, ApprovalsSkeleton,
  *   AuditSkeleton, PoliciesSkeleton, FreezeWindowSkeleton, TokenSpendSkeleton,
- *   IntegrationsSkeleton, RoomsSkeleton, SettingsSkeleton,
+ *   RoomsSkeleton, SettingsSkeleton,
  *   AppShellSkeleton (used by the dashboard layout during auth verify).
  *
  * Each takes no props — the page wraps it in its own <Topbar> so the
@@ -521,75 +521,6 @@ export function TokenSpendSkeleton() {
             <div className="flex items-center justify-between">
               <Skeleton className="h-[12px] w-20 rounded-[3px]" />
               <Skeleton className="h-[12px] w-12 rounded-[3px]" />
-            </div>
-          </div>
-        </section>
-      </div>
-    </div>
-  );
-}
-
-// ─── /dashboard/integrations ───────────────────────────────────────────────
-
-export function IntegrationsSkeleton() {
-  return (
-    <div>
-      <PageHeader />
-
-      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
-        {/* Left: integration list */}
-        <aside className="space-y-3">
-          {[0, 1, 2].map((i) => (
-            <div
-              key={i}
-              className="flex items-center gap-3 rounded-[12px] border border-[var(--stroke-soft-200)] bg-white px-4 py-4 shadow-[0_1px_2px_rgba(23,23,23,0.04)]"
-            >
-              <Skeleton className="h-10 w-10 rounded-[10px]" />
-              <div className="min-w-0 flex-1 space-y-1.5">
-                <Skeleton className="h-[13px] w-32 rounded-[4px]" />
-                <Skeleton className="h-[11px] w-40 rounded-[3px]" />
-              </div>
-            </div>
-          ))}
-        </aside>
-
-        {/* Right: config + steps */}
-        <section className="overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
-          <div className="space-y-2 p-5">
-            <Skeleton className="h-[16px] w-32 rounded-[4px]" />
-            <Skeleton className="h-[12px] w-72 rounded-[3px]" />
-          </div>
-          <ol className="space-y-3 border-t border-[var(--stroke-soft-200)] px-5 py-4">
-            {[0, 1, 2, 3].map((i) => (
-              <li key={i} className="flex items-start gap-3">
-                <Skeleton variant="circle" className="h-5 w-5" />
-                <SkeletonText width="5/6" />
-              </li>
-            ))}
-          </ol>
-          {/* Code block placeholder */}
-          <div className="border-t border-[var(--stroke-soft-200)]">
-            <div className="flex items-center justify-between bg-[var(--neutral-weak-50)] px-4 py-2">
-              <div className="flex items-center gap-2">
-                <Skeleton variant="circle" className="h-2 w-2" />
-                <Skeleton variant="circle" className="h-2 w-2" />
-                <Skeleton variant="circle" className="h-2 w-2" />
-                <Skeleton className="ml-2 h-[12px] w-32 rounded-[3px]" />
-              </div>
-              <SkeletonButton width={68} className="h-7 rounded-[8px]" />
-            </div>
-            <div className="space-y-2 p-4">
-              {[
-                'full',
-                '5/6',
-                '4/6',
-                'full',
-                '3/6',
-                '5/6',
-                '2/6',
-              ].map((w, i) => (
-                <SkeletonText key={i} width={w as 'full' | '5/6' | '4/6' | '3/6' | '2/6'} className="h-[11px]" />
-              ))}
             </div>
           </div>
         </section>
