@@ -49,6 +49,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { api } from '@/lib/api';
 
 interface Command {
   id: string;
@@ -215,7 +216,9 @@ export function CommandPalette() {
           setOpen(false);
           localStorage.removeItem('access_token');
           localStorage.removeItem('refresh_token');
-          window.location.href = '/auth';
+          localStorage.removeItem('aegis_preview');
+          api.logOut();
+          router.replace('/auth');
         },
       },
     ];

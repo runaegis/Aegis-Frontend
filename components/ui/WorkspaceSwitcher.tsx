@@ -38,6 +38,7 @@ import { useUser } from '@/lib/hooks';
 import { cn } from '@/lib/utils';
 import { GenerativeAvatar } from '@/components/ui/GenerativeAvatar';
 import { UserAvatar } from '@/components/ui/UserAvatar';
+import { api } from '@/lib/api';
 
 export function WorkspaceSwitcher() {
   const router = useRouter();
@@ -98,10 +99,12 @@ export function WorkspaceSwitcher() {
     try {
       localStorage.removeItem('access_token');
       localStorage.removeItem('refresh_token');
-    } catch {
-      // ignore
+      localStorage.removeItem('aegis_preview');
+      api.logOut();
+      router.replace('/auth');
+    } catch{
+
     }
-    window.location.href = '/auth';
   };
 
   const handleSettings = () => {
