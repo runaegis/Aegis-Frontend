@@ -391,7 +391,7 @@ export default function FreezeWindowPage() {
     return (
       <>
         <Topbar title="Freeze Windows" subtitle="When agents should stand down" />
-        <div className="mx-auto max-w-[1320px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
+        <div className="mx-auto max-w-[1320px] 2xl:max-w-[1480px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
           <FreezeWindowSkeleton />
         </div>
       </>
@@ -401,7 +401,7 @@ export default function FreezeWindowPage() {
   return (
     <>
       <Topbar title="Freeze Windows" subtitle="When agents should stand down" />
-      <div className="mx-auto max-w-[1320px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
+      <div className="mx-auto max-w-[1320px] 2xl:max-w-[1480px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
         {error && (
           <div className="mb-6">
             <ErrorBanner
@@ -1020,11 +1020,19 @@ function FreezeWindowRow({
         activeNow && 'bg-gradient-to-r from-[var(--primary-alpha-10)]/30 to-transparent',
       )}
     >
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] border border-[var(--stroke-soft-200)] bg-white">
-        <Calendar
-          className="h-4 w-4 text-[var(--neutral-sub-600)]"
-          strokeWidth={2}
-        />
+      {/* Concentric-ring icon — same treatment as the Policies row
+          (outer 44px ring + inner 32px white circle + brand-orange
+          glyph). Unifies the "governance rule" visual vocabulary
+          across both pages: freeze windows ARE policies in the
+          decision pipeline, so they should read as the same primitive. */}
+      <div
+        className="relative flex h-11 w-11 shrink-0 items-center justify-center"
+        aria-hidden
+      >
+        <div className="absolute h-11 w-11 rounded-full border border-[var(--stroke-soft-200)]" />
+        <div className="relative flex h-8 w-8 items-center justify-center rounded-full bg-white text-[var(--primary-base)] shadow-[0_1px_2px_rgba(23,23,23,0.05)] ring-1 ring-[var(--stroke-soft-200)]">
+          <Calendar className="h-4 w-4" strokeWidth={2} />
+        </div>
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">

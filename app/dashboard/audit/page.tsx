@@ -12,7 +12,7 @@ import {
   FileText,
   Search,
   Sparkles,
-  Wand2,
+  Pencil,
   X,
   XCircle,
 } from 'lucide-react';
@@ -225,7 +225,7 @@ export default function AuditPage() {
     return (
       <>
         <Topbar title="Audit Trail" subtitle="Immutable event log" />
-        <div className="mx-auto max-w-[1320px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
+        <div className="mx-auto max-w-[1320px] 2xl:max-w-[1480px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
           <AuditSkeleton />
         </div>
       </>
@@ -235,7 +235,7 @@ export default function AuditPage() {
   return (
     <>
       <Topbar title="Audit Trail" subtitle="Immutable event log" />
-      <div className="mx-auto max-w-[1320px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
+      <div className="mx-auto max-w-[1320px] 2xl:max-w-[1480px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
         {error && (
           <div className="mb-6">
             <ErrorBanner
@@ -272,41 +272,26 @@ export default function AuditPage() {
           </motion.p>
         </motion.header>
 
-        {/* Filter bar — date range, then per-dimension filter chips
-            (agent / decision / repo / tool), then a free-text search
-            on the right. Layout collapses to a single column on
-            narrow viewports. "Clear filters" appears only when
-            something is filtering. */}
+        {/* Filter bar — all controls in a single wrap row:
+            date range, filter chips (agent / decision / repo / tool),
+            free-text search, and Export. Was previously split across
+            two rows separated by a divider, which made the panel feel
+            taller than the actions justified. Single row with
+            flex-wrap means everything sits on one line on wide
+            viewports and reflows cleanly on narrow ones. */}
         <motion.div
           className="mb-6 rounded-[12px] border border-[var(--stroke-soft-200)] bg-white p-3 shadow-[0_1px_2px_rgba(23,23,23,0.04)]"
           initial={reduce ? false : { opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: DUR.slow, ease: EASE.out, delay: 0.18 }}
         >
-          {/* Row 1: date range + export, justified between */}
-          <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <DateRangePicker
               value={range}
               onChange={setRange}
               defaultPreset="last7"
               size="sm"
             />
-            <Button
-              variant="secondary"
-              onClick={exportJson}
-              disabled={!user?.id || userLoading}
-              leadingIcon={<Download className="h-3.5 w-3.5" strokeWidth={2} />}
-            >
-              Export JSON
-            </Button>
-          </div>
-          {/* Divider between date row and filter row */}
-          <div className="my-3 border-t border-[var(--stroke-soft-200)]" />
-          {/* Row 2: filter chips + search.
-              Filter chips are wrapped on small viewports so the
-              search input stays usable; chips group at the left,
-              search input grows to fill remaining space. */}
-          <div className="flex flex-wrap items-center gap-2">
             <FilterChip
               label="Agent"
               options={filterOptions.agents}
@@ -366,12 +351,25 @@ export default function AuditPage() {
               <button
                 type="button"
                 onClick={clearAllFilters}
-                className="inline-flex h-7 items-center gap-1 rounded-[8px] px-2 text-[11.5px] font-medium text-[var(--neutral-sub-600)] transition-colors hover:bg-[var(--neutral-weak-50)] hover:text-[var(--error)]"
+                className="inline-flex h-7 items-center gap-1 rounded-[8px] px-2 text-[11.5px] font-medium text-[var(--neutral-sub-600)] transition-colors hover:bg-[var(--primary-lighter)]/50 hover:text-[var(--error)]"
               >
                 <X className="h-3 w-3" strokeWidth={2.25} aria-hidden />
                 Clear filters
               </button>
             )}
+            {/* Export sits at the end of the single-row filter bar.
+                Compact size="sm" so it matches the height of the
+                filter chips and search input (h-7) instead of
+                breaking the row's rhythm with a taller button. */}
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={exportJson}
+              disabled={!user?.id || userLoading}
+              leadingIcon={<Download className="h-3 w-3" strokeWidth={2} />}
+            >
+              Export JSON
+            </Button>
           </div>
           {/* Result-count strip — only shows when filtering is
               active, surfaces "X of Y" so the user can verify the
@@ -493,7 +491,12 @@ function DecisionIcon({ decision }: { decision: string }) {
 
   let Icon = CheckCircle2;
   if (upper === 'DENY' || upper === 'REJECTED' || upper === 'DENIED') Icon = XCircle;
-  else if (upper === 'REWRITE') Icon = Wand2;
+  // REWRITE icon iteration history: started as Wand2 ("AI magic" vibe,
+  // wrong for a security tool), tried Replace ("barely understandable
+  // at small sizes" per user feedback). Pencil is the universal
+  // "edited / modified" icon — instantly recognizable at 14px and
+  // doesn't carry the AI-magic connotation Wand2 did.
+  else if (upper === 'REWRITE') Icon = Pencil;
   else if (upper.includes('APPROVAL') || upper === 'PENDING') Icon = Sparkles;
 
   return (

@@ -761,6 +761,15 @@ export function installPreviewApi() {
     email: 'preview@runaegis.co',
     github_user_id: 0,
   });
-  api.getOnboardingStep = async () => ({ onboarding_step: 6 });
+  // Preview onboarding when the user is actually ON /onboarding (so
+  // designers can review the flow). Anywhere else, claim "complete" so
+  // they don't get pulled back into the wizard mid-session. The numeric
+  // value matters: > 4 redirects to /dashboard, 1..4 renders that step.
+  api.getOnboardingStep = async () => {
+    const onOnboarding =
+      typeof window !== 'undefined' &&
+      window.location.pathname.startsWith('/onboarding');
+    return { onboarding_step: onOnboarding ? 1 : 6 };
+  };
   api.updateOnboardingStep = async () => ({ success: true });
 }

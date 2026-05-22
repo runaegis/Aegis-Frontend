@@ -4,7 +4,7 @@ import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'success';
-type Size = 'sm' | 'md';
+type Size = 'sm' | 'md' | 'lg';
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant;
@@ -17,6 +17,11 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 const sizeStyles: Record<Size, string> = {
   sm: 'h-7 px-2.5 text-[12px] gap-1.5',
   md: 'h-8 px-3 text-[13px] gap-1.5',
+  // `lg` exists specifically to line up with the Input component
+  // (h-9 / 36px) when a Button sits next to a text field in the same
+  // form row. Without this size, every inline-with-input button had to
+  // ride on a className override.
+  lg: 'h-9 px-3.5 text-[13px] gap-1.5',
 };
 
 const variantStyles: Record<Variant, string> = {

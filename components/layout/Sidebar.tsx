@@ -13,7 +13,7 @@ import {
   FileText,
   Clock,
   Coins,
-  Plug,
+  Boxes,
   Settings,
   Menu,
   X,
@@ -103,6 +103,7 @@ const NAV_GROUPS: NavGroup[] = [
       { name: 'Policies', href: '/dashboard/policies', icon: BookOpen },
       { name: 'Audit Trail', href: '/dashboard/audit', icon: FileText },
       { name: 'Freeze Windows', href: '/dashboard/freeze-window', icon: Clock },
+      { name: 'Connectors', href: '/dashboard/connectors', icon: Boxes },
     ],
   },
   {
@@ -114,7 +115,6 @@ const NAV_GROUPS: NavGroup[] = [
 ];
 
 const BOTTOM_ITEMS: NavItem[] = [
-  { name: 'Integrations', href: '/dashboard/integrations', icon: Plug },
   { name: 'Settings', href: '/dashboard/settings', icon: Settings },
 ];
 

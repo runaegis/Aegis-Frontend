@@ -199,14 +199,14 @@ export default function RoomConnectPage() {
 
   if (roomLoading || loading) {
     return (
-      <div className="mx-auto w-full max-w-[1320px] px-4 pt-4 pb-6 sm:px-6 sm:pt-6 sm:pb-7 lg:px-8 lg:pt-8 lg:pb-8">
+      <div className="mx-auto w-full max-w-[1320px] 2xl:max-w-[1480px] px-4 pt-4 pb-6 sm:px-6 sm:pt-6 sm:pb-7 lg:px-8 lg:pt-8 lg:pb-8">
         <Skeleton className="h-[420px] w-full rounded-[12px]" />
       </div>
     );
   }
 
   return (
-    <div className="mx-auto w-full max-w-[1320px] px-4 pt-4 pb-6 sm:px-6 sm:pt-6 sm:pb-7 lg:px-8 lg:pt-8 lg:pb-8">
+    <div className="mx-auto w-full max-w-[1320px] 2xl:max-w-[1480px] px-4 pt-4 pb-6 sm:px-6 sm:pt-6 sm:pb-7 lg:px-8 lg:pt-8 lg:pb-8">
       <motion.div
         variants={staggerContainer(0.06)}
         initial={reduce ? false : 'hidden'}
@@ -287,7 +287,10 @@ export default function RoomConnectPage() {
                   : 'border-dashed border-[var(--stroke-sub-300)] bg-white hover:border-[var(--neutral-soft-400)] hover:bg-[var(--neutral-weak-50)]',
               )}
             >
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-[var(--neutral-weak-50)] text-[var(--neutral-soft-400)]">
+              {/* Canonical icon box. Neutral icon color signals
+                  "catch-all / generic" vs the brand-colored ToolLogo
+                  containers used for known agents in the same list. */}
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-white text-[var(--neutral-sub-600)] shadow-[0_1px_2px_rgba(23,23,23,0.05)] ring-1 ring-[var(--stroke-soft-200)]">
                 <Plug className="h-4 w-4" strokeWidth={2} aria-hidden />
               </div>
               <div className="min-w-0 flex-1">

@@ -14,10 +14,18 @@ interface TopbarProps {
   subtitle?: string;
   lastUpdated?: Date;
   onRefresh?: () => void;
-  /** When true, the date filter and notification bell are hidden (useful for setting pages). */
+  /** When true, the notification bell is hidden (useful for settings pages). */
   minimal?: boolean;
   /** Optional unread notification count — when > 0, a dot appears on the bell. */
   unreadCount?: number;
+  /**
+   * Render the date-range picker. Default false. Opt in only on pages
+   * where time-windowed data is the primary surface (Dashboard, Runs,
+   * Sessions, Token Spenditure). Configuration pages (Policies,
+   * Rooms, Connectors, Settings, Freeze) hide it because there's no
+   * time-bound data to filter.
+   */
+  showDateRange?: boolean;
 }
 
 function formatRelative(d: Date) {
@@ -35,7 +43,13 @@ export default function Topbar({
   onRefresh,
   minimal = false,
   unreadCount = 0,
+  showDateRange = false,
 }: TopbarProps) {
+  // Date range state only lives here when the picker is actually
+  // rendered. The state is local to the Topbar today (no global
+  // filtering wired up yet) — that's tracked as a follow-up. Pages
+  // that need real filtering (e.g. Audit) embed their own
+  // DateRangePicker in the page body instead.
   const [range, setRange] = useState<DateRange | undefined>(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -136,8 +150,11 @@ export default function Topbar({
             works (see CommandPalette's keydown listener). */}
         <CommandPaletteTrigger />
 
-        {/* Date filter — hidden on mobile (limited horizontal room); reappears at sm */}
-        {!minimal && (
+        {/* Date filter — opt-in per page. Only renders when the page
+            actually surfaces time-windowed data (Dashboard, Runs,
+            Sessions, Token Spend). Hidden on mobile regardless
+            (limited horizontal room); reappears at sm. */}
+        {showDateRange && (
           <div className="hidden sm:inline-flex">
             <DateRangePicker
               value={range}

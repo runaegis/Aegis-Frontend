@@ -44,6 +44,7 @@ import { Switch } from '@/components/ui/Switch';
 import { useToast } from '@/components/ui/Toast';
 import { CodeChip } from '@/components/ui/CodeChip';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import EmptyState from '@/components/ui/EmptyState';
 import ThemeToggle from '@/components/ui/ThemeToggle';
 import { UserAvatar } from '@/components/ui/UserAvatar';
 import {
@@ -180,7 +181,7 @@ export default function SettingsPage() {
   return (
     <>
       <Topbar title="Settings" subtitle="Account, integrations, governance" minimal />
-      <div className="mx-auto max-w-[1320px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
+      <div className="mx-auto max-w-[1320px] 2xl:max-w-[1480px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
         {error && (
           <div className="mb-4">
             <ErrorBanner message={error} onDismiss={() => setError(null)} />
@@ -1045,31 +1046,20 @@ function PermPill({
 }
 
 // ── Section: API Keys ───────────────────────────────────────────────────────
+//
+// "Coming soon" surface. Previously this section showed two fake
+// aegis_live_* keys with working-looking Copy/Revoke buttons. That
+// reads as "this works today" to anyone touring the dashboard, but
+// Jenil's backend has no Aegis REST API yet (the only integration
+// path is the per-room MCP endpoint). Replaced with an honest
+// EmptyState that names the planned scopes so reviewers understand
+// what'll ship.
 function ApiKeysSection({
   reduce,
-  onSuccess,
 }: {
   reduce: boolean;
   onSuccess: (s: string) => void;
 }) {
-  // Demo keys — wire to a real endpoint when available.
-  const [keys, setKeys] = useState([
-    {
-      id: 'aegis_live_4f9c…a821',
-      name: 'CI runner',
-      created: '2 days ago',
-      lastUsed: '3 min ago',
-      scopes: ['runs:read', 'approvals:write'],
-    },
-    {
-      id: 'aegis_live_91b3…ff03',
-      name: 'Local scripts',
-      created: 'Last month',
-      lastUsed: 'Yesterday',
-      scopes: ['runs:read'],
-    },
-  ]);
-
   return (
     <motion.div
       variants={staggerContainer(0.05)}
@@ -1079,66 +1069,35 @@ function ApiKeysSection({
       <motion.div variants={fadeUp}>
         <SettingsCard
           title="API keys"
-          description="Use these to call the Aegis API from your scripts and CI."
-          action={
-            <Button
-              variant="primary"
-              leadingIcon={<Plus className="h-3.5 w-3.5" strokeWidth={2.25} />}
-              onClick={() => onSuccess('Demo: create-key flow would open here')}
-            >
-              New key
-            </Button>
-          }
+          description="Programmatic access to Aegis from your scripts and CI."
         >
-          {keys.length === 0 ? (
-            <p className="py-6 text-center text-[12.5px] text-[var(--neutral-soft-400)]">
-              No keys yet. Create one to call the Aegis API.
+          <EmptyState
+            icon={<KeyRound className="h-5 w-5" />}
+            title="API keys are on the roadmap"
+            description="Once shipped, you'll generate scoped keys and call the Aegis REST API from CI pipelines, automation scripts, or custom integrations."
+            compact
+          />
+          <div className="mt-2 border-t border-[var(--stroke-soft-200)] pt-5">
+            <p className="mb-3 text-[10.5px] font-semibold uppercase tracking-[0.07em] text-[var(--neutral-soft-400)]">
+              Planned scopes
             </p>
-          ) : (
-            <div className="divide-y divide-[var(--stroke-soft-200)]">
-              {keys.map((k) => (
-                <Row
-                  key={k.id}
-                  title={
-                    <div className="flex items-center gap-2">
-                      <span>{k.name}</span>
-                      <CodeChip>{k.id}</CodeChip>
-                    </div>
-                  }
-                  description={`Created ${k.created} · Last used ${k.lastUsed}`}
-                  meta={
-                    <div className="flex flex-wrap gap-1">
-                      {k.scopes.map((s) => (
-                        <CodeChip key={s}>{s}</CodeChip>
-                      ))}
-                    </div>
-                  }
-                  action={
-                    <div className="flex items-center gap-1.5">
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        leadingIcon={<Copy className="h-3 w-3" strokeWidth={2} />}
-                        onClick={() => onSuccess('Key copied (demo)')}
-                      >
-                        Copy
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => {
-                          setKeys((prev) => prev.filter((x) => x.id !== k.id));
-                          onSuccess('Key revoked');
-                        }}
-                      >
-                        Revoke
-                      </Button>
-                    </div>
-                  }
-                />
+            <div className="flex flex-wrap gap-1.5">
+              {[
+                'runs:read',
+                'approvals:read',
+                'approvals:write',
+                'policies:read',
+                'audit:read',
+                'token-usage:read',
+              ].map((scope) => (
+                <CodeChip key={scope}>{scope}</CodeChip>
               ))}
             </div>
-          )}
+            <p className="mt-4 text-[12px] italic text-[var(--neutral-soft-400)]">
+              Reach out via support if this is a blocker for your team — we
+              prioritize the roadmap on customer need.
+            </p>
+          </div>
         </SettingsCard>
       </motion.div>
     </motion.div>
@@ -1146,27 +1105,57 @@ function ApiKeysSection({
 }
 
 // ── Section: Webhooks ───────────────────────────────────────────────────────
+//
+// "Coming soon" surface. Previously this rendered a working-looking
+// add-endpoint form, status badges, and a placeholder signing secret
+// (whsec_b7c9…ab12). The backend has no webhook fan-out today.
+// Replaced with an honest EmptyState plus a concrete event list so
+// SecOps reviewers can see exactly which events they'll be able to
+// subscribe to — that's typically what they ask for in a first sales
+// call (PagerDuty / Slack / Datadog wiring).
 function WebhooksSection({
   reduce,
-  onSuccess,
 }: {
   reduce: boolean;
   onSuccess: (s: string) => void;
 }) {
-  const [hooks, setHooks] = useState<
-    { url: string; status: 'active' | 'failing'; events: string[] }[]
-  >([]);
-  const [url, setUrl] = useState('');
-
-  const add = () => {
-    if (!url.trim()) return;
-    setHooks((p) => [
-      ...p,
-      { url: url.trim(), status: 'active', events: ['approval', 'denied'] },
-    ]);
-    setUrl('');
-    onSuccess('Webhook added');
-  };
+  // Events the backend already emits internally and that the webhook
+  // fan-out will surface once implemented. Grouped semantically so
+  // the panel reads like a documentation preview, not a flat list.
+  const eventGroups: Array<{ category: string; events: string[] }> = [
+    {
+      category: 'Approvals',
+      events: [
+        'approval.requested',
+        'approval.approved',
+        'approval.rejected',
+      ],
+    },
+    {
+      category: 'Actions',
+      events: [
+        'action.allowed',
+        'action.denied',
+        'action.rewritten',
+      ],
+    },
+    {
+      category: 'Policy',
+      events: ['policy.fired', 'policy.changed'],
+    },
+    {
+      category: 'Rooms',
+      events: [
+        'room.member_added',
+        'room.member_removed',
+        'room.role_changed',
+      ],
+    },
+    {
+      category: 'Freeze windows',
+      events: ['freeze_window.started', 'freeze_window.ended'],
+    },
+  ];
 
   return (
     <motion.div
@@ -1176,88 +1165,37 @@ function WebhooksSection({
     >
       <motion.div variants={fadeUp}>
         <SettingsCard
-          title="Endpoints"
-          description="Aegis will POST a signed JSON payload to each endpoint when matching events occur."
+          title="Webhooks"
+          description="Aegis will POST a signed JSON payload to your endpoint when matching events occur."
         >
-          <div className="mb-4 flex gap-2">
-            <Input
-              type="url"
-              placeholder="https://your-app.com/aegis/webhook"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-            />
-            <Button
-              variant="primary"
-              onClick={add}
-              disabled={!url.trim()}
-              leadingIcon={<Plus className="h-3.5 w-3.5" strokeWidth={2.25} />}
-            >
-              Add
-            </Button>
-          </div>
-          {hooks.length === 0 ? (
-            <p className="rounded-[8px] border border-dashed border-[var(--stroke-sub-300)] p-6 text-center text-[12.5px] text-[var(--neutral-soft-400)]">
-              No webhooks yet.
+          <EmptyState
+            icon={<Webhook className="h-5 w-5" />}
+            title="Webhooks are on the roadmap"
+            description="Wire Aegis into PagerDuty, Slack, Datadog, or your own internal alerting. Each delivery will be signed so you can verify authenticity."
+            compact
+          />
+          <div className="mt-2 border-t border-[var(--stroke-soft-200)] pt-5">
+            <p className="mb-3 text-[10.5px] font-semibold uppercase tracking-[0.07em] text-[var(--neutral-soft-400)]">
+              Planned events
             </p>
-          ) : (
-            <div className="divide-y divide-[var(--stroke-soft-200)]">
-              {hooks.map((h) => (
-                <Row
-                  key={h.url}
-                  title={
-                    <div className="flex items-center gap-2">
-                      <Badge tone={h.status === 'active' ? 'success' : 'error'} uppercase leadingDot>
-                        {h.status}
-                      </Badge>
-                      <CodeChip>{h.url}</CodeChip>
-                    </div>
-                  }
-                  meta={
-                    <div className="flex flex-wrap gap-1">
-                      {h.events.map((e) => (
-                        <CodeChip key={e}>{e}</CodeChip>
-                      ))}
-                    </div>
-                  }
-                  action={
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={() => {
-                        setHooks((prev) => prev.filter((x) => x.url !== h.url));
-                        onSuccess('Webhook removed');
-                      }}
-                    >
-                      Remove
-                    </Button>
-                  }
-                />
+            <div className="space-y-3">
+              {eventGroups.map((group) => (
+                <div key={group.category}>
+                  <p className="mb-1.5 text-[11.5px] font-medium text-[var(--neutral-sub-600)]">
+                    {group.category}
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {group.events.map((event) => (
+                      <CodeChip key={event}>{event}</CodeChip>
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
-          )}
-        </SettingsCard>
-      </motion.div>
-
-      <motion.div variants={fadeUp}>
-        <SettingsCard
-          title="Signing secret"
-          description="Use this to verify the signature on every payload Aegis sends."
-        >
-          <div className="flex items-center gap-2">
-            <Input value="whsec_b7c9…ab12" readOnly />
-            <Button
-              variant="secondary"
-              leadingIcon={<ClipboardCopy className="h-3.5 w-3.5" strokeWidth={2} />}
-              onClick={() => onSuccess('Signing secret copied')}
-            >
-              Copy
-            </Button>
-            <Button
-              variant="secondary"
-              onClick={() => onSuccess('Signing secret rotated (demo)')}
-            >
-              Rotate
-            </Button>
+            <p className="mt-5 text-[12px] italic text-[var(--neutral-soft-400)]">
+              Reach out via support if this is a blocker for your team — we
+              prioritize the roadmap on customer need.
+            </p>
           </div>
         </SettingsCard>
       </motion.div>

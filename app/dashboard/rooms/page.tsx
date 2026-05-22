@@ -208,7 +208,7 @@ export default function RoomsIndexPage() {
     return (
       <>
         <Topbar title="Rooms" subtitle="Per-repo agent permissions" />
-        <div className="mx-auto max-w-[1320px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
+        <div className="mx-auto max-w-[1320px] 2xl:max-w-[1480px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
           <RoomsSkeleton />
         </div>
       </>
@@ -223,7 +223,7 @@ export default function RoomsIndexPage() {
         lastUpdated={lastUpdated}
         onRefresh={fetchRooms}
       />
-      <div className="mx-auto max-w-[1320px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
+      <div className="mx-auto max-w-[1320px] 2xl:max-w-[1480px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
         {error && (
           <div className="mb-6">
             <ErrorBanner message={error} onDismiss={() => setError(null)} onRetry={fetchRooms} />
@@ -491,9 +491,15 @@ export default function RoomsIndexPage() {
                   placeholder="aeg-..."
                   autoFocus
                 />
+                {/* size="lg" (h-9) so the Cancel + Join-room buttons
+                    share their height with the Input above (also h-9).
+                    Default Button md is h-8, which left a 4px height
+                    delta and made the row read as "buttons too short
+                    for the input." */}
                 <div className="flex gap-1.5">
                   <Button
                     type="button"
+                    size="lg"
                     variant="secondary"
                     onClick={() => {
                       setShowJoin(false);
@@ -505,7 +511,8 @@ export default function RoomsIndexPage() {
                   </Button>
                   <Button
                     type="submit"
-                    variant="secondary"
+                    size="lg"
+                    variant="primary"
                     disabled={submittingJoin || !joinCode.trim()}
                   >
                     {submittingJoin ? 'Joining…' : 'Join room'}
@@ -589,7 +596,11 @@ export default function RoomsIndexPage() {
                   >
                     <Link
                       href={`/dashboard/rooms/${id}`}
-                      className="flex items-center gap-4 px-5 py-4 transition-colors hover:bg-[var(--neutral-weak-50)]"
+                      /* primary-lighter/50 hover matches the shared
+                         <Table> TR pattern. Was --neutral-weak-50,
+                         which read as "did anything change?" against
+                         the white card. */
+                      className="flex items-center gap-4 px-5 py-4 transition-colors hover:bg-[var(--primary-lighter)]/50"
                     >
                       {/* Generative avatar — deterministic from the
                           repo name, so users learn to recognize each
@@ -605,9 +616,18 @@ export default function RoomsIndexPage() {
                         <p className="truncate text-[14px] font-semibold tracking-[-0.005em] text-[var(--neutral-strong-950)]">
                           {room.repo_name || id}
                         </p>
+                        {/* Metadata line. The room ID used to be wrapped
+                            in font-mono, which gave the mono glyphs a
+                            different vertical baseline from the
+                            surrounding sans text — the "ID" prefix
+                            and "· created…" tail bounced ~1px above
+                            the mono span. Dropping mono here keeps the
+                            entire line on one baseline; the "ID" prefix
+                            still signals "this is the identifier" without
+                            needing the typography switch. */}
                         <p className="mt-0.5 truncate text-[11.5px] text-[var(--neutral-soft-400)]">
                           ID{' '}
-                          <span className="font-mono text-[var(--neutral-sub-600)]">
+                          <span className="text-[var(--neutral-sub-600)]">
                             {id}
                           </span>
                           {room.created_at && (

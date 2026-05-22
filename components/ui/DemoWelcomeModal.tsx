@@ -32,10 +32,11 @@
 
 import { useEffect } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
-import { ArrowRight, Sparkles, User as UserIcon } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { useUser } from '@/lib/hooks';
 import { AegisLogo } from '@/components/ui/AegisLogo';
-import { getInitials, cn } from '@/lib/utils';
+import { GenerativeAvatar } from '@/components/ui/GenerativeAvatar';
+import { cn } from '@/lib/utils';
 
 const EASE_EMPH: [number, number, number, number] = [0.2, 0.8, 0.2, 1];
 
@@ -121,13 +122,25 @@ export function DemoWelcomeModal({
               {/* Two stacked option cards. The demo card is the
                   recommended path (primary visual weight) — most
                   new users benefit from seeing what populated looks
-                  like before wiring up their first agent. */}
+                  like before wiring up their first agent.
+
+                  Both icons are GenerativeAvatar (Bayer dither
+                  pattern) so the modal previews the exact identity
+                  marks the user will see in the WorkspaceSwitcher
+                  after picking. Same seeds + variants used there:
+                    Demo  → seed="aegis-demo-workspace", variant="demo"
+                            (locks to brand orange palette)
+                    User  → seed=username, variant="user"
+                            (seed picks one of the curated palettes) */}
               <div className="space-y-2.5 p-5 pb-6">
                 <OptionCard
                   icon={
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-[var(--primary-alpha-10)] text-[var(--primary-base)]">
-                      <Sparkles className="h-5 w-5" strokeWidth={2.25} />
-                    </div>
+                    <GenerativeAvatar
+                      seed="aegis-demo-workspace"
+                      variant="demo"
+                      size={40}
+                      radius={10}
+                    />
                   }
                   title="Take a tour with demo data"
                   description="Explore a fully-populated Aegis with sample runs, approvals, and policies. Nothing is real — perfect for getting the feel."
@@ -137,11 +150,12 @@ export function DemoWelcomeModal({
                 />
                 <OptionCard
                   icon={
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-[var(--neutral-weak-50)] text-[var(--neutral-strong-950)] text-[13px] font-semibold">
-                      {user
-                        ? getInitials(user.username)
-                        : <UserIcon className="h-5 w-5" strokeWidth={2} />}
-                    </div>
+                    <GenerativeAvatar
+                      seed={user?.username || user?.email || 'workspace'}
+                      variant="user"
+                      size={40}
+                      radius={10}
+                    />
                   }
                   title="Start with my workspace"
                   description="Skip the demo and go straight to your empty dashboard. Connect your first agent to start seeing real activity."
@@ -180,7 +194,14 @@ function OptionCard({
       onClick={onClick}
       className={cn(
         'group flex w-full items-start gap-3.5 rounded-[12px] border p-4 text-left',
+        // Smooth hover treatment: in addition to the border/bg shift,
+        // lift the card 1px and add a subtle shadow so the response
+        // feels physical, not flat. duration-200 with the
+        // emphasized-decelerate curve matches the rest of the
+        // dashboard's motion language.
         'transition-all duration-200 ease-[cubic-bezier(0.2,0.8,0.2,1)]',
+        'shadow-[0_1px_2px_rgba(23,23,23,0)]',
+        'hover:-translate-y-px hover:shadow-[0_6px_18px_rgba(23,23,23,0.06)]',
         // Recommended card: subtle orange tint + stronger hover lift,
         // so the eye lands here first. The non-recommended card stays
         // pure neutral so the choice doesn't feel coerced — both are

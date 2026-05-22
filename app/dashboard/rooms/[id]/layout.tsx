@@ -73,7 +73,7 @@ function RoomScopeInner() {
           can show their own loading/empty states, but this gives a
           page-level recovery path. */}
       {error && !loading && (
-        <div className="mx-auto w-full max-w-[1320px] px-4 pt-6 sm:px-6 lg:px-8">
+        <div className="mx-auto w-full max-w-[1320px] 2xl:max-w-[1480px] px-4 pt-6 sm:px-6 lg:px-8">
           <div className="rounded-[12px] border border-[var(--stroke-soft-200)] bg-white p-2 shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
             <EmptyState
               icon={<DoorOpen className="h-5 w-5" />}
@@ -112,7 +112,7 @@ function RoomScopeInner() {
               The trigger uses -my-1.5 to widen its hover rect past
               the title; with py-3 that left only ~6px of clearance,
               which felt cramped when hovering. py-4 gives ~10px. */}
-          <div className="mx-auto max-w-[1320px] px-4 py-4 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-[1320px] 2xl:max-w-[1480px] px-4 py-4 sm:px-6 lg:px-8">
             {/* Breadcrumb — small, subtle, but the icon-only back
                 arrow is a real affordance the user can click.
                 mb-5 (not 3) so the breadcrumb has visible breathing

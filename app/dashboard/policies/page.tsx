@@ -154,7 +154,7 @@ export default function PoliciesPage() {
   return (
     <>
       <Topbar title="Policies" subtitle="Rules that evaluate every agent action" />
-      <div className="mx-auto max-w-[1320px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
+      <div className="mx-auto max-w-[1320px] 2xl:max-w-[1480px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
         {error && (
           <div className="mb-6">
             <ErrorBanner message={error} onDismiss={() => setError(null)} />
@@ -244,15 +244,30 @@ export default function PoliciesPage() {
                 <motion.li
                   key={policy.key}
                   variants={fadeUpSm}
-                  className={`grid grid-cols-[44px_1fr_140px_120px_64px] items-center gap-3 px-6 py-4 transition-colors hover:bg-[var(--neutral-weak-50)] ${
+                  /* hover bg uses primary-lighter (warm orange tint),
+                     matching the shared <Table> TR hover. Previously
+                     was --neutral-weak-50, which is nearly identical
+                     to the page bg in light mode — hover read as
+                     "almost nothing happening." */
+                  className={`grid grid-cols-[44px_1fr_140px_120px_64px] items-center gap-3 px-6 py-4 transition-colors hover:bg-[var(--primary-lighter)]/50 ${
                     isActive ? '' : 'opacity-60'
                   }`}
                 >
+                  {/* Concentric-ring icon — scaled-down echo of the
+                      EmptyState illustration pattern the user called
+                      out. Outer ring sits at 44px (matches the grid
+                      column), inner white circle at 32px carries the
+                      orange outline icon. Single ring instead of
+                      EmptyState's three so the row stays dense
+                      enough for a 10-item list. */}
                   <div
-                    className="flex h-9 w-9 items-center justify-center rounded-[10px] border border-[var(--stroke-soft-200)] bg-white"
-                    style={{ color: 'var(--primary-base)' }}
+                    className="relative flex h-11 w-11 items-center justify-center"
+                    aria-hidden
                   >
-                    <Icon className="h-4 w-4" strokeWidth={2} />
+                    <div className="absolute h-11 w-11 rounded-full border border-[var(--stroke-soft-200)]" />
+                    <div className="relative flex h-8 w-8 items-center justify-center rounded-full bg-white text-[var(--primary-base)] shadow-[0_1px_2px_rgba(23,23,23,0.05)] ring-1 ring-[var(--stroke-soft-200)]">
+                      <Icon className="h-4 w-4" strokeWidth={2} />
+                    </div>
                   </div>
                   <div className="min-w-0">
                     <p className="text-[13.5px] font-semibold text-[var(--neutral-strong-950)]">

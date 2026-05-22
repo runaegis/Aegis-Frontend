@@ -112,8 +112,8 @@ export default function SessionsPage() {
   if (userLoading || loading) {
     return (
       <>
-        <Topbar title="Sessions" subtitle="Agent working sessions" />
-        <div className="mx-auto max-w-[1320px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
+        <Topbar title="Sessions" subtitle="Agent working sessions" showDateRange />
+        <div className="mx-auto max-w-[1320px] 2xl:max-w-[1480px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
           <SessionsSkeleton />
         </div>
       </>
@@ -127,8 +127,9 @@ export default function SessionsPage() {
         subtitle="Agent working sessions"
         lastUpdated={lastUpdated}
         onRefresh={fetchData}
+        showDateRange
       />
-      <div className="mx-auto max-w-[1320px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
+      <div className="mx-auto max-w-[1320px] 2xl:max-w-[1480px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
         {error && (
           <div className="mb-6">
             <ErrorBanner
