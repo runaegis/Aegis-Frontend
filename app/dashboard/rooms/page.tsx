@@ -146,9 +146,9 @@ export default function RoomsIndexPage() {
   const filteredRepos = useMemo(() => {
     const q = repoQuery.trim().toLowerCase();
     return repos
-      .filter((r) => !usedRepoNames.has(r.full_name))
-      .filter((r) => !q || r.full_name.toLowerCase().includes(q))
-      .sort((a, b) => a.full_name.localeCompare(b.full_name));
+      .filter((r) => !usedRepoNames.has(r.name))
+      .filter((r) => !q || r.name.toLowerCase().includes(q))
+      .sort((a, b) => a.name.localeCompare(b.name));
   }, [repos, repoQuery, usedRepoNames]);
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -360,14 +360,14 @@ export default function RoomsIndexPage() {
                 ) : (
                   <ul role="radiogroup" aria-label="Choose a repository">
                     {filteredRepos.map((repo) => {
-                      const isSelected = selectedRepo === repo.full_name;
+                      const isSelected = selectedRepo === repo.name;
                       return (
                         <li key={repo.repo_id}>
                           <button
                             type="button"
                             role="radio"
                             aria-checked={isSelected}
-                            onClick={() => setSelectedRepo(repo.full_name)}
+                            onClick={() => setSelectedRepo(repo.name)}
                             className={cn(
                               'flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors',
                               isSelected
@@ -376,7 +376,7 @@ export default function RoomsIndexPage() {
                             )}
                           >
                             <GenerativeAvatar
-                              seed={repo.full_name}
+                              seed={repo.name}
                               variant="user"
                               size={32}
                               radius={8}
@@ -390,7 +390,7 @@ export default function RoomsIndexPage() {
                                     : 'text-[var(--neutral-strong-950)]',
                                 )}
                               >
-                                {repo.full_name}
+                                {repo.name}
                               </p>
                               <p className="mt-0.5 flex items-center gap-1 text-[11px] text-[var(--neutral-soft-400)]">
                                 {repo.is_private ? (
