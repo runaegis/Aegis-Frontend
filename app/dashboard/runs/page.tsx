@@ -83,10 +83,11 @@ export default function RunsPage() {
   // a sortable column header cycles asc → desc → null. No backend
   // change: we're just reordering the in-memory filtered array.
   //
-  // `risk` sorts the combined Risk column by blast-radius severity rank
-  // (most severe last in asc / first in desc) — more product-meaningful
-  // than sorting by the textual policy verdict.
-  type SortKey = 'agent' | 'tool' | 'repo' | 'risk' | 'decision' | 'time';
+  // `policy` sorts alphabetically by the policy verdict text.
+  // `risk` sorts by blast-radius severity rank (most severe last in
+  // asc / first in desc) — more product-meaningful than sorting by
+  // the textual blast-radius label.
+  type SortKey = 'agent' | 'tool' | 'repo' | 'policy' | 'risk' | 'decision' | 'time';
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<SortDirection>(null);
   const onSort = useCallback(
@@ -111,6 +112,7 @@ export default function RunsPage() {
         case 'agent':    return r.agent_name?.toLowerCase() ?? '';
         case 'tool':     return r.tool_name?.toLowerCase() ?? '';
         case 'repo':     return r.target_repo?.toLowerCase() ?? '';
+        case 'policy':   return String(r.policy ?? '').toLowerCase();
         case 'risk':     return blastRadiusRank(readBlastRadius(r));
         case 'decision': return r.decision ?? '';
         case 'time':     return new Date(r.timestamp).getTime();
@@ -133,8 +135,8 @@ export default function RunsPage() {
   if (userLoading || (runsLoading && runs.length === 0)) {
     return (
       <>
-        <Topbar title="Runs" subtitle="Real-time agent activity" />
-        <div className="mx-auto max-w-[1320px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
+        <Topbar title="Runs" subtitle="Real-time agent activity" showDateRange />
+        <div className="mx-auto max-w-[1320px] 2xl:max-w-[1480px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
           <RunsSkeleton />
         </div>
       </>
@@ -148,8 +150,9 @@ export default function RunsPage() {
         subtitle="Real-time agent activity"
         lastUpdated={lastUpdated}
         onRefresh={refreshRuns}
+        showDateRange
       />
-      <div className="mx-auto max-w-[1320px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
+      <div className="mx-auto max-w-[1320px] 2xl:max-w-[1480px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
         {runsError && (
           <div className="mb-6">
             <ErrorBanner
@@ -225,7 +228,7 @@ export default function RunsPage() {
           <div className="space-y-3">
             {/* Filters */}
             <div className="flex flex-wrap items-center gap-2">
-              <div className="min-w-[260px] flex-1">
+              <div className="min-w-[220px] flex-1 sm:min-w-[260px]">
                 <Input
                   type="text"
                   placeholder="Search by agent, tool, repo, summary…"
@@ -250,19 +253,20 @@ export default function RunsPage() {
               />
             </div>
 
-            {/* Table */}
-            <Table>
+            {/* Table — wide (9 data columns), so horizontal scroll stays
+                on at every breakpoint. Trades the page-level sticky thead
+                for a wrapper-level one — acceptable since this page is
+                table-first and the user is rarely scrolled far past the
+                header anyway. */}
+            <Table scrollX>
               <THead>
                 <tr>
                   <TH sortable sortDirection={dirFor('agent')} onSort={() => onSort('agent')}>Agent</TH>
                   <TH sortable sortDirection={dirFor('tool')} onSort={() => onSort('tool')}>Tool</TH>
                   <TH sortable sortDirection={dirFor('repo')} onSort={() => onSort('repo')}>Repository</TH>
                   <TH>Branch</TH>
-                  {/* Combined Policy + Blast radius column — sort cycles
-                      through blast-radius severity (more useful than the
-                      free-form policy text). Hovering the cell shows both
-                      chip tooltips with the underlying values. */}
-                  <TH sortable sortDirection={dirFor('risk')} onSort={() => onSort('risk')}>Risk</TH>
+                  <TH sortable sortDirection={dirFor('policy')} onSort={() => onSort('policy')}>Policy</TH>
+                  <TH sortable sortDirection={dirFor('risk')} onSort={() => onSort('risk')}>Blast Radius</TH>
                   <TH sortable sortDirection={dirFor('decision')} onSort={() => onSort('decision')}>Decision</TH>
                   <TH sortable sortDirection={dirFor('time')} onSort={() => onSort('time')} className="text-right">Time</TH>
                   <TH aria-label="Expand" className="w-8" />
@@ -372,14 +376,10 @@ function RunRow({
           ) : null}
         </TD>
         <TD className="whitespace-nowrap">
-          {/* Stacked Policy + Blast radius — single column header "Risk".
-              Both chips render nothing when their underlying value is
-              missing, so empty cells stay blank instead of leaving
-              vertical whitespace. */}
-          <div className="flex flex-col items-start gap-1">
-            <PolicyChip policy={run.policy} />
-            <BlastRadiusChip value={readBlastRadius(run)} />
-          </div>
+          <PolicyChip policy={run.policy} />
+        </TD>
+        <TD className="whitespace-nowrap">
+          <BlastRadiusChip value={readBlastRadius(run)} />
         </TD>
         <TD className="whitespace-nowrap">
           <div className="flex flex-col items-start gap-1">
@@ -413,7 +413,7 @@ function RunRow({
         onExitComplete={() => setStillExpanded(false)}
       >
       {isExpanded && (
-        <TRExpanded key="expanded" colSpan={8}>
+        <TRExpanded key="expanded" colSpan={9}>
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
             <div>
               <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.05em] text-[var(--neutral-soft-400)]">
@@ -428,10 +428,10 @@ function RunRow({
                   No summary provided
                 </p>
               )}
-              {/* Policy + Blast radius are already in the row's Risk
-                  column — no need to repeat them inside the expanded
-                  panel. Keeps the inspector focused on details not
-                  visible at the row level. */}
+              {/* Policy + Blast Radius are already shown as separate
+                  columns in the row — no need to repeat them inside the
+                  expanded panel. Keeps the inspector focused on details
+                  not visible at the row level. */}
             </div>
             <div className="grid grid-cols-2 gap-3 text-[12px] md:grid-cols-4">
               <div>

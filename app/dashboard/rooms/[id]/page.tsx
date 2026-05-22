@@ -83,7 +83,7 @@ export default function RoomOverviewPage() {
 
   if (roomLoading) {
     return (
-      <div className="mx-auto w-full max-w-[1320px] px-4 pt-4 pb-6 sm:px-6 sm:pt-6 sm:pb-7 lg:px-8 lg:pt-8 lg:pb-8">
+      <div className="mx-auto w-full max-w-[1320px] 2xl:max-w-[1480px] px-4 pt-4 pb-6 sm:px-6 sm:pt-6 sm:pb-7 lg:px-8 lg:pt-8 lg:pb-8">
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           {[0, 1, 2].map((i) => (
             <Skeleton key={i} className="h-[88px] w-full rounded-[12px]" />
@@ -94,7 +94,7 @@ export default function RoomOverviewPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-[1320px] px-4 pt-4 pb-6 sm:px-6 sm:pt-6 sm:pb-7 lg:px-8 lg:pt-8 lg:pb-8">
+    <div className="mx-auto w-full max-w-[1320px] 2xl:max-w-[1480px] px-4 pt-4 pb-6 sm:px-6 sm:pt-6 sm:pb-7 lg:px-8 lg:pt-8 lg:pb-8">
       <motion.div
         variants={staggerContainer(0.06)}
         initial={reduce ? false : 'hidden'}

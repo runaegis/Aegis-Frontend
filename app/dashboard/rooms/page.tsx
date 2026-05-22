@@ -208,7 +208,7 @@ export default function RoomsIndexPage() {
     return (
       <>
         <Topbar title="Rooms" subtitle="Per-repo agent permissions" />
-        <div className="mx-auto max-w-[1320px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
+        <div className="mx-auto max-w-[1320px] 2xl:max-w-[1480px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
           <RoomsSkeleton />
         </div>
       </>
@@ -223,7 +223,7 @@ export default function RoomsIndexPage() {
         lastUpdated={lastUpdated}
         onRefresh={fetchRooms}
       />
-      <div className="mx-auto max-w-[1320px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
+      <div className="mx-auto max-w-[1320px] 2xl:max-w-[1480px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
         {error && (
           <div className="mb-6">
             <ErrorBanner message={error} onDismiss={() => setError(null)} onRetry={fetchRooms} />
@@ -596,7 +596,11 @@ export default function RoomsIndexPage() {
                   >
                     <Link
                       href={`/dashboard/rooms/${id}`}
-                      className="flex items-center gap-4 px-5 py-4 transition-colors hover:bg-[var(--neutral-weak-50)]"
+                      /* primary-lighter/50 hover matches the shared
+                         <Table> TR pattern. Was --neutral-weak-50,
+                         which read as "did anything change?" against
+                         the white card. */
+                      className="flex items-center gap-4 px-5 py-4 transition-colors hover:bg-[var(--primary-lighter)]/50"
                     >
                       {/* Generative avatar — deterministic from the
                           repo name, so users learn to recognize each

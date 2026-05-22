@@ -20,11 +20,30 @@ const EASE_EMPH: [number, number, number, number] = [0.2, 0.8, 0.2, 1];
  * - Row interactivity signaled by `clickable` — adds cursor + chevron-friendly group.
  */
 
+interface TableProps extends TableHTMLAttributes<HTMLTableElement> {
+  /**
+   * Keep horizontal scroll active at all breakpoints (including desktop).
+   * Use when the table has too many columns to fit comfortably even on
+   * wide screens — Runs is the canonical case (9 columns including
+   * Policy + Blast Radius split out).
+   *
+   * Tradeoff: when on, the wrapper becomes the sticky-ancestor for the
+   * thead at all breakpoints, so the header pins to the top of the
+   * wrapper rather than under the page-level Topbar. Acceptable since
+   * tables wide enough to need this usually live on their own page.
+   *
+   * Sets a 1180px floor so the columns have room to breathe — anything
+   * narrower and the chips start wrapping into each other.
+   */
+  scrollX?: boolean;
+}
+
 export function Table({
   className,
   children,
+  scrollX,
   ...props
-}: TableHTMLAttributes<HTMLTableElement>) {
+}: TableProps) {
   // `overflow: clip` clips children to the rounded rect WITHOUT creating
   // a new scroll/containing context — so position:sticky on <thead> still
   // anchors against the page scroll and pins under the topbar.
@@ -40,8 +59,20 @@ export function Table({
           mobile/tablet. At lg+: clear the scroll container so the thead's
           page-level sticky positioning works again (sticky anchors against
           the nearest scrolling ancestor — we don't want that to be this
-          wrapper on desktop). */}
-      <div className="overflow-x-auto lg:overflow-x-visible">
+          wrapper on desktop). When `scrollX` is on, keep the scroll
+          container at all breakpoints — the table is wide enough that
+          horizontal scroll is worth the tradeoff.
+
+          IMPORTANT: with scrollX on, this wrapper becomes the sticky-ancestor
+          for the thead at desktop too. The thead's `lg:top-[var(--table-thead-top,56px)]`
+          would then leave a 56px gap of empty wrapper above the header (the
+          56px offset is calibrated for page-level Topbar, not wrapper-internal
+          sticky). Override the var to 0 so the thead sticks to the wrapper top
+          instead. */}
+      <div
+        className={cn('overflow-x-auto', !scrollX && 'lg:overflow-x-visible')}
+        style={scrollX ? ({ ['--table-thead-top' as string]: '0px' } as React.CSSProperties) : undefined}
+      >
         <table
           className={cn(
             // `border-separate` instead of collapse so the table's outer
@@ -50,7 +81,28 @@ export function Table({
             // where the table's straight edge fought the curved wrapper).
             // `[border-spacing:0]` keeps cells visually adjacent so this
             // is purely a corner-rendering fix, no row-gap change.
-            'w-full min-w-[760px] border-separate text-[13px] [border-spacing:0] lg:min-w-0',
+            'w-full border-separate text-[13px] [border-spacing:0]',
+            // Default: 760px on mobile, fluid on desktop.
+            // scrollX: 1180px floor at every breakpoint, so all 9 columns
+            // stay readable and the user scrolls horizontally on narrow
+            // viewports instead of having columns squish.
+            scrollX ? 'min-w-[1180px]' : 'min-w-[760px] lg:min-w-0',
+            // scrollX action rail: freeze the rightmost column (where the
+            // chevron / kebab lives) to the right edge so it stays reachable
+            // while the data columns scroll horizontally underneath. Pattern
+            // referenced from Rox (/customers) and Mercury (/transactions):
+            // wide enterprise-data tables both pin a thin actions column on
+            // the right. The 1px `border-l` acts as the visual seam between
+            // the scrolling content and the anchored rail.
+            //
+            // The sticky tbody cells need an opaque bg so scrolling content
+            // doesn't show through. Bg stays neutral (`--white-0`) even on
+            // row hover/expand because (a) following the row's bg would
+            // require a CSS-variable handshake and (b) the chevron rotation
+            // already signals row state — the action rail is meant to read
+            // as a separate UI zone, not part of the row.
+            scrollX &&
+              '[&_thead_th:last-child]:sticky [&_thead_th:last-child]:right-0 [&_thead_th:last-child]:border-l [&_thead_th:last-child]:border-[var(--stroke-soft-200)] [&_tbody_td:last-child]:sticky [&_tbody_td:last-child]:right-0 [&_tbody_td:last-child]:z-[1] [&_tbody_td:last-child]:bg-[var(--white-0)] [&_tbody_td:last-child]:border-l [&_tbody_td:last-child]:border-[var(--stroke-soft-200)]',
             className,
           )}
           {...props}
@@ -135,8 +187,13 @@ export function TH({
         // instead of relying on overflow:clip which sticky thead seems
         // to defeat in some browsers.
         'first:rounded-tl-[11px] first:pl-5 last:rounded-tr-[11px] last:pr-5',
+        // Sortable headers: smooth color transition on hover instead
+        // of Tailwind's default `transition-colors` (150ms, ease-in)
+        // which felt abrupt per user feedback. 200ms with the
+        // emphasized-decelerate curve matches the motion language
+        // used across the dashboard (tabs, buttons, etc).
         sortable &&
-          'cursor-pointer select-none transition-colors hover:text-[var(--neutral-strong-950)]',
+          'cursor-pointer select-none transition-colors duration-200 ease-[cubic-bezier(0.2,0.8,0.2,1)] hover:text-[var(--neutral-strong-950)]',
         isActive && 'text-[var(--neutral-strong-950)]',
         className,
       )}
@@ -245,7 +302,13 @@ export function TR({ className, clickable, isExpanded, children, ...props }: TRP
   return (
     <tr
       className={cn(
-        'group border-b border-[var(--stroke-soft-200)] transition-colors last:border-b-0',
+        // Row separator via inset shadow on the cells (not border-b
+        // on the <tr>) because this table uses border-separate +
+        // border-spacing:0, where <tr> borders don't render reliably
+        // across browsers. The THEAD already uses the same trick.
+        // Visually identical to the divide-y the Sessions page uses
+        // on its <ul>: 1px line at --stroke-soft-200.
+        'group transition-colors [&>td]:shadow-[inset_0_-1px_0_0_var(--stroke-soft-200)] last:[&>td]:shadow-none',
         // Hover: solid `--primary-lighter`/50 (≈ average of the gradient
         // stops on the expanded state). Solid instead of gradient so
         // the bg can SMOOTHLY transition with the global 180ms curve —
@@ -256,12 +319,14 @@ export function TR({ className, clickable, isExpanded, children, ...props }: TRP
         clickable && !isExpanded &&
           'cursor-pointer hover:[&>td]:bg-[var(--primary-lighter)]/50',
         clickable && isExpanded && 'cursor-pointer',
-        // When expanded: suppress the row-divider AND apply the
-        // top-to-bottom warm gradient that hands off into TRExpanded's
-        // panel below. Stops are tuned so this row's end-color matches
-        // TRExpanded's start-color, producing one continuous wash.
+        // When expanded: suppress the row-divider (the inset shadow
+        // ends here so the row hands off cleanly into TRExpanded's
+        // top edge) AND apply the top-to-bottom warm gradient that
+        // hands off into TRExpanded's panel below. Stops are tuned
+        // so this row's end-color matches TRExpanded's start-color,
+        // producing one continuous wash.
         isExpanded &&
-          '!border-b-0 [&>td]:bg-gradient-to-b [&>td]:from-[var(--primary-lighter)]/55 [&>td]:to-[var(--primary-lighter)]/45',
+          '[&>td]:!shadow-none [&>td]:bg-gradient-to-b [&>td]:from-[var(--primary-lighter)]/55 [&>td]:to-[var(--primary-lighter)]/45',
         className,
       )}
       {...props}

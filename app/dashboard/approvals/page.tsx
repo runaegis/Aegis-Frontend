@@ -344,7 +344,7 @@ export default function ApprovalsPage() {
     return (
       <>
         <Topbar title="Approvals" subtitle="Actions requiring review" />
-        <div className="mx-auto max-w-[1320px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
+        <div className="mx-auto max-w-[1320px] 2xl:max-w-[1480px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
           <ApprovalsSkeleton />
         </div>
       </>
@@ -381,7 +381,7 @@ export default function ApprovalsPage() {
           }
         }}
       />
-      <div className="mx-auto max-w-[1320px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
+      <div className="mx-auto max-w-[1320px] 2xl:max-w-[1480px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
         {error && (
           <div className="mb-6">
             <ErrorBanner

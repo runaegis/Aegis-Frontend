@@ -15,7 +15,7 @@ import {
   Inbox,
   Shield,
   Sparkles,
-  Wand2,
+  Pencil,
   XCircle,
   type LucideIcon,
 } from 'lucide-react';
@@ -213,13 +213,13 @@ export default function DashboardHomePage() {
   if (userLoading || loading) {
     return (
       <>
-        <Topbar title="Dashboard" subtitle="Overview" />
+        <Topbar title="Dashboard" subtitle="Overview" showDateRange />
         {/* Same content container as the loaded state (mx-auto +
-            max-w-[1320px] + horizontal/vertical padding) so the
+            max-w-[1320px] 2xl:max-w-[1480px] + horizontal/vertical padding) so the
             skeleton's gray blocks respect the page gutters instead
             of going edge-to-edge — matches every other dashboard
             page's loading layout. */}
-        <div className="mx-auto max-w-[1320px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
+        <div className="mx-auto max-w-[1320px] 2xl:max-w-[1480px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
           <DashboardHomeSkeleton />
         </div>
       </>
@@ -234,9 +234,10 @@ export default function DashboardHomePage() {
         lastUpdated={lastUpdated}
         onRefresh={fetchData}
         unreadCount={stats.pendingApprovals}
+        showDateRange
       />
 
-      <div className="mx-auto max-w-[1320px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
+      <div className="mx-auto max-w-[1320px] 2xl:max-w-[1480px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
         {error && (
           <div className="mb-6">
             <ErrorBanner
@@ -475,10 +476,10 @@ export default function DashboardHomePage() {
                 <EmptyState
                   icon={<Shield className="h-5 w-5" />}
                   title="No agent activity yet"
-                  description="Connect an agent via Integrations to start monitoring."
+                  description="Create a Room, then wire up your agent from its Connect tab."
                   action={
-                    <Link href="/dashboard/integrations">
-                      <Button variant="primary">Set up agent</Button>
+                    <Link href="/dashboard/rooms">
+                      <Button variant="primary">Go to Rooms</Button>
                     </Link>
                   }
                   compact
@@ -656,7 +657,10 @@ function DecisionIcon({ decision }: { decision: string }) {
 
   let Icon = CheckCircle2;
   if (upper === 'DENY' || upper === 'REJECTED' || upper === 'DENIED') Icon = XCircle;
-  else if (upper === 'REWRITE') Icon = Wand2;
+  // REWRITE icon: Pencil = universal "edited/modified" — instantly
+  // recognizable at 14px. Iteration history: Wand2 (felt AI-magic),
+  // Replace (barely readable at this size per user). Pencil sticks.
+  else if (upper === 'REWRITE') Icon = Pencil;
   else if (upper.includes('APPROVAL') || upper === 'PENDING') Icon = Sparkles;
 
   return (

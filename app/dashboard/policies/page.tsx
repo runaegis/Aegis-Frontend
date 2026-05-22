@@ -154,7 +154,7 @@ export default function PoliciesPage() {
   return (
     <>
       <Topbar title="Policies" subtitle="Rules that evaluate every agent action" />
-      <div className="mx-auto max-w-[1320px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
+      <div className="mx-auto max-w-[1320px] 2xl:max-w-[1480px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
         {error && (
           <div className="mb-6">
             <ErrorBanner message={error} onDismiss={() => setError(null)} />
@@ -244,7 +244,12 @@ export default function PoliciesPage() {
                 <motion.li
                   key={policy.key}
                   variants={fadeUpSm}
-                  className={`grid grid-cols-[44px_1fr_140px_120px_64px] items-center gap-3 px-6 py-4 transition-colors hover:bg-[var(--neutral-weak-50)] ${
+                  /* hover bg uses primary-lighter (warm orange tint),
+                     matching the shared <Table> TR hover. Previously
+                     was --neutral-weak-50, which is nearly identical
+                     to the page bg in light mode — hover read as
+                     "almost nothing happening." */
+                  className={`grid grid-cols-[44px_1fr_140px_120px_64px] items-center gap-3 px-6 py-4 transition-colors hover:bg-[var(--primary-lighter)]/50 ${
                     isActive ? '' : 'opacity-60'
                   }`}
                 >
