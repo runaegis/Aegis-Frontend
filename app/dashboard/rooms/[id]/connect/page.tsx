@@ -165,9 +165,11 @@ export default function RoomConnectPage() {
       return JSON.stringify(
         {
           
-            mcpServers: {
-              type:"sse",
-              aegis: { url: integrationUrl },
+            servers: {
+           
+              aegis: { 
+                   type:"sse",
+                url: integrationUrl },
             },
         
         },
