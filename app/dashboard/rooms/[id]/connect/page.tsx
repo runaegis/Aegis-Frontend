@@ -157,6 +157,7 @@ export default function RoomConnectPage() {
         },
       },
     };
+     
     if (selectedAgent === 'cursor' || selectedAgent === 'claude-code') {
       return JSON.stringify(mcpEntry, null, 2);
     }
