@@ -50,27 +50,62 @@ import { fadeUp, staggerContainer } from '@/lib/motion';
 const TOOL_GROUPS: Record<string, string[]> = {
   Repository: [
     'get_file_contents',
-    'list_repository_files',
-    'search_repositories',
-    'get_repository',
     'create_or_update_file',
+    'create_repository',
+    'fork_repository',
     'push_files',
+    'search_repositories',
   ],
+
   'Issues & PR': [
     'get_issue',
     'list_issues',
     'create_issue',
+    'update_issue',
+    'add_issue_comment',
+
     'get_pull_request',
+    'list_pull_requests',
     'create_pull_request',
-    'issue_read:get_comments',
-    'issue_read:get_sub_issues',
-    'pull_request_read:get_comments',
-    'pull_request_read:get_review_comments',
-    'pull_request_read:get_reviews',
+    'create_pull_request_review',
+    'merge_pull_request',
+
+    'get_pull_request_comments',
+    'get_pull_request_reviews',
+    'get_pull_request_files',
+    'get_pull_request_status',
+
+    'update_pull_request_branch',
   ],
-  Search: ['search_code', 'search_issues'],
-  Git: ['get_latest_commit', 'list_branches', 'create_branch'],
+
+  Search: [
+    'search_code',
+    'search_issues',
+    'search_users',
+  ],
+
+  Git: [
+    'create_branch',
+    'list_commits',
+  ],
 };
+
+const READ_ONLY_TOOLS = new Set([
+  'get_file_contents',
+  'get_issue',
+  'get_pull_request',
+  'get_pull_request_comments',
+  'get_pull_request_files',
+  'get_pull_request_reviews',
+  'get_pull_request_status',
+  'list_commits',
+  'list_issues',
+  'list_pull_requests',
+  'search_code',
+  'search_issues',
+  'search_repositories',
+  'search_users',
+]);
 const ALL_TOOLS = Object.values(TOOL_GROUPS).flat();
 
 const ROLE_LEVELS: Record<string, number> = {
@@ -95,10 +130,7 @@ const TEMPLATES: Record<
     tools: Object.fromEntries(
       ALL_TOOLS.map((t) => [
         t,
-        t.startsWith('get_') ||
-          t.startsWith('list_') ||
-          t.startsWith('search_') ||
-          t.includes(':get_'),
+        READ_ONLY_TOOLS.has(t),
       ]),
     ),
   },
