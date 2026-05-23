@@ -262,56 +262,133 @@ export default function AuthPage() {
   };
 
   const handleLogin = async () => {
-    if (!validateForm()) return;
-    setLoading(true);
-    setErrors({});
-    try {
-      const res = await apiFetch(`${BACKEND_URL}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-        credentials: 'include',
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Login failed');
+  if (!validateForm()) return;
+
+  setLoading(true);
+  setErrors({});
+
+  try {
+    const res = await apiFetch(`${BACKEND_URL}/auth/login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        email,
+        password,
+      }),
+      credentials: 'include',
+      redirect: 'manual',
+    });
+
+    /**
+     * IMPORTANT:
+     * Backend returns 307 RedirectResponse
+     * fetch() with redirect: 'manual'
+     * prevents CORS redirect failure
+     */
+
+    if (
+      res.type === 'opaqueredirect' ||
+      res.status === 307
+    ) {
       const userData: User = {
         email,
-        github_user_id: data.github_user_id || 0,
-        username: data.username || '',
-        access_token: data.access_token || '',
+        github_user_id: 0,
+        username: '',
+        access_token: '',
       };
+
       setUser(userData);
+
       setLoggingIn(true);
-      setTimeout(() => router.push('/onboarding '), 1000);
-    } catch (err: any) {
-        const detail = err?.detail || err;
 
-        switch (detail.code) {
-          case 'ACCOUNT_NOT_FOUND':
-            setErrors({ form: 'not_found' });
-            break;
+      setTimeout(() => {
+        router.push('/onboarding');
+      }, 1000);
 
-          case 'INVALID_PASSWORD':
-            setErrors({
-              form: 'Incorrect password.',
-            });
-            break;
-
-          case 'EMAIL_NOT_VERIFIED':
-            setErrors({ form: 'unverified' });
-            break;
-
-          default:
-            setErrors({
-              form:
-                detail.message ||
-                'Something went wrong. Please try again.',
-            });
-        }
-      } finally {
-      setLoading(false);
+      return;
     }
-  };
+
+    /**
+     * Error response handling
+     */
+
+    let data: any = {};
+
+    try {
+      data = await res.json();
+    } catch {
+      data = {};
+    }
+
+    if (!res.ok) {
+      throw data;
+    }
+
+    /**
+     * Optional success path
+     * if backend sometimes returns 200 JSON
+     */
+
+    const userData: User = {
+      email,
+      github_user_id: data.github_user_id || 0,
+      username: data.username || '',
+      access_token: data.access_token || '',
+    };
+
+    setUser(userData);
+
+    setLoggingIn(true);
+
+    setTimeout(() => {
+      router.push('/onboarding');
+    }, 1000);
+
+  } catch (err: any) {
+    console.log('LOGIN ERROR:', err);
+
+    const detail =
+      err?.detail ||
+      err;
+
+    /**
+     * Backend structured errors
+     */
+
+    switch (detail?.code) {
+      case 'ACCOUNT_NOT_FOUND':
+        setErrors({
+          form: 'Account not found.',
+        });
+        break;
+
+      case 'INVALID_PASSWORD':
+        setErrors({
+          form: 'Incorrect password.',
+        });
+        break;
+
+      case 'EMAIL_NOT_VERIFIED':
+        setErrors({
+          form: 'Please verify your email first.',
+        });
+        break;
+
+      default:
+        setErrors({
+          form:
+            detail?.message ||
+            detail?.detail ||
+            err?.message ||
+            'Something went wrong. Please try again.',
+        });
+    }
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleForgotPassword = async () => {
     const newErrors: FormErrors = {};
