@@ -14,6 +14,7 @@ import {
   Clock,
   Coins,
   Boxes,
+  LifeBuoy,
   Settings,
   Menu,
   X,
@@ -79,6 +80,9 @@ type NavItem = {
   href: string;
   icon: LucideIcon;
   badge?: { value: number | string; tone: 'urgent' | 'neutral' };
+  /** External link (mailto:, https://). Renders an <a> instead of
+   *  next/link, can't be the active route, and shows no active state. */
+  external?: boolean;
 };
 
 type NavGroup = {
@@ -115,6 +119,19 @@ const NAV_GROUPS: NavGroup[] = [
 ];
 
 const BOTTOM_ITEMS: NavItem[] = [
+  // Support sits above Settings — when a pilot customer needs help,
+  // they look at the bottom of the sidebar (same pattern as Linear,
+  // Vercel, Stripe Dashboard). Opens the user's mail client to
+  // hello@runaegis.co with a pre-filled subject so the team can route
+  // it without back-and-forth on context.
+  // NOTE: subject copy uses only hyphens / spaces, no em or en dashes —
+  // matches the rest of the product's hard rule against em dashes.
+  {
+    name: 'Support',
+    href: 'mailto:hello@runaegis.co?subject=Aegis%20support%20request',
+    icon: LifeBuoy,
+    external: true,
+  },
   { name: 'Settings', href: '/dashboard/settings', icon: Settings },
 ];
 
@@ -135,30 +152,15 @@ export default function Sidebar() {
   // indicator when minimized so urgent state remains visible at a
   // glance.
   const renderNavLink = (item: NavItem) => {
-    const active = isActive(item.href);
+    // External items (mailto:, https://) can't match the current
+    // route — never show an active state. The renderer composes the
+    // common content once and swaps the wrapper element based on
+    // `external`.
+    const active = !item.external && isActive(item.href);
     const Icon = item.icon;
-    return (
-      <Link
-        key={item.href}
-        href={item.href}
-        onClick={() => setMobileOpen(false)}
-        data-sidebar-center
-        className={[
-          'group relative flex h-8 items-center gap-2 rounded-[7px] px-2 text-[13px] font-medium tracking-[-0.01em]',
-          // Hover motion — 200ms emphasized-decel curve, the same
-          // family Linear/Cursor/Raycast use for sidebar nav. Explicit
-          // `transition-colors` instead of `transition-all` so only
-          // bg + text fade (no transform animation, which can feel
-          // jittery on rapid mouse-over). On hover, text also shifts
-          // from neutral-sub-600 → neutral-strong-950 for a subtle
-          // brightness lift that signals interactivity.
-          'transition-colors duration-200 ease-[cubic-bezier(0.2,0.8,0.2,1)]',
-          active
-            ? 'bg-[var(--primary-alpha-10)] text-[var(--primary-base)]'
-            : 'text-[var(--neutral-sub-600)] hover:bg-[var(--neutral-weak-50)] hover:text-[var(--neutral-strong-950)]',
-        ].join(' ')}
-        style={active ? { backgroundColor: 'rgba(250, 115, 25, 0.10)' } : undefined}
-      >
+
+    const inner = (
+      <>
         <Icon
           className="h-3.5 w-3.5 shrink-0"
           strokeWidth={active ? 2.25 : 2}
@@ -193,6 +195,55 @@ export default function Sidebar() {
             }}
           />
         )}
+      </>
+    );
+
+    const className = [
+      'group relative flex h-8 items-center gap-2 rounded-[7px] px-2 text-[13px] font-medium tracking-[-0.01em]',
+      // Hover motion — 200ms emphasized-decel curve, the same
+      // family Linear/Cursor/Raycast use for sidebar nav. Explicit
+      // `transition-colors` instead of `transition-all` so only
+      // bg + text fade (no transform animation, which can feel
+      // jittery on rapid mouse-over). On hover, text also shifts
+      // from neutral-sub-600 → neutral-strong-950 for a subtle
+      // brightness lift that signals interactivity.
+      'transition-colors duration-200 ease-[cubic-bezier(0.2,0.8,0.2,1)]',
+      active
+        ? 'bg-[var(--primary-alpha-10)] text-[var(--primary-base)]'
+        : 'text-[var(--neutral-sub-600)] hover:bg-[var(--neutral-weak-50)] hover:text-[var(--neutral-strong-950)]',
+    ].join(' ');
+    const style = active ? { backgroundColor: 'rgba(250, 115, 25, 0.10)' } : undefined;
+
+    // mailto: opens the user's local mail client; https://... uses
+    // _blank + noopener noreferrer. No need for rel on mailto links.
+    if (item.external) {
+      const isHttp = item.href.startsWith('http');
+      return (
+        <a
+          key={item.href}
+          href={item.href}
+          onClick={() => setMobileOpen(false)}
+          data-sidebar-center
+          className={className}
+          style={style}
+          target={isHttp ? '_blank' : undefined}
+          rel={isHttp ? 'noopener noreferrer' : undefined}
+        >
+          {inner}
+        </a>
+      );
+    }
+
+    return (
+      <Link
+        key={item.href}
+        href={item.href}
+        onClick={() => setMobileOpen(false)}
+        data-sidebar-center
+        className={className}
+        style={style}
+      >
+        {inner}
       </Link>
     );
   };
