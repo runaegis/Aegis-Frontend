@@ -304,7 +304,8 @@ export default function AuthPage() {
         throw new Error('Failed to fetch onboarding step');
       }
 
-      const onboardingStep = await onboardingRes.json();
+      const onboardingData = await onboardingRes.json();
+      const onboardingStep = onboardingData.onboarding_step;
       const userData: User = {
         email,
         github_user_id: 0,
