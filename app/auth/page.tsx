@@ -292,6 +292,19 @@ export default function AuthPage() {
       res.type === 'opaqueredirect' ||
       res.status === 307
     ) {
+      const onboardingRes = await apiFetch(
+        `${BACKEND_URL}/auth/onboarding-step`,
+        {
+          method: 'GET',
+          credentials: 'include',
+        }
+      );
+
+      if (!onboardingRes.ok) {
+        throw new Error('Failed to fetch onboarding step');
+      }
+
+      const onboardingStep = await onboardingRes.json();
       const userData: User = {
         email,
         github_user_id: 0,
@@ -304,7 +317,14 @@ export default function AuthPage() {
       setLoggingIn(true);
 
       setTimeout(() => {
-        router.push('/onboarding');
+        if (
+          onboardingStep >= 0 &&
+          onboardingStep < 4
+        ) {
+          router.push('/onboarding');
+        } else {
+          router.push('/dashboard');
+        }
       }, 1000);
 
       return;
