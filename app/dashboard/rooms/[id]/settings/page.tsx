@@ -168,7 +168,7 @@ export default function RoomSettingsPage() {
               }
               cta={isOwner ? 'Transfer…' : 'Leave room'}
               disabled
-              disabledReason="Pending backend endpoint. Coming soon."
+              disabledReason=""
             />
             {isOwner && (
               <DangerRow
@@ -176,7 +176,7 @@ export default function RoomSettingsPage() {
                 description="Permanently remove the room, its members, and its invites. The audit trail of past actions remains."
                 cta="Delete room"
                 disabled
-                disabledReason="Pending backend endpoint. Coming soon."
+                disabledReason=""
                 destructive
               />
             )}
