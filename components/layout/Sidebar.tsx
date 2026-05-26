@@ -489,11 +489,17 @@ export default function Sidebar() {
               top: menuPos.top,
               zIndex: 100,
             }}
-            className="w-[212px] overflow-hidden rounded-[8px] border border-[var(--stroke-soft-200)] bg-white py-1 shadow-[0_8px_24px_rgba(23,23,23,0.12)]"
+            /* Canonical AlignUI dropdown chrome — 12px outer radius,
+               soft double-shadow, content sits inside a 1.5-unit
+               padded wrapper so items aren't flush against the
+               border. Matches WorkspaceSwitcher + the Approval
+               More menu so all three dropdowns read as one
+               design-system family. */
+            className="w-[220px] overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-[var(--white-0)] shadow-[0_12px_32px_rgba(23,23,23,0.10),0_2px_6px_rgba(23,23,23,0.04)]"
           >
             {/* Header — Room identity so the user knows which Room
                 they're acting on without checking the underlying row. */}
-            <div className="flex items-center gap-2 px-2.5 pb-1.5 pt-1">
+            <div className="flex items-center gap-2 px-2.5 pb-1.5 pt-2">
               <GenerativeAvatar
                 seed={openRoomName}
                 variant="user"
@@ -504,35 +510,37 @@ export default function Sidebar() {
                 {openRoomName}
               </span>
             </div>
-            <div className="my-1 h-px bg-[var(--stroke-soft-200)]" />
-            <RoomMenuItem
-              icon={Copy}
-              label="Copy MCP endpoint"
-              onClick={() => {
-                void copyMcpEndpoint(openRoomMenu, openRoomName);
-                setMenuPos(null);
-              }}
-            />
-            <RoomMenuItem
-              icon={Activity}
-              label="Activity"
-              href={`/dashboard/rooms/${openRoomMenu}/activity`}
-              onClick={() => {
-                setOpenRoomMenu(null);
-                setMenuPos(null);
-                setMobileOpen(false);
-              }}
-            />
-            <RoomMenuItem
-              icon={Wrench}
-              label="Tools"
-              href={`/dashboard/rooms/${openRoomMenu}/tools`}
-              onClick={() => {
-                setOpenRoomMenu(null);
-                setMenuPos(null);
-                setMobileOpen(false);
-              }}
-            />
+            <div className="mx-2 border-t border-[var(--stroke-soft-200)]" />
+            <div className="space-y-0.5 p-1.5">
+              <RoomMenuItem
+                icon={Copy}
+                label="Copy MCP endpoint"
+                onClick={() => {
+                  void copyMcpEndpoint(openRoomMenu, openRoomName);
+                  setMenuPos(null);
+                }}
+              />
+              <RoomMenuItem
+                icon={Activity}
+                label="Activity"
+                href={`/dashboard/rooms/${openRoomMenu}/activity`}
+                onClick={() => {
+                  setOpenRoomMenu(null);
+                  setMenuPos(null);
+                  setMobileOpen(false);
+                }}
+              />
+              <RoomMenuItem
+                icon={Wrench}
+                label="Tools"
+                href={`/dashboard/rooms/${openRoomMenu}/tools`}
+                onClick={() => {
+                  setOpenRoomMenu(null);
+                  setMenuPos(null);
+                  setMobileOpen(false);
+                }}
+              />
+            </div>
           </div>,
           document.body,
         )
@@ -764,8 +772,14 @@ function RoomMenuItem({
   href?: string;
   onClick?: () => void;
 }) {
+  // Canonical AlignUI dropdown row — 7px row radius so hover/focus
+  // states look pill-like inside the 12px container, 12.5px medium
+  // text + neutral-sub-600 → neutral-strong-950 on hover. Matches the
+  // ActionRow pattern in WorkspaceSwitcher + the MenuItem in the
+  // approvals More menu so every dropdown across the dashboard reads
+  // as one design system.
   const className =
-    'flex h-7 w-full items-center gap-2 px-2.5 text-left text-[12px] font-medium text-[var(--neutral-sub-600)] transition-colors hover:bg-[var(--neutral-weak-50)] hover:text-[var(--neutral-strong-950)] focus:bg-[var(--neutral-weak-50)] focus:text-[var(--neutral-strong-950)] focus:outline-none';
+    'flex w-full items-center gap-2.5 rounded-[7px] px-2 py-1.5 text-left text-[12.5px] font-medium text-[var(--neutral-sub-600)] transition-colors duration-200 ease-[cubic-bezier(0.2,0.8,0.2,1)] hover:bg-[var(--neutral-weak-50)] hover:text-[var(--neutral-strong-950)] focus:bg-[var(--neutral-weak-50)] focus:text-[var(--neutral-strong-950)] focus:outline-none';
   const inner = (
     <>
       <Icon
