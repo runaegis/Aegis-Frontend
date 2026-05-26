@@ -87,13 +87,13 @@ interface FreezeWindowFormData {
 // Mon-first matches the backend's `work_days` 0=Mon convention.
 // Visible labels are short so the day pills stay narrow.
 const DAYS_OF_WEEK = [
-  { label: 'Mon', full: 'Monday',    value: 1 },
-  { label: 'Tue', full: 'Tuesday',   value: 2 },
-  { label: 'Wed', full: 'Wednesday', value: 3 },
-  { label: 'Thu', full: 'Thursday',  value: 4 },
-  { label: 'Fri', full: 'Friday',    value: 5 },
-  { label: 'Sat', full: 'Saturday',  value: 6 },
-  { label: 'Sun', full: 'Sunday',    value: 7 },
+  { label: 'Mon', full: 'Monday', value: 0 },
+  { label: 'Tue', full: 'Tuesday', value: 1 },
+  { label: 'Wed', full: 'Wednesday', value: 2 },
+  { label: 'Thu', full: 'Thursday', value: 3 },
+  { label: 'Fri', full: 'Friday', value: 4 },
+  { label: 'Sat', full: 'Saturday', value: 5 },
+  { label: 'Sun', full: 'Sunday', value: 6 },
 ];
 
 // Curated timezone list — the 5 zones in the old page weren't
@@ -141,7 +141,7 @@ const TEMPLATES: Record<
     description: 'Block agents 6pm → 9am, Monday–Friday.',
     icon: PauseCircle,
     payload: {
-      work_days: [1, 2, 3, 4, 5],
+      work_days: [0, 1, 2, 3, 4],
       window_start: '18:00',
       window_end: '09:00',
     },
@@ -151,7 +151,7 @@ const TEMPLATES: Record<
     description: 'Block agents from Friday 6pm through Sunday midnight.',
     icon: Calendar,
     payload: {
-      work_days: [6, 7],
+      work_days: [5, 6],
       window_start: '00:00',
       window_end: '23:59',
     },
@@ -161,7 +161,7 @@ const TEMPLATES: Record<
     description: 'Nightly 6pm–9am plus full weekends.',
     icon: Clock,
     payload: {
-      work_days: [1, 2, 3, 4, 5, 6, 7],
+      work_days: [0, 1, 2, 3, 4, 5, 6],
       window_start: '18:00',
       window_end: '09:00',
     },
@@ -171,7 +171,7 @@ const TEMPLATES: Record<
     description: 'Block agents every Friday 5pm onwards.',
     icon: AlertTriangle,
     payload: {
-      work_days: [5],
+      work_days: [4],
       window_start: '17:00',
       window_end: '23:59',
     },

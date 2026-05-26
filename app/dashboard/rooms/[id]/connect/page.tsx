@@ -152,21 +152,26 @@ export default function RoomConnectPage() {
     const mcpEntry = {
       mcpServers: {
         aegis: {
+          transport:"sse",
           url: integrationUrl,
         },
       },
     };
+     
     if (selectedAgent === 'cursor' || selectedAgent === 'claude-code') {
       return JSON.stringify(mcpEntry, null, 2);
     }
     if (selectedAgent === 'vscode-copilot') {
       return JSON.stringify(
         {
-          'github.copilot.advanced': {
-            mcpServers: {
-              aegis: { url: integrationUrl },
+          
+            servers: {
+           
+              aegis: { 
+                   type:"sse",
+                url: integrationUrl },
             },
-          },
+        
         },
         null,
         2,

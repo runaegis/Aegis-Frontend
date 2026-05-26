@@ -36,7 +36,7 @@ export default function AgentationWidget() {
       // running, the widget still works locally — it just can't
       // sync annotations back to me. Run `npx agentation-mcp
       // server` in a terminal to enable the bridge.
-      endpoint="http://localhost:4747"
+      endpoint="http://localhost:8000"
     />
   );
 }

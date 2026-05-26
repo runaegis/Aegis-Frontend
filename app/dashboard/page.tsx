@@ -444,7 +444,7 @@ export default function DashboardHomePage() {
               color={stats.activeSessions > 0 ? 'var(--success)' : undefined}
               live={stats.activeSessions > 0}
             />
-            <StatCell label="Runs this week" value={stats.runsThisWeek} />
+            <StatCell label="Runs this week" value={metrics.total} />
             <StatCell
               label="Pending approvals"
               value={stats.pendingApprovals}

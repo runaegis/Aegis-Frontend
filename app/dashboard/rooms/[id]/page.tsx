@@ -151,7 +151,7 @@ export default function RoomOverviewPage() {
           />
           <StatCard
             icon={Activity}
-            label="Recent activity"
+            label="Your Recent activity"
             value={
               activityLoading ? '—' : recentRuns.length.toLocaleString()
             }
@@ -169,7 +169,7 @@ export default function RoomOverviewPage() {
           <div className="overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
             <div className="flex items-center justify-between border-b border-[var(--stroke-soft-200)] px-5 py-3.5">
               <h2 className="text-[14px] font-semibold tracking-[-0.01em] text-[var(--neutral-strong-950)]">
-                Recent activity
+                Your recent activity in this room
               </h2>
               <Link
                 href="/dashboard/audit"
