@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
 import { IconMark } from '@/components/ui/IconMark';
 import { DUR, EASE, fadeUp, fadeUpSm, staggerContainer } from '@/lib/motion';
+import { HOVER_LIFT_HOVER, HOVER_LIFT_TAP } from '@/components/ui/HoverLift';
 
 const RESOURCES = [
   {
@@ -97,10 +98,8 @@ export default function SupportPage() {
                     href={r.href}
                     {...linkProps}
                     variants={fadeUpSm}
-                    whileHover={{
-                      y: -2,
-                      transition: { duration: 0.2, ease: [0.32, 0.72, 0.32, 1] },
-                    }}
+                    whileHover={HOVER_LIFT_HOVER}
+                    whileTap={HOVER_LIFT_TAP}
                     className="group flex flex-col gap-3 rounded-[12px] border border-[var(--stroke-soft-200)] bg-[var(--white-0)] p-4 shadow-[0_1px_2px_rgba(23,23,23,0.04)] transition-[box-shadow,border-color] duration-200 ease-[cubic-bezier(0.2,0.8,0.2,1)] hover:border-[var(--primary-base)]/30 hover:shadow-[0_8px_24px_rgba(23,23,23,0.06)]"
                   >
                     <div className="flex items-start justify-between gap-2">
