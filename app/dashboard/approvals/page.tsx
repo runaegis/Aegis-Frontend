@@ -1087,17 +1087,17 @@ function MoreActionsMenu({ approval }: { approval: MCPApproval }) {
           <ChevronDown className="h-3.5 w-3.5" strokeWidth={2} />
         </button>
         {open && (
-          /* Open UPWARD (bottom-full + mb-2) — the More button
-             sits near the bottom of each approval card, so opening
-             downward gets clipped by the next card's stacking
-             context. Above-button has empty space on the right of
-             the metadata grid.
-
-             Container chrome matches the canonical AlignUI pattern
-             from WorkspaceSwitcher: 12px outer radius, 1.5 unit
-             inner padding (so menu items aren't flush against the
-             border), 0.5 unit vertical gap between rows, soft
-             double-shadow drop. */}
+          // Open UPWARD (bottom-full + mb-2) — the More button
+          // sits near the bottom of each approval card, so opening
+          // downward gets clipped by the next card's stacking
+          // context. Above-button has empty space on the right of
+          // the metadata grid.
+          //
+          // Container chrome matches the canonical AlignUI pattern
+          // from WorkspaceSwitcher: 12px outer radius, 1.5 unit
+          // inner padding (so menu items aren't flush against the
+          // border), 0.5 unit vertical gap between rows, soft
+          // double-shadow drop.
           <div
             role="menu"
             className="absolute right-0 bottom-full z-50 mb-2 w-[240px] overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-[var(--white-0)] shadow-[0_-12px_32px_rgba(23,23,23,0.10),0_-2px_6px_rgba(23,23,23,0.04)]"
