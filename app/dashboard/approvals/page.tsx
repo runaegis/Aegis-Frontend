@@ -1078,13 +1078,13 @@ function MoreActionsMenu({ approval }: { approval: MCPApproval }) {
           aria-expanded={open}
           aria-label="More actions"
           onClick={() => setOpen((v) => !v)}
-          /* Matches Button size="sm" geometry exactly (h-7, px-2.5,
-             text-[12px], gap-1.5) so this sits next to Deny/Approve
-             without a vertical or horizontal misalignment. */
-          className="inline-flex h-7 items-center gap-1.5 rounded-[6px] border border-[var(--stroke-soft-200)] bg-[var(--white-0)] px-2.5 text-[12px] font-medium text-[var(--neutral-sub-600)] transition-colors hover:bg-[var(--neutral-weak-50)] hover:text-[var(--neutral-strong-950)]"
+          /* Icon-only square (h-7 w-7) matching the v3 mock. Reads
+             as a quiet secondary affordance next to the primary
+             Approve / Deny buttons instead of competing with them
+             for label real estate. */
+          className="inline-flex h-7 w-7 items-center justify-center rounded-[6px] border border-[var(--stroke-soft-200)] bg-[var(--white-0)] text-[var(--neutral-sub-600)] transition-colors hover:bg-[var(--neutral-weak-50)] hover:text-[var(--neutral-strong-950)]"
         >
-          More
-          <ChevronDown className="h-3 w-3" strokeWidth={2} />
+          <ChevronDown className="h-3.5 w-3.5" strokeWidth={2} />
         </button>
         {open && (
           /* Open UPWARD (bottom-full + mb-1) instead of downward —
