@@ -29,6 +29,8 @@ import { CodeChip } from '@/components/ui/CodeChip';
 import { Input } from '@/components/ui/Input';
 import { PolicyChip } from '@/components/ui/PolicyChip';
 import { PullRequestLink } from '@/components/ui/PullRequestLink';
+import { SemanticTypeChip } from '@/components/ui/SemanticTypeChip';
+import type { CILFields } from '@/lib/cil-types';
 import { SelectMenu } from '@/components/ui/SelectMenu';
 import {
   Table,
@@ -376,7 +378,21 @@ function RunRow({
           ) : null}
         </TD>
         <TD className="whitespace-nowrap">
-          <PolicyChip policy={run.policy} />
+          {/* Stack SemanticTypeChip above PolicyChip when the
+              classifier has tagged the row. Until backend persists
+              `semantic_type` (Engineering Sprint Board Ticket 1),
+              the chip is hidden and only the PolicyChip renders —
+              same surface area as before. Once it ships, the
+              canonical CIL verdict appears here automatically. */}
+          <div className="flex flex-col items-start gap-1">
+            {(run as typeof run & CILFields).semantic_type && (
+              <SemanticTypeChip
+                semantic_type={(run as typeof run & CILFields).semantic_type}
+                variant="compact"
+              />
+            )}
+            <PolicyChip policy={run.policy} />
+          </div>
         </TD>
         <TD className="whitespace-nowrap">
           <BlastRadiusChip value={readBlastRadius(run)} />

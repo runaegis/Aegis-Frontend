@@ -12,6 +12,9 @@ import Topbar from '@/components/layout/Topbar';
 import { AgentMark } from '@/components/ui/AgentMark';
 import DecisionBadge from '@/components/ui/DecisionBadge';
 import EmptyState from '@/components/ui/EmptyState';
+import { SemanticTypeChip } from '@/components/ui/SemanticTypeChip';
+import { ContextEvidencePanel } from '@/components/dashboard/ContextEvidencePanel';
+import type { CILFields } from '@/lib/cil-types';
 import ErrorBanner from '@/components/ui/ErrorBanner';
 import JsonViewer from '@/components/ui/JsonViewer';
 import { ApprovalsSkeleton } from '@/components/ui/PageSkeletons';
@@ -833,6 +836,15 @@ function ApprovalItem({
           </div>
           <div className="flex shrink-0 flex-col items-end gap-1.5">
             <DecisionBadge decision={approval.status} />
+            {/* SemanticTypeChip surfaces the CIL verdict on the
+                approval. Hidden until backend persists semantic_type
+                (Engineering Sprint Board Ticket 1). */}
+            {(approval as MCPApproval & CILFields).semantic_type && (
+              <SemanticTypeChip
+                semantic_type={(approval as MCPApproval & CILFields).semantic_type}
+                variant="compact"
+              />
+            )}
             {prUrl && <PullRequestLink url={prUrl} variant="chip" />}
           </div>
         </div>
@@ -914,13 +926,28 @@ function ApprovalItem({
           )}
         </div>
 
-        {isExpanded && approval.arguments && (
-          <div className="mt-4">
-            <JsonViewer
-              data={approval.arguments}
-              collapsed={false}
-              label="Arguments"
-            />
+        {isExpanded && (
+          <div className="mt-4 space-y-4">
+            {approval.arguments && (
+              <JsonViewer
+                data={approval.arguments}
+                collapsed={false}
+                label="Arguments"
+              />
+            )}
+            {/* ContextEvidencePanel — the 4 contexts that classified
+                this action. Renders inline only when backend has
+                persisted them. The decision_path + canonical_action_type
+                strip below the panels surfaces the classifier's
+                reasoning trail. Until backend ships persistence
+                (Engineering Sprint Board Ticket 2), the surface
+                stays hidden. */}
+            {(approval as MCPApproval & CILFields).contexts && (
+              <ContextEvidencePanel
+                contexts={(approval as MCPApproval & CILFields).contexts}
+                decisionPath={(approval as MCPApproval & CILFields).decision_path}
+              />
+            )}
           </div>
         )}
       </div>

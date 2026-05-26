@@ -35,6 +35,8 @@ import { SessionsSkeleton } from '@/components/ui/PageSkeletons';
 import { BlastRadiusChip } from '@/components/ui/BlastRadiusChip';
 import { CodeChip } from '@/components/ui/CodeChip';
 import { PolicyChip } from '@/components/ui/PolicyChip';
+import { SemanticTypeChip } from '@/components/ui/SemanticTypeChip';
+import type { CILFields } from '@/lib/cil-types';
 import { PullRequestLink } from '@/components/ui/PullRequestLink';
 import { DUR, EASE, fadeUp, fadeUpSm, staggerContainer } from '@/lib/motion';
 
@@ -453,6 +455,22 @@ function SessionRow({
                           </div>
                           <div className="flex shrink-0 flex-col items-end gap-1.5">
                             <DecisionBadge decision={action.decision} />
+                            {/* SemanticTypeChip surfaces the canonical
+                                CIL verdict (working_commit, REWRITE,
+                                etc.) when backend persists the field.
+                                Hidden until then — guarded on
+                                presence so both demo + real workspace
+                                stay in sync. */}
+                            {(action as typeof action & CILFields)
+                              .semantic_type && (
+                              <SemanticTypeChip
+                                semantic_type={
+                                  (action as typeof action & CILFields)
+                                    .semantic_type
+                                }
+                                variant="compact"
+                              />
+                            )}
                             <PolicyChip policy={action.policy} />
                             <BlastRadiusChip value={readBlastRadius(action)} />
                             {actionPrUrl && (
