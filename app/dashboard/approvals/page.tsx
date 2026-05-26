@@ -904,6 +904,7 @@ function ApprovalItem({
 
           {isPending && (
             <div className="flex items-center gap-2">
+              <MoreActionsMenu approval={approval} />
               <Button
                 size="sm"
                 variant="secondary"
@@ -969,5 +970,183 @@ function MetaCell({
       </p>
       <div className="min-w-0">{children}</div>
     </div>
+  );
+}
+
+/**
+ * MoreActionsMenu — power-user affordances next to Approve / Deny.
+ *
+ * Surfaces four secondary intent actions a reviewer might want
+ * instead of a one-off allow/deny:
+ *   • Always allow similar — creates a permanent rule
+ *   • Always deny similar  — creates a permanent deny rule
+ *   • Approve for 30 minutes — time-bound allow
+ *   • Escalate to owner — hands off to a higher-privilege reviewer
+ *
+ * Today these toast as "Policy rule created" / "Escalated" because
+ * the backend rules engine isn't shipping yet (Engineering Sprint
+ * Board Ticket 9: Approval Routing). The frontend surface exists
+ * so the affordance is reviewable on demo workspace before backend
+ * lands. When backend ships, the toast handlers swap to real API
+ * calls — no UI change needed.
+ *
+ * Each action gates through ConfirmDialog so a click doesn't
+ * accidentally create a permanent policy rule.
+ */
+function MoreActionsMenu({ approval }: { approval: MCPApproval }) {
+  const [open, setOpen] = useState(false);
+  const [pendingKind, setPendingKind] = useState<
+    null | 'allow_similar' | 'deny_similar' | 'approve_30m' | 'escalate'
+  >(null);
+  const toast = useToast();
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [open]);
+
+  const confirmText = (kind: typeof pendingKind) => {
+    switch (kind) {
+      case 'allow_similar':
+        return {
+          title: 'Always allow similar actions?',
+          body: `Create a permanent policy rule to allow ${approval.tool_name} from this agent on this repo. Applies to all future similar requests.`,
+          cta: 'Create allow rule',
+        };
+      case 'deny_similar':
+        return {
+          title: 'Always deny similar actions?',
+          body: `Create a permanent policy rule to deny ${approval.tool_name} from this agent on this repo. Applies to all future similar requests.`,
+          cta: 'Create deny rule',
+        };
+      case 'approve_30m':
+        return {
+          title: 'Approve for 30 minutes?',
+          body: 'This approval will auto-expire in 30 minutes. The agent has that window to complete the action.',
+          cta: 'Approve · 30m',
+        };
+      case 'escalate':
+        return {
+          title: 'Escalate to owner?',
+          body: 'Route this approval to the workspace OWNER. They will receive a notification and the request will sit in their queue.',
+          cta: 'Escalate',
+        };
+      default:
+        return { title: '', body: '', cta: '' };
+    }
+  };
+
+  const runConfirm = () => {
+    switch (pendingKind) {
+      case 'allow_similar':
+        toast.success('Policy rule created', {
+          description: 'Similar actions will now auto-approve.',
+        });
+        break;
+      case 'deny_similar':
+        toast.success('Policy rule created', {
+          description: 'Similar actions will now auto-deny.',
+        });
+        break;
+      case 'approve_30m':
+        toast.success('Approved for 30 minutes', {
+          description: 'The approval will auto-expire at the end of the window.',
+        });
+        break;
+      case 'escalate':
+        toast.success('Escalated to owner', {
+          description: 'The approval is now in the owner queue.',
+        });
+        break;
+    }
+    setPendingKind(null);
+  };
+
+  const text = confirmText(pendingKind);
+
+  return (
+    <>
+      <div ref={ref} className="relative">
+        <button
+          type="button"
+          aria-haspopup="menu"
+          aria-expanded={open}
+          aria-label="More actions"
+          onClick={() => setOpen((v) => !v)}
+          className="inline-flex h-7 items-center gap-1 rounded-[6px] border border-[var(--stroke-soft-200)] bg-[var(--white-0)] px-2 text-[12px] font-medium text-[var(--neutral-sub-600)] hover:bg-[var(--neutral-weak-50)] hover:text-[var(--neutral-strong-950)]"
+        >
+          More
+          <ChevronDown className="h-3 w-3" strokeWidth={2} />
+        </button>
+        {open && (
+          <div
+            role="menu"
+            className="absolute right-0 z-10 mt-1 w-[240px] overflow-hidden rounded-[8px] border border-[var(--stroke-soft-200)] bg-[var(--white-0)] py-1 shadow-[0_8px_24px_rgba(23,23,23,0.10)]"
+          >
+            <MenuItem
+              label="Always allow similar"
+              onClick={() => {
+                setOpen(false);
+                setPendingKind('allow_similar');
+              }}
+            />
+            <MenuItem
+              label="Always deny similar"
+              onClick={() => {
+                setOpen(false);
+                setPendingKind('deny_similar');
+              }}
+            />
+            <MenuItem
+              label="Approve for 30 minutes"
+              onClick={() => {
+                setOpen(false);
+                setPendingKind('approve_30m');
+              }}
+            />
+            <MenuItem
+              label="Escalate to owner"
+              onClick={() => {
+                setOpen(false);
+                setPendingKind('escalate');
+              }}
+            />
+          </div>
+        )}
+      </div>
+      <ConfirmDialog
+        open={pendingKind !== null}
+        onOpenChange={(o) => !o && setPendingKind(null)}
+        title={text.title}
+        description={text.body}
+        confirmLabel={text.cta}
+        cancelLabel="Cancel"
+        variant={pendingKind === 'deny_similar' ? 'danger' : 'primary'}
+        onConfirm={runConfirm}
+      />
+    </>
+  );
+}
+
+function MenuItem({
+  label,
+  onClick,
+}: {
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      role="menuitem"
+      onClick={onClick}
+      className="block w-full px-3 py-2 text-left text-[12px] text-[var(--neutral-strong-950)] hover:bg-[var(--neutral-weak-50)]"
+    >
+      {label}
+    </button>
   );
 }

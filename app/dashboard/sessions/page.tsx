@@ -418,10 +418,34 @@ function SessionRow({
                       />
                     )}
                     <div className="relative flex w-[14px] shrink-0 justify-center pt-[8px]">
-                      <span
-                        aria-hidden
-                        className="relative inline-block h-[9px] w-[9px] rounded-full bg-[var(--neutral-soft-400)]"
-                      />
+                      {/* Timeline dot — color-coded by classifier
+                          decision so a reviewer can scan a long
+                          session and immediately spot the moments
+                          where Aegis intervened. 2px white ring
+                          lifts the dot off the connecting line so
+                          it doesn't read as a bead on a string.
+                          Decision colors mirror SemanticTypeChip
+                          and the agent decision-distribution bar. */}
+                      {(() => {
+                        const d = (action.decision || '').toUpperCase();
+                        const color =
+                          d === 'DENY'
+                            ? 'var(--error)'
+                            : d === 'REWRITE' || d === 'CD'
+                              ? 'var(--primary-base)'
+                              : d === 'REQUIRE_APPROVAL'
+                                ? 'var(--warning-dark)'
+                                : d === 'ALLOW'
+                                  ? 'var(--success)'
+                                  : 'var(--neutral-soft-400)';
+                        return (
+                          <span
+                            aria-hidden
+                            className="relative inline-block h-[9px] w-[9px] rounded-full ring-2 ring-[var(--bg-app)]"
+                            style={{ backgroundColor: color }}
+                          />
+                        );
+                      })()}
                     </div>
 
                     <div className="min-w-0 flex-1">
@@ -478,6 +502,84 @@ function SessionRow({
                             )}
                           </div>
                         </div>
+
+                        {/* Decision callouts — surface WHAT Aegis
+                            did when the decision wasn't a pass-
+                            through ALLOW. Reviewers reading a
+                            session shouldn't have to decode color
+                            chips alone; the inline copy tells them
+                            "blocked because X" or "rewrote onto Y"
+                            in one glance. */}
+                        {(() => {
+                          const d = (action.decision || '').toUpperCase();
+                          if (d === 'DENY') {
+                            return (
+                              <div
+                                className="mt-2.5 flex items-start gap-2 rounded-[6px] border border-[rgba(239,68,68,0.24)] bg-[rgba(239,68,68,0.05)] px-3 py-2"
+                              >
+                                <span
+                                  aria-hidden
+                                  className="mt-[3px] inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--error)]"
+                                />
+                                <p className="text-[11.5px] leading-[1.45] text-[var(--neutral-strong-950)]">
+                                  <span className="font-semibold text-[var(--error)]">
+                                    Denied
+                                  </span>
+                                  {action.policy ? (
+                                    <>
+                                      {' '}
+                                      <span className="text-[var(--neutral-sub-600)]">
+                                        by{' '}
+                                      </span>
+                                      <span className="font-mono text-[11px] text-[var(--neutral-strong-950)]">
+                                        {action.policy}
+                                      </span>
+                                    </>
+                                  ) : (
+                                    <span className="text-[var(--neutral-sub-600)]">
+                                      {' '}
+                                      before the payload reached the downstream MCP.
+                                    </span>
+                                  )}
+                                </p>
+                              </div>
+                            );
+                          }
+                          if (d === 'REWRITE' || d === 'CD') {
+                            return (
+                              <div
+                                className="mt-2.5 flex items-start gap-2 rounded-[6px] border border-[rgba(250,115,25,0.32)] bg-[rgba(250,115,25,0.06)] px-3 py-2"
+                              >
+                                <span
+                                  aria-hidden
+                                  className="mt-[3px] inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--primary-base)]"
+                                />
+                                <p className="text-[11.5px] leading-[1.45] text-[var(--neutral-strong-950)]">
+                                  <span className="font-semibold text-[var(--primary-dark)]">
+                                    Rewrote
+                                  </span>{' '}
+                                  <span className="text-[var(--neutral-sub-600)]">
+                                    the unsafe write onto{' '}
+                                  </span>
+                                  <span className="font-mono text-[11px] text-[var(--neutral-strong-950)]">
+                                    aegis_workstation
+                                  </span>
+                                  {actionPrUrl && (
+                                    <span className="text-[var(--neutral-sub-600)]">
+                                      {' '}and opened a pull request automatically.
+                                    </span>
+                                  )}
+                                  {!actionPrUrl && (
+                                    <span className="text-[var(--neutral-sub-600)]">
+                                      {' '}so the protected branch stayed clean.
+                                    </span>
+                                  )}
+                                </p>
+                              </div>
+                            );
+                          }
+                          return null;
+                        })()}
 
                         {/* Arguments — full-width below the summary row so the
                             JSON panel has equal breathing room left & right. */}
