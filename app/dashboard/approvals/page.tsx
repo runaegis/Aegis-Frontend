@@ -1078,15 +1078,24 @@ function MoreActionsMenu({ approval }: { approval: MCPApproval }) {
           aria-expanded={open}
           aria-label="More actions"
           onClick={() => setOpen((v) => !v)}
-          className="inline-flex h-7 items-center gap-1 rounded-[6px] border border-[var(--stroke-soft-200)] bg-[var(--white-0)] px-2 text-[12px] font-medium text-[var(--neutral-sub-600)] hover:bg-[var(--neutral-weak-50)] hover:text-[var(--neutral-strong-950)]"
+          /* Matches Button size="sm" geometry exactly (h-7, px-2.5,
+             text-[12px], gap-1.5) so this sits next to Deny/Approve
+             without a vertical or horizontal misalignment. */
+          className="inline-flex h-7 items-center gap-1.5 rounded-[6px] border border-[var(--stroke-soft-200)] bg-[var(--white-0)] px-2.5 text-[12px] font-medium text-[var(--neutral-sub-600)] transition-colors hover:bg-[var(--neutral-weak-50)] hover:text-[var(--neutral-strong-950)]"
         >
           More
           <ChevronDown className="h-3 w-3" strokeWidth={2} />
         </button>
         {open && (
+          /* Open UPWARD (bottom-full + mb-1) instead of downward —
+             the More button sits near the bottom of each approval
+             card, so opening downward gets clipped by the next
+             card's stacking context. Above-button has empty space
+             on the right of the metadata grid. z-50 floats above
+             any sibling that might overlap. */
           <div
             role="menu"
-            className="absolute right-0 z-10 mt-1 w-[240px] overflow-hidden rounded-[8px] border border-[var(--stroke-soft-200)] bg-[var(--white-0)] py-1 shadow-[0_8px_24px_rgba(23,23,23,0.10)]"
+            className="absolute right-0 bottom-full z-50 mb-1 w-[240px] overflow-hidden rounded-[8px] border border-[var(--stroke-soft-200)] bg-[var(--white-0)] py-1 shadow-[0_-8px_24px_rgba(23,23,23,0.10)]"
           >
             <MenuItem
               label="Always allow similar"
