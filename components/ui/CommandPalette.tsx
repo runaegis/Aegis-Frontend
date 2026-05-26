@@ -33,6 +33,8 @@ import {
   Coins,
   ExternalLink,
   FileText,
+  GitBranch,
+  Hash,
   HelpCircle,
   LayoutDashboard,
   Layers,
@@ -43,6 +45,7 @@ import {
   Plug,
   Search,
   Settings,
+  Shield,
   Sun,
   Users,
   X,
@@ -50,6 +53,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { api } from '@/lib/api';
+import { useDashboardData } from '@/lib/dashboardDataContext';
 
 interface Command {
   id: string;
@@ -59,10 +63,42 @@ interface Command {
   /** Tokens that should match the search query (label + synonyms). */
   keywords: string[];
   /** Visual group in the palette. */
-  group: 'Navigate' | 'Actions' | 'External';
+  group:
+    | 'Navigate'
+    | 'Runs'
+    | 'Sessions'
+    | 'Rooms'
+    | 'Policies'
+    | 'Actions'
+    | 'External';
   /** Runs when the user picks this command. */
   perform: () => void | Promise<void>;
 }
+
+// Canonical static lists for cross-entity search. Kept inline so the
+// palette stays a single self-contained component. Agents are
+// intentionally omitted here: v1 has no /dashboard/agents/[id] route
+// yet, so per-agent navigation would 404. Re-add the Agents group
+// (and an `agent-` perform that goes to /dashboard/agents/[id]) once
+// the agent detail page ships.
+const PALETTE_POLICIES = [
+  'Protected Branch Denial',
+  'Freeze Window Enforcement',
+  'Aegis Branch Naming',
+  'Mandatory PR Flow',
+  'No Autonomous Merge',
+  'CI Required Before Merge',
+  'Repo Allowlist',
+  'Sensitive Path Approval',
+  'Secret Detection',
+  'Blast Radius Gate',
+];
+
+const PALETTE_ROOMS = [
+  { id: 'room_dash', repo: 'aegis/dashboard' },
+  { id: 'room_mcp',  repo: 'aegis/mcp-server' },
+  { id: 'room_api',  repo: 'runaegis/api' },
+];
 
 const EASE_EMPH: [number, number, number, number] = [0.2, 0.8, 0.2, 1];
 
@@ -152,7 +188,7 @@ export function CommandPalette() {
       { label: 'Audit Trail', href: '/dashboard/audit', icon: FileText, keywords: ['events', 'log', 'history'] },
       { label: 'Freeze Windows', href: '/dashboard/freeze-window', icon: Clock, keywords: ['schedule', 'pause'] },
       { label: 'Connectors', href: '/dashboard/connectors', icon: Boxes, keywords: ['integrations', 'catalog', 'slack', 'linear', 'jira', 'terraform', 'postgres', 'roadmap'] },
-      { label: 'Token Spenditure', href: '/dashboard/token-spenditure', icon: Coins, keywords: ['usage', 'cost', 'billing'] },
+      { label: 'Token Expenditure', href: '/dashboard/token-spenditure', icon: Coins, keywords: ['usage', 'cost', 'billing'] },
       { label: 'Connect agent', href: '/dashboard/rooms', icon: Plug, keywords: ['cursor', 'vscode', 'claude code', 'mcp', 'connect', 'integration', 'integrations'] },
       { label: 'Settings', href: '/dashboard/settings', icon: Settings, keywords: ['account', 'preferences'] },
     ];
@@ -251,23 +287,117 @@ export function CommandPalette() {
     return [...navCommands, ...actionCommands, ...externalCommands];
   }, [goto, pathname, open]); // re-read on open via the `open` dep so action labels reflect current state
 
+  // ─── Dynamic search commands (runs / sessions / rooms / policies) ─
+  // Only built when the palette opens to avoid running the full
+  // derivation on every keystroke from idle. The Agents group is
+  // intentionally omitted until /dashboard/agents/[id] exists on this
+  // branch — re-add when that page ships.
+  const { sessionActions: paletteRuns } = useDashboardData();
+  const dynamicCommands: Command[] = useMemo(() => {
+    if (!open) return [];
+
+    // Recent runs: top 8 most recent, searchable by agent / tool /
+    // summary / repo / semantic_type (when present).
+    const recent = [...paletteRuns]
+      .sort(
+        (a, b) =>
+          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+      )
+      .slice(0, 8);
+    const runCommands: Command[] = recent.map((r) => ({
+      id: `run-${r.id}`,
+      label: `${r.agent_name ?? 'agent'} · ${r.tool_name ?? 'tool'}`,
+      hint: r.target_repo ?? r.action_summary?.slice(0, 50) ?? '',
+      icon: Activity,
+      keywords: [
+        (r.agent_name ?? '').toLowerCase(),
+        (r.tool_name ?? '').toLowerCase(),
+        (r.action_summary ?? '').toLowerCase(),
+        (r.target_repo ?? '').toLowerCase(),
+      ],
+      group: 'Runs',
+      perform: () => goto(`/dashboard/runs?session=${r.session_id ?? ''}`),
+    }));
+
+    // Sessions: unique sessions from runs, searchable by id / agent.
+    const seenSessions = new Set<string>();
+    const sessions: Array<{ id: string; agent?: string }> = [];
+    for (const r of paletteRuns) {
+      if (!r.session_id || seenSessions.has(r.session_id)) continue;
+      seenSessions.add(r.session_id);
+      sessions.push({ id: r.session_id, agent: r.agent_name });
+      if (sessions.length >= 6) break;
+    }
+    const sessionCommands: Command[] = sessions.map((s) => ({
+      id: `session-${s.id}`,
+      label: s.id.slice(0, 12) + '…',
+      hint: s.agent ?? 'session',
+      icon: Hash,
+      keywords: [s.id.toLowerCase(), (s.agent ?? '').toLowerCase(), 'session'],
+      group: 'Sessions',
+      perform: () => goto(`/dashboard/sessions?session=${s.id}`),
+    }));
+
+    // Rooms: static demo set.
+    const roomCommands: Command[] = PALETTE_ROOMS.map((r) => ({
+      id: `room-${r.id}`,
+      label: r.repo,
+      hint: 'Room',
+      icon: GitBranch,
+      keywords: [r.repo.toLowerCase(), 'room', 'repo'],
+      group: 'Rooms',
+      perform: () => goto(`/dashboard/rooms/${r.id}`),
+    }));
+
+    // Policies: static list.
+    const policyCommands: Command[] = PALETTE_POLICIES.map((name) => ({
+      id: `policy-${name}`,
+      label: name,
+      hint: 'Policy',
+      icon: Shield,
+      keywords: [name.toLowerCase(), 'policy', 'rule'],
+      group: 'Policies',
+      perform: () => goto('/dashboard/policies'),
+    }));
+
+    return [
+      ...runCommands,
+      ...sessionCommands,
+      ...roomCommands,
+      ...policyCommands,
+    ];
+  }, [open, paletteRuns, goto]);
+
+  const allCommands = useMemo(
+    () => [...commands, ...dynamicCommands],
+    [commands, dynamicCommands],
+  );
+
   // Fuzzy-ish match: split query into tokens, every token must hit
   // either the label or a keyword. Simple, fast, no library needed.
+  // Empty query shows ONLY the static Navigate / Actions / External
+  // sets — dynamic Runs/Sessions/Rooms/Policies entries are noise
+  // without a query, they light up once the user types.
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return commands;
     const tokens = q.split(/\s+/);
-    return commands.filter((cmd) => {
+    return allCommands.filter((cmd) => {
       const haystack = [cmd.label, ...cmd.keywords].join(' ').toLowerCase();
       return tokens.every((t) => haystack.includes(t));
     });
-  }, [commands, query]);
+  }, [commands, allCommands, query]);
 
   // Group for visual sectioning. Order is the order we want sections
-  // to appear in the list.
+  // to appear in the list. Static groups first (Navigate / Actions /
+  // External), then dynamic ones (Runs / Sessions / Rooms / Policies).
   const grouped = useMemo(() => {
     const groups: Array<{ name: Command['group']; items: Command[] }> = [
       { name: 'Navigate', items: [] },
+      { name: 'Runs', items: [] },
+      { name: 'Sessions', items: [] },
+      { name: 'Rooms', items: [] },
+      { name: 'Policies', items: [] },
       { name: 'Actions', items: [] },
       { name: 'External', items: [] },
     ];
