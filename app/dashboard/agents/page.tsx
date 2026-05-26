@@ -159,6 +159,48 @@ export default function AgentsPage() {
         subtitle={`${agents.length} ${agents.length === 1 ? 'agent' : 'agents'} active in your workspace`}
       />
       <div className="mx-auto max-w-[1320px] 2xl:max-w-[1480px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
+        {/* Page-level body header — mirrors the eyebrow + h1 + subtext
+            pattern from the Approvals page so the two governance
+            surfaces feel like a family. Skipping this would have
+            left the page anchored only by the Topbar, which reads
+            as undercooked next to Approvals' body header. */}
+        <motion.div
+          className="mb-7"
+          variants={staggerContainer(0.05, 0.04)}
+          initial={reduce ? false : 'hidden'}
+          animate="show"
+        >
+          <motion.p
+            variants={fadeUp}
+            className="mb-2 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-[var(--neutral-soft-400)]"
+          >
+            Agent inventory
+          </motion.p>
+          <motion.h1
+            variants={fadeUp}
+            className="text-[26px] font-semibold leading-[1.1] tracking-[-0.03em] text-[var(--neutral-strong-950)]"
+          >
+            Who&apos;s calling tools in your workspace
+          </motion.h1>
+          {agents.length > 0 && (
+            <motion.p
+              variants={fadeUp}
+              className="mt-2 text-[13.5px] text-[var(--neutral-sub-600)]"
+            >
+              <span className="font-semibold text-[var(--neutral-strong-950)]">
+                {agents.length}
+              </span>{' '}
+              {agents.length === 1 ? 'agent' : 'agents'} ·{' '}
+              <span className="font-semibold tabular-nums text-[var(--neutral-strong-950)]">
+                {agents
+                  .reduce((sum, a) => sum + a.runCount, 0)
+                  .toLocaleString()}
+              </span>{' '}
+              runs total
+            </motion.p>
+          )}
+        </motion.div>
+
         {agents.length === 0 ? (
           <EmptyState
             icon={<Bot className="h-5 w-5" strokeWidth={2} />}
@@ -181,54 +223,73 @@ export default function AgentsPage() {
               >
                 <Link
                   href={`/dashboard/runs?agent=${encodeURIComponent(agent.name)}`}
-                  className="group flex h-full flex-col gap-3 rounded-[12px] border border-[var(--stroke-soft-200)] bg-[var(--white-0)] p-4 shadow-[0_1px_2px_rgba(23,23,23,0.04)] transition-[box-shadow,border-color] duration-200 ease-[cubic-bezier(0.2,0.8,0.2,1)] hover:border-[var(--primary-base)]/30 hover:shadow-[0_8px_24px_rgba(23,23,23,0.06)]"
+                  className="group relative flex h-full flex-col gap-4 rounded-[12px] border border-[var(--stroke-soft-200)] bg-[var(--white-0)] p-[18px] shadow-[0_1px_2px_rgba(23,23,23,0.04)] transition-[box-shadow,border-color] duration-200 ease-[cubic-bezier(0.2,0.8,0.2,1)] hover:border-[var(--stroke-sub-300)] hover:shadow-[0_8px_24px_rgba(23,23,23,0.06)]"
                 >
-                  {/* Identity row */}
+                  {/* Identity row. ArrowUpRight is opacity-0 at rest
+                      and only shows on group-hover so the card reads
+                      as calm chrome until you intent to click. */}
                   <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="flex min-w-0 items-center gap-3">
                       <AgentMark name={agent.name} size="md" />
                       <div className="min-w-0">
-                        <p className="truncate text-[13.5px] font-semibold tracking-[-0.005em] text-[var(--neutral-strong-950)]">
+                        <p className="truncate text-[14.5px] font-semibold leading-[1.2] tracking-[-0.01em] text-[var(--neutral-strong-950)]">
                           {agent.name}
                         </p>
-                        <p className="mt-0.5 text-[11px] text-[var(--neutral-soft-400)]">
-                          Last seen <RelativeTime timestamp={agent.lastSeen} />
+                        <p className="mt-1 font-mono text-[10.5px] uppercase tracking-[0.08em] text-[var(--neutral-soft-400)]">
+                          Active <RelativeTime timestamp={agent.lastSeen} />
                         </p>
                       </div>
                     </div>
                     <ArrowUpRight
-                      className="h-3.5 w-3.5 shrink-0 text-[var(--neutral-soft-400)] transition-colors group-hover:text-[var(--primary-base)]"
+                      className="h-3.5 w-3.5 shrink-0 text-[var(--neutral-soft-400)] opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-hover:text-[var(--primary-base)]"
                       strokeWidth={2}
                     />
                   </div>
 
-                  {/* Stats row */}
-                  <div className="grid grid-cols-2 gap-2 text-[11.5px]">
+                  {/* Divider between identity and metrics keeps the
+                      two regions readable as separate concerns. */}
+                  <div
+                    aria-hidden
+                    className="-mx-[18px] h-px bg-[var(--stroke-soft-200)]"
+                  />
+
+                  {/* Metrics row — primary metric (runs) gets the
+                      bold tabular treatment that Anthropic console +
+                      Rox use for top-level values. Top tool sits
+                      beside it in mono so the technical anchor stays
+                      visually distinct. */}
+                  <div className="grid grid-cols-[auto_1fr] items-end gap-x-5">
                     <div>
-                      <p className="font-mono uppercase tracking-[0.06em] text-[var(--neutral-soft-400)]">
-                        Runs
-                      </p>
-                      <p className="mt-0.5 font-semibold tabular-nums text-[var(--neutral-strong-950)]">
+                      <p className="font-semibold leading-[1] tabular-nums text-[var(--neutral-strong-950)] text-[26px] tracking-[-0.02em]">
                         {agent.runCount.toLocaleString()}
                       </p>
-                    </div>
-                    <div>
-                      <p className="font-mono uppercase tracking-[0.06em] text-[var(--neutral-soft-400)]">
-                        Top tool
+                      <p className="mt-2 font-mono text-[10px] uppercase tracking-[0.08em] text-[var(--neutral-soft-400)]">
+                        Runs
                       </p>
-                      <p className="mt-0.5 truncate font-mono text-[11px] text-[var(--neutral-strong-950)]">
+                    </div>
+                    <div className="min-w-0 text-right">
+                      <p className="truncate font-mono text-[12.5px] font-medium text-[var(--neutral-strong-950)]">
                         {agent.topTools[0] ?? '—'}
+                      </p>
+                      <p className="mt-2 font-mono text-[10px] uppercase tracking-[0.08em] text-[var(--neutral-soft-400)]">
+                        Top tool
                       </p>
                     </div>
                   </div>
 
-                  {/* Decision distribution — mini stacked bar.
-                      Renders only when at least one decision is
-                      counted; otherwise the bar is empty so we hide
-                      it rather than show a flat gray line. */}
+                  {/* Decision distribution — bumped from a 1.5px
+                      hairline to a 4px bar with an inner ring so it
+                      reads as a real signal instead of decoration.
+                      Renders only when there's at least one decision
+                      counted, otherwise hidden so the card doesn't
+                      show a flat gray strip. */}
                   {agent.runCount > 0 && (
-                    <div className="space-y-1.5">
-                      <div className="flex h-1.5 w-full items-stretch gap-[1px] overflow-hidden rounded-[2px]">
+                    <div className="mt-auto space-y-2">
+                      <div
+                        className="flex h-1 w-full items-stretch gap-[1px] overflow-hidden rounded-[2px] ring-1 ring-inset ring-[rgba(23,23,23,0.04)]"
+                        role="img"
+                        aria-label={`Decision distribution for ${agent.name}`}
+                      >
                         {(['allow', 'deny', 'rewrite', 'approval'] as const).map(
                           (key) => {
                             const value = agent.decisions[key];
@@ -248,19 +309,22 @@ export default function AgentsPage() {
                           },
                         )}
                       </div>
-                      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 font-mono text-[10px] text-[var(--neutral-soft-400)]">
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[10.5px] text-[var(--neutral-soft-400)]">
                         {(['allow', 'deny', 'rewrite', 'approval'] as const)
                           .filter((key) => agent.decisions[key] > 0)
                           .map((key) => (
-                            <span key={key} className="inline-flex items-center gap-1">
+                            <span
+                              key={key}
+                              className="inline-flex items-center gap-1.5"
+                            >
                               <span
                                 aria-hidden
                                 className="inline-block h-1.5 w-1.5 rounded-full"
                                 style={{ backgroundColor: DECISION_COLORS[key] }}
                               />
-                              <span>
+                              <span className="lowercase">
                                 {DECISION_LABELS[key].toLowerCase()}{' '}
-                                <span className="text-[var(--neutral-sub-600)]">
+                                <span className="font-semibold tabular-nums text-[var(--neutral-sub-600)]">
                                   {agent.decisions[key]}
                                 </span>
                               </span>
