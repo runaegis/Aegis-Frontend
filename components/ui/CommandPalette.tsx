@@ -196,7 +196,11 @@ export function CommandPalette() {
     ];
 
     const navCommands: Command[] = navItems.map((item) => ({
-      id: `nav-${item.href}`,
+      // Label-prefixed id keeps each command unique even when two
+      // entries share the same href (e.g. "Rooms" + "Connect agent"
+      // both route to /dashboard/rooms). Pre-fix had collided on the
+      // href-only id and triggered React's duplicate-key warning.
+      id: `nav-${item.label}-${item.href}`,
       label: item.label,
       hint: isCurrent(item.href) ? 'Current page' : undefined,
       icon: item.icon,

@@ -169,7 +169,7 @@ export default function AgentsPage() {
           <motion.div
             variants={staggerContainer(0.04)}
             initial={reduce ? false : 'hidden'}
-            animate="visible"
+            animate="show"
             className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"
           >
             {agents.map((agent) => (
