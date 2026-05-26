@@ -787,14 +787,11 @@ input:-webkit-autofill {
    (VS Code blue, Claude orange, Copilot gradient, Replit orange)
    stay untouched. Add new tool IDs to this list as needed.
    The data-tool-id attribute is set in ToolLogo.tsx. */
-/* Devin (cyan) and Aider (bright green) are colored-on-transparent
-   after the background-strip pass — they don't need inversion in
-   dark mode the way the monochrome marks (cursor, openai, windsurf)
-   do. Keeping them inverted would flip their saturated brand colors
-   to clashing complements. */
 [data-theme="dark"] img[data-tool-id="cursor"],
 [data-theme="dark"] img[data-tool-id="openai"],
-[data-theme="dark"] img[data-tool-id="windsurf"] {
+[data-theme="dark"] img[data-tool-id="windsurf"],
+[data-theme="dark"] img[data-tool-id="aider"],
+[data-theme="dark"] img[data-tool-id="devin"] {
   filter: invert(1) hue-rotate(180deg);
 }
 

@@ -5,10 +5,11 @@ import Link from 'next/link';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import {
   Bell,
+  CreditCard,
   ExternalLink,
   HelpCircle,
+  KeyRound,
   LogOut,
-  MessageSquarePlus,
   Sparkles,
   User as UserIcon,
 } from 'lucide-react';
@@ -167,25 +168,9 @@ export function UserMenu({ pendingApprovals = 0, className }: UserMenuProps) {
                   {email}
                 </p>
               </div>
-              {/* Workspace badge. Always uses primary (brand orange)
-                  so the chip stays inside the dashboard's color
-                  language — purple felt off-brand here even though
-                  it would have visually paired with the demo avatar.
-                  DEMO for the sample workspace, FREE for real
-                  accounts on the current default tier. Once metered
-                  billing ships, swap FREE for the real plan name
-                  (Pro / Team / Enterprise). Hidden during the initial
-                  render before demoOn resolves so we don't flash the
-                  wrong label. */}
-              {demoOn === true ? (
-                <Badge tone="primary" uppercase>
-                  Demo
-                </Badge>
-              ) : demoOn === false ? (
-                <Badge tone="primary" uppercase>
-                  Free
-                </Badge>
-              ) : null}
+              <Badge tone="primary" uppercase>
+                Free
+              </Badge>
             </div>
 
             {/* Quick stat — only when there's something to surface */}
@@ -210,13 +195,7 @@ export function UserMenu({ pendingApprovals = 0, className }: UserMenuProps) {
               </Link>
             )}
 
-            {/* Menu group 1 — pilot-stage essentials only.
-                "API keys" was removed because programmatic access
-                isn't live yet (only "Coming soon" placeholders exist
-                in Settings). "Plan & usage" was removed because
-                pilot customers aren't on metered billing — the page
-                only carries placeholder copy. Both will come back
-                once the underlying surfaces ship. */}
+            {/* Menu group 1 */}
             <div className="p-1">
               <Item
                 href="/dashboard/settings#profile"
@@ -229,6 +208,18 @@ export function UserMenu({ pendingApprovals = 0, className }: UserMenuProps) {
                 href="/dashboard/settings#notifications"
                 icon={Bell}
                 label="Notifications"
+                onClick={() => setOpen(false)}
+              />
+              <Item
+                href="/dashboard/settings#api-keys"
+                icon={KeyRound}
+                label="API keys"
+                onClick={() => setOpen(false)}
+              />
+              <Item
+                href="/dashboard/settings#billing"
+                icon={CreditCard}
+                label="Plan & usage"
                 onClick={() => setOpen(false)}
               />
             </div>
@@ -247,19 +238,8 @@ export function UserMenu({ pendingApprovals = 0, className }: UserMenuProps) {
 
             <div className="border-t border-[var(--stroke-soft-200)]" />
 
-            {/* Menu group 2 — pilot-stage external help.
-                "Send feedback" is intentionally prominent for pilot
-                customers; their feedback shapes the product. Goes to
-                a mailto: today so it works without server wiring; a
-                proper in-app feedback widget can replace this later. */}
+            {/* Menu group 2 — external help */}
             <div className="p-1">
-              <Item
-                href="mailto:hello@runaegis.co?subject=Aegis%20feedback"
-                external
-                icon={MessageSquarePlus}
-                label="Send feedback"
-                onClick={() => setOpen(false)}
-              />
               <Item
                 href="https://docs.runaegis.co"
                 external
