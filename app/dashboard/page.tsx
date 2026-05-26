@@ -38,7 +38,6 @@ import { Button } from '@/components/ui/Button';
 import { CodeChip } from '@/components/ui/CodeChip';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useToast } from '@/components/ui/Toast';
-import { Tooltip } from '@/components/ui/Tooltip';
 
 const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 const ONE_HOUR_MS = 60 * 60 * 1000;
@@ -335,46 +334,19 @@ export default function DashboardHomePage() {
             <div className="flex h-[10px] w-full items-stretch gap-[2px] overflow-hidden">
               {distribution.map((seg, i) =>
                 seg.pct > 0 ? (
-                  // AlignUI-styled custom tooltip replaces the native
-                  // `title=` (which read as a generic OS tooltip and
-                  // broke design hygiene against the rest of the bar).
-                  // Shows "ALLOW · 1,247 · 62%" so the user gets the
-                  // raw count AND the share in one glance.
-                  <Tooltip
+                  <motion.span
                     key={seg.key}
-                    content={
-                      <span className="inline-flex items-center gap-1.5">
-                        <span
-                          aria-hidden
-                          className="inline-block h-1.5 w-1.5 rounded-full"
-                          style={{ backgroundColor: seg.color }}
-                        />
-                        <span className="font-semibold uppercase tracking-[0.05em]">
-                          {seg.label}
-                        </span>
-                        <span className="opacity-50">·</span>
-                        <span className="tabular-nums">
-                          {seg.value.toLocaleString()}
-                        </span>
-                        <span className="opacity-50">·</span>
-                        <span className="tabular-nums opacity-80">
-                          {seg.pct.toFixed(1)}%
-                        </span>
-                      </span>
-                    }
-                  >
-                    <motion.span
-                      className="block rounded-[3px]"
-                      style={{ backgroundColor: seg.color }}
-                      initial={reduce ? { width: `${seg.pct}%` } : { width: 0 }}
-                      animate={{ width: `${seg.pct}%` }}
-                      transition={{
-                        duration: DUR.bar,
-                        ease: EASE.out,
-                        delay: 0.4 + i * 0.08,
-                      }}
-                    />
-                  </Tooltip>
+                    className="block rounded-[3px]"
+                    style={{ backgroundColor: seg.color }}
+                    initial={reduce ? { width: `${seg.pct}%` } : { width: 0 }}
+                    animate={{ width: `${seg.pct}%` }}
+                    transition={{
+                      duration: DUR.bar,
+                      ease: EASE.out,
+                      delay: 0.4 + i * 0.08,
+                    }}
+                    title={`${seg.label}: ${seg.value}`}
+                  />
                 ) : null,
               )}
               {metrics.total === 0 && (

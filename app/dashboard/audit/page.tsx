@@ -24,8 +24,6 @@ import { formatFullTimestamp, truncate } from '@/lib/utils';
 import Topbar from '@/components/layout/Topbar';
 import { AgentMark } from '@/components/ui/AgentMark';
 import DecisionBadge, { decisionColor } from '@/components/ui/DecisionBadge';
-import { SemanticTypeChip } from '@/components/ui/SemanticTypeChip';
-import type { CILFields } from '@/lib/cil-types';
 import EmptyState from '@/components/ui/EmptyState';
 import ErrorBanner from '@/components/ui/ErrorBanner';
 import JsonViewer from '@/components/ui/JsonViewer';
@@ -552,19 +550,7 @@ function AuditRow({
         </TD>
         <TD className="text-[var(--neutral-sub-600)]">{event.target_repo}</TD>
         <TD>
-          <div className="flex flex-col items-start gap-1">
-            <DecisionBadge decision={event.decision} />
-            {/* SemanticTypeChip on audit rows surfaces the canonical
-                CIL verdict alongside the decision. Hidden until
-                backend persists semantic_type (Engineering Sprint
-                Board Ticket 1). */}
-            {(event as SessionAction & CILFields).semantic_type && (
-              <SemanticTypeChip
-                semantic_type={(event as SessionAction & CILFields).semantic_type}
-                variant="compact"
-              />
-            )}
-          </div>
+          <DecisionBadge decision={event.decision} />
         </TD>
         <TD className="w-8 pr-3 text-right">
           <ChevronDown

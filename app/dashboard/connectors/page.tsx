@@ -28,7 +28,6 @@ import { ConnectorMark, CONNECTORS, type ConnectorId } from '@/components/ui/Con
 import { Button } from '@/components/ui/Button';
 import { cn } from '@/lib/utils';
 import { DUR, EASE, fadeUp, staggerContainer } from '@/lib/motion';
-import { HOVER_LIFT_HOVER, HOVER_LIFT_TAP } from '@/components/ui/HoverLift';
 
 type ConnectorStatus = 'live' | 'in-progress' | 'coming-soon';
 
@@ -145,8 +144,7 @@ function ConnectorCard({
       // than the lift's 260ms so the cosmetic settle lands a frame
       // before the motion completes — feels more polished than all
       // three landing at the same instant.
-      whileHover={HOVER_LIFT_HOVER}
-      whileTap={HOVER_LIFT_TAP}
+      whileHover={{ y: -2, transition: { duration: 0.26, ease: [0.32, 0.72, 0.32, 1] } }}
       className={cn(
         'group relative flex flex-col overflow-hidden rounded-[14px] border border-[var(--stroke-soft-200)] bg-white',
         'shadow-[0_1px_2px_rgba(23,23,23,0.04)]',
