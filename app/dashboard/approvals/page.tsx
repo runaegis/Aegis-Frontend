@@ -12,6 +12,9 @@ import Topbar from '@/components/layout/Topbar';
 import { AgentMark } from '@/components/ui/AgentMark';
 import DecisionBadge from '@/components/ui/DecisionBadge';
 import EmptyState from '@/components/ui/EmptyState';
+import { SemanticTypeChip } from '@/components/ui/SemanticTypeChip';
+import { ContextEvidencePanel } from '@/components/dashboard/ContextEvidencePanel';
+import type { CILFields } from '@/lib/cil-types';
 import ErrorBanner from '@/components/ui/ErrorBanner';
 import JsonViewer from '@/components/ui/JsonViewer';
 import { ApprovalsSkeleton } from '@/components/ui/PageSkeletons';
@@ -833,6 +836,15 @@ function ApprovalItem({
           </div>
           <div className="flex shrink-0 flex-col items-end gap-1.5">
             <DecisionBadge decision={approval.status} />
+            {/* SemanticTypeChip surfaces the CIL verdict on the
+                approval. Hidden until backend persists semantic_type
+                (Engineering Sprint Board Ticket 1). */}
+            {(approval as MCPApproval & CILFields).semantic_type && (
+              <SemanticTypeChip
+                semantic_type={(approval as MCPApproval & CILFields).semantic_type}
+                variant="compact"
+              />
+            )}
             {prUrl && <PullRequestLink url={prUrl} variant="chip" />}
           </div>
         </div>
@@ -892,6 +904,7 @@ function ApprovalItem({
 
           {isPending && (
             <div className="flex items-center gap-2">
+              <MoreActionsMenu approval={approval} />
               <Button
                 size="sm"
                 variant="secondary"
@@ -914,13 +927,28 @@ function ApprovalItem({
           )}
         </div>
 
-        {isExpanded && approval.arguments && (
-          <div className="mt-4">
-            <JsonViewer
-              data={approval.arguments}
-              collapsed={false}
-              label="Arguments"
-            />
+        {isExpanded && (
+          <div className="mt-4 space-y-4">
+            {approval.arguments && (
+              <JsonViewer
+                data={approval.arguments}
+                collapsed={false}
+                label="Arguments"
+              />
+            )}
+            {/* ContextEvidencePanel — the 4 contexts that classified
+                this action. Renders inline only when backend has
+                persisted them. The decision_path + canonical_action_type
+                strip below the panels surfaces the classifier's
+                reasoning trail. Until backend ships persistence
+                (Engineering Sprint Board Ticket 2), the surface
+                stays hidden. */}
+            {(approval as MCPApproval & CILFields).contexts && (
+              <ContextEvidencePanel
+                contexts={(approval as MCPApproval & CILFields).contexts}
+                decisionPath={(approval as MCPApproval & CILFields).decision_path}
+              />
+            )}
           </div>
         )}
       </div>
@@ -942,5 +970,223 @@ function MetaCell({
       </p>
       <div className="min-w-0">{children}</div>
     </div>
+  );
+}
+
+/**
+ * MoreActionsMenu — power-user affordances next to Approve / Deny.
+ *
+ * Surfaces four secondary intent actions a reviewer might want
+ * instead of a one-off allow/deny:
+ *   • Always allow similar — creates a permanent rule
+ *   • Always deny similar  — creates a permanent deny rule
+ *   • Approve for 30 minutes — time-bound allow
+ *   • Escalate to owner — hands off to a higher-privilege reviewer
+ *
+ * Today these toast as "Policy rule created" / "Escalated" because
+ * the backend rules engine isn't shipping yet (Engineering Sprint
+ * Board Ticket 9: Approval Routing). The frontend surface exists
+ * so the affordance is reviewable on demo workspace before backend
+ * lands. When backend ships, the toast handlers swap to real API
+ * calls — no UI change needed.
+ *
+ * Each action gates through ConfirmDialog so a click doesn't
+ * accidentally create a permanent policy rule.
+ */
+function MoreActionsMenu({ approval }: { approval: MCPApproval }) {
+  const [open, setOpen] = useState(false);
+  const [pendingKind, setPendingKind] = useState<
+    null | 'allow_similar' | 'deny_similar' | 'approve_30m' | 'escalate'
+  >(null);
+  const toast = useToast();
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [open]);
+
+  const confirmText = (kind: typeof pendingKind) => {
+    switch (kind) {
+      case 'allow_similar':
+        return {
+          title: 'Always allow similar actions?',
+          body: `Create a permanent policy rule to allow ${approval.tool_name} from this agent on this repo. Applies to all future similar requests.`,
+          cta: 'Create allow rule',
+        };
+      case 'deny_similar':
+        return {
+          title: 'Always deny similar actions?',
+          body: `Create a permanent policy rule to deny ${approval.tool_name} from this agent on this repo. Applies to all future similar requests.`,
+          cta: 'Create deny rule',
+        };
+      case 'approve_30m':
+        return {
+          title: 'Approve for 30 minutes?',
+          body: 'This approval will auto-expire in 30 minutes. The agent has that window to complete the action.',
+          cta: 'Approve · 30m',
+        };
+      case 'escalate':
+        return {
+          title: 'Escalate to owner?',
+          body: 'Route this approval to the workspace OWNER. They will receive a notification and the request will sit in their queue.',
+          cta: 'Escalate',
+        };
+      default:
+        return { title: '', body: '', cta: '' };
+    }
+  };
+
+  const runConfirm = () => {
+    switch (pendingKind) {
+      case 'allow_similar':
+        toast.success('Policy rule created', {
+          description: 'Similar actions will now auto-approve.',
+        });
+        break;
+      case 'deny_similar':
+        toast.success('Policy rule created', {
+          description: 'Similar actions will now auto-deny.',
+        });
+        break;
+      case 'approve_30m':
+        toast.success('Approved for 30 minutes', {
+          description: 'The approval will auto-expire at the end of the window.',
+        });
+        break;
+      case 'escalate':
+        toast.success('Escalated to owner', {
+          description: 'The approval is now in the owner queue.',
+        });
+        break;
+    }
+    setPendingKind(null);
+  };
+
+  const text = confirmText(pendingKind);
+
+  return (
+    <>
+      <div ref={ref} className="relative">
+        <button
+          type="button"
+          aria-haspopup="menu"
+          aria-expanded={open}
+          aria-label="More actions"
+          onClick={() => setOpen((v) => !v)}
+          /* Icon-only square (h-7 w-7) matching the v3 mock. Reads
+             as a quiet secondary affordance next to the primary
+             Approve / Deny buttons instead of competing with them
+             for label real estate. */
+          className="inline-flex h-7 w-7 items-center justify-center rounded-[6px] border border-[var(--stroke-soft-200)] bg-[var(--white-0)] text-[var(--neutral-sub-600)] transition-colors hover:bg-[var(--neutral-weak-50)] hover:text-[var(--neutral-strong-950)]"
+        >
+          <ChevronDown className="h-3.5 w-3.5" strokeWidth={2} />
+        </button>
+        {open && (
+          // Open UPWARD (bottom-full + mb-2) — the More button
+          // sits near the bottom of each approval card, so opening
+          // downward gets clipped by the next card's stacking
+          // context. Above-button has empty space on the right of
+          // the metadata grid.
+          //
+          // Container chrome matches the canonical AlignUI pattern
+          // from WorkspaceSwitcher: 12px outer radius, 1.5 unit
+          // inner padding (so menu items aren't flush against the
+          // border), 0.5 unit vertical gap between rows, soft
+          // double-shadow drop.
+          <div
+            role="menu"
+            className="absolute right-0 bottom-full z-50 mb-2 w-[240px] overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-[var(--white-0)] shadow-[0_-12px_32px_rgba(23,23,23,0.10),0_-2px_6px_rgba(23,23,23,0.04)]"
+          >
+            <div className="space-y-0.5 p-1.5">
+              <MenuItem
+                label="Always allow similar"
+                onClick={() => {
+                  setOpen(false);
+                  setPendingKind('allow_similar');
+                }}
+              />
+              <MenuItem
+                label="Always deny similar"
+                destructive
+                onClick={() => {
+                  setOpen(false);
+                  setPendingKind('deny_similar');
+                }}
+              />
+              <MenuItem
+                label="Approve for 30 minutes"
+                onClick={() => {
+                  setOpen(false);
+                  setPendingKind('approve_30m');
+                }}
+              />
+              <MenuItem
+                label="Escalate to owner"
+                onClick={() => {
+                  setOpen(false);
+                  setPendingKind('escalate');
+                }}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+      <ConfirmDialog
+        open={pendingKind !== null}
+        onOpenChange={(o) => !o && setPendingKind(null)}
+        title={text.title}
+        description={text.body}
+        confirmLabel={text.cta}
+        cancelLabel="Cancel"
+        variant={pendingKind === 'deny_similar' ? 'danger' : 'primary'}
+        onConfirm={runConfirm}
+      />
+    </>
+  );
+}
+
+/**
+ * MenuItem — canonical AlignUI dropdown row used in the More-actions
+ * menu. Mirrors the ActionRow pattern from WorkspaceSwitcher so the
+ * two surfaces feel like one design system:
+ *   • 7px row radius so hover/active states look pill-like inside
+ *     the 12px container without bleeding to the edges
+ *   • px-2 py-1.5 so the hover background has internal padding
+ *   • 12.5px medium text — same as WorkspaceSwitcher's ActionRow
+ *
+ * `destructive` paints the row in --error tones (red) on rest +
+ * hover, matching the "Sign out" / "Delete" pattern in
+ * WorkspaceSwitcher.
+ */
+function MenuItem({
+  label,
+  destructive,
+  onClick,
+}: {
+  label: string;
+  destructive?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      onClick={onClick}
+      className={[
+        'flex w-full items-center rounded-[7px] px-2 py-1.5 text-left',
+        'text-[12.5px] font-medium',
+        'transition-colors duration-200 ease-[cubic-bezier(0.2,0.8,0.2,1)]',
+        destructive
+          ? 'text-[var(--error)] hover:bg-[var(--error-lighter)]'
+          : 'text-[var(--neutral-sub-600)] hover:bg-[var(--neutral-weak-50)] hover:text-[var(--neutral-strong-950)]',
+      ].join(' ')}
+    >
+      {label}
+    </button>
   );
 }

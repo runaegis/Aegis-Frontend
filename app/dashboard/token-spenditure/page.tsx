@@ -37,12 +37,28 @@ type SessionBucket = {
   total: number;
 };
 
-type SessionAegisBucket = {
+/** Unified bar-chart bucket — used by both the "Tokens used" chart
+ *  and the "With Aegis vs without" chart. Drives the MonetarySavingsTile
+ *  too. Aggregation key is either a session_id (granularity = 'session')
+ *  or a time-bucket id (granularity = hour/day/week/month).
+ *
+ *  Replaces an earlier `SessionAegisBucket` type that was fixed to
+ *  per-session aggregation — couldn't scale past ~30 sessions without
+ *  crushing the chart density. */
+type ChartBucket = {
+  /** Display label on the x-axis ("S1", "Oct 5", "Jan '26"). */
   label: string;
-  session: string;
-  /** Modeled larger total without Aegis (~50–70% above recorded). Shown tall + black. */
+  /** Unique bucket id — session_id or time-bucket key. */
+  key: string;
+  /** Bucket start time in ms. 0 for session buckets (sort handled
+   *  elsewhere). Used to chronologically order time buckets. */
+  sortMs: number;
+  input: number;
+  output: number;
+  total: number;
+  /** Modeled larger total without Aegis. */
   without_aegis: number;
-  /** Recorded input + output with Aegis (meter). Shown shorter + orange. */
+  /** Metered total with Aegis (sum of input + output for the bucket). */
   with_aegis: number;
 };
 
@@ -201,6 +217,110 @@ function rangeTableCaption(range: UsageRange): string {
   }
 }
 
+// ─── Chart granularity ─────────────────────────────────────────────
+// At 30+ sessions the per-session bar chart collapses into noise
+// (each bar ~10px wide, x-axis labels collide, outliers crush the
+// scale). Industry-standard fix: aggregate by time bucket whose size
+// adapts to the selected range and the data span — Stripe / Vercel
+// / AWS Cost Explorer all do this. Per-session detail still lives in
+// the table below.
+
+type ChartGranularity = 'session' | 'hour' | 'day' | 'week' | 'month';
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Pick a bucket size given the range + actual data shape. Short
+ *  pilot accounts with few sessions keep the per-session view; once
+ *  the chart would exceed ~12 bars, we switch to time buckets. */
+function pickGranularity(
+  range: UsageRange,
+  rows: TokenMeterResponse[],
+): ChartGranularity {
+  const sessionCount = new Set(rows.map((r) => r.session_id || 'unknown')).size;
+  // Pilot accounts with sparse data read better per-session.
+  if (sessionCount <= 12) return 'session';
+
+  if (range === 'today') return 'hour';
+  if (range === '7d') return 'day';
+  if (range === '30d') return 'day';
+
+  // 'all' — adapt to the actual time span on file.
+  const timestamps = rows
+    .map((r) => parseApiDate(r.timestamp ?? r.created_at ?? '').getTime())
+    .filter((t) => Number.isFinite(t));
+  if (timestamps.length === 0) return 'day';
+  const days = (Math.max(...timestamps) - Math.min(...timestamps)) / DAY_MS;
+  if (days <= 60) return 'day';
+  if (days <= 180) return 'week';
+  return 'month';
+}
+
+const MONTH_SHORT = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+];
+
+/** Hash a timestamp into a bucket id + display label for the given
+ *  granularity. `sortMs` is the bucket's canonical start time, used
+ *  to chronologically order bars on the x-axis. */
+function bucketFor(
+  ts: number,
+  gran: ChartGranularity,
+): { key: string; label: string; sortMs: number } {
+  const d = new Date(ts);
+  if (gran === 'hour') {
+    const start = new Date(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours());
+    const h = start.getHours();
+    const label =
+      h === 0 ? '12 AM' : h < 12 ? `${h} AM` : h === 12 ? '12 PM' : `${h - 12} PM`;
+    return { key: `h-${start.getTime()}`, label, sortMs: start.getTime() };
+  }
+  if (gran === 'day') {
+    const start = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const label = `${MONTH_SHORT[start.getMonth()]} ${start.getDate()}`;
+    return { key: `d-${start.getTime()}`, label, sortMs: start.getTime() };
+  }
+  if (gran === 'week') {
+    // Anchor on Sunday. en-US convention; matches the calendar
+    // pickers in the rest of the app.
+    const day = d.getDay();
+    const start = new Date(d.getFullYear(), d.getMonth(), d.getDate() - day);
+    const label = `${MONTH_SHORT[start.getMonth()]} ${start.getDate()}`;
+    return { key: `w-${start.getTime()}`, label, sortMs: start.getTime() };
+  }
+  if (gran === 'month') {
+    const start = new Date(d.getFullYear(), d.getMonth(), 1);
+    // "Oct" if same year as today, "Oct '25" otherwise — keeps the
+    // axis legible for accounts spanning multiple years without
+    // shouting the year on every bar.
+    const sameYear = start.getFullYear() === new Date().getFullYear();
+    const label = sameYear
+      ? MONTH_SHORT[start.getMonth()]
+      : `${MONTH_SHORT[start.getMonth()]} '${String(start.getFullYear()).slice(-2)}`;
+    return { key: `m-${start.getTime()}`, label, sortMs: start.getTime() };
+  }
+  // session — caller computes its own key from session_id
+  return { key: '', label: '', sortMs: ts };
+}
+
+/** Axis interval (Recharts) chosen so labels never overlap. */
+function tickIntervalFor(n: number): number | 'preserveStartEnd' {
+  if (n <= 14) return 0;
+  if (n <= 35) return Math.max(0, Math.ceil(n / 10) - 1);
+  return 'preserveStartEnd';
+}
+
+/** Chart title suffix that names the bucket scope. */
+function granularityLabel(gran: ChartGranularity): string {
+  switch (gran) {
+    case 'session': return 'per session';
+    case 'hour':    return 'per hour';
+    case 'day':     return 'per day';
+    case 'week':    return 'per week';
+    case 'month':   return 'per month';
+  }
+}
+
 export default function TokenSpenditurePage() {
   const { user, isLoading: userLoading } = useUser();
   const reduce = useReducedMotion();
@@ -309,24 +429,92 @@ export default function TokenSpenditurePage() {
     return map;
   }, [sessionData]);
 
-  /** Without Aegis = taller (modeled uplift); With Aegis = shorter (metered total per session). */
-  const sessionAegisComparison = useMemo<SessionAegisBucket[]>(() => {
-    return sessionData.map((s) => {
-      const meteredTotal = s.total;
-      const mult = aegisBenchMultiplier(s.session);
-      return {
-        label: s.label,
-        session: s.session,
-        without_aegis: Math.round(meteredTotal * mult),
-        with_aegis: meteredTotal,
-      };
-    });
-  }, [sessionData]);
+  /** Bucket granularity, chosen based on the selected range + data
+   *  shape. Drives the bar chart's axis density and the chart title. */
+  const chartGranularity = useMemo<ChartGranularity>(
+    () => pickGranularity(usageRange, displayRows),
+    [usageRange, displayRows],
+  );
+
+  /** Unified chart series — replaces the old `sessionData` + `sessionAegisComparison`.
+   *  Each bucket carries input/output (for the first chart) AND
+   *  without_aegis/with_aegis (for the second chart + the savings tile),
+   *  so both bar charts and the MonetarySavingsTile read from the same
+   *  series with consistent buckets. */
+  const chartData = useMemo<ChartBucket[]>(() => {
+    if (chartGranularity === 'session') {
+      // Per-session view — preserves the original chronological-ordinal
+      // behavior so pilot accounts with few sessions read like before.
+      return sessionData.map((s) => {
+        const mult = aegisBenchMultiplier(s.session);
+        return {
+          label: s.label,
+          key: s.session,
+          sortMs: 0,
+          input: s.input,
+          output: s.output,
+          total: s.total,
+          without_aegis: Math.round(s.total * mult),
+          with_aegis: s.total,
+        };
+      });
+    }
+
+    // Time-bucketed view — sums all rows that fall into the same
+    // hour/day/week/month, regardless of how many sessions contributed.
+    const map = new Map<string, ChartBucket>();
+    for (const row of displayRows) {
+      const tsRaw = row.timestamp ?? row.created_at ?? '';
+      const tsMs = tsRaw ? parseApiDate(tsRaw).getTime() : NaN;
+      if (!Number.isFinite(tsMs)) continue;
+      const { key, label, sortMs } = bucketFor(tsMs, chartGranularity);
+      let b = map.get(key);
+      if (!b) {
+        b = {
+          label,
+          key,
+          sortMs,
+          input: 0,
+          output: 0,
+          total: 0,
+          without_aegis: 0,
+          with_aegis: 0,
+        };
+        map.set(key, b);
+      }
+      const inp = toNumber(row.input_token);
+      const out = toNumber(row.output_token);
+      b.input += inp;
+      b.output += out;
+      b.total = b.input + b.output;
+      // Multiplier is applied per-row at the session level — when
+      // multiple sessions roll into one time bucket, each session's
+      // modeled "without" lift composes correctly.
+      const mult = aegisBenchMultiplier(row.session_id || 'unknown');
+      const rowTotal = inp + out;
+      b.without_aegis += Math.round(rowTotal * mult);
+      b.with_aegis += rowTotal;
+    }
+    return Array.from(map.values()).sort((a, b) => a.sortMs - b.sortMs);
+  }, [chartGranularity, sessionData, displayRows]);
+
+  /** Tick interval picked from the bucket count so x-axis labels
+   *  never collide regardless of range. */
+  const chartTickInterval = useMemo(
+    () => tickIntervalFor(chartData.length),
+    [chartData.length],
+  );
+
+  /** Title suffix that names the bucket scope ("per day", "per session", …). */
+  const chartScopeLabel = useMemo(
+    () => granularityLabel(chartGranularity),
+    [chartGranularity],
+  );
 
   if (userLoading || loading) {
     return (
       <>
-        <Topbar title="Token Spenditure" subtitle={rangeSubtitle(usageRange)} showDateRange />
+        <Topbar title="Token Expenditure" subtitle={rangeSubtitle(usageRange)} showDateRange />
         <div className="mx-auto max-w-[1320px] 2xl:max-w-[1480px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
           <TokenSpendSkeleton />
         </div>
@@ -337,7 +525,7 @@ export default function TokenSpenditurePage() {
   return (
     <>
       <Topbar
-        title="Token Spenditure"
+        title="Token Expenditure"
         subtitle={rangeSubtitle(usageRange)}
         lastUpdated={lastUpdated}
         onRefresh={fetchData}
@@ -436,7 +624,7 @@ export default function TokenSpenditurePage() {
             "With vs Without Aegis" chart below it, just summarised
             for the at-a-glance reviewer. */}
         <MonetarySavingsTile
-          buckets={sessionAegisComparison}
+          buckets={chartData}
           reduce={!!reduce}
         />
 
@@ -466,7 +654,7 @@ export default function TokenSpenditurePage() {
                   eyebrow / subtitle stack eating vertical space. */}
               <div className="flex items-center justify-between gap-3 border-b border-[var(--stroke-soft-200)] px-4 py-3.5">
                 <h2 className="truncate text-[13.5px] font-semibold tracking-[-0.01em] text-[var(--neutral-strong-950)]">
-                  Tokens used per session
+                  Tokens used {chartScopeLabel}
                 </h2>
                 <div className="flex shrink-0 flex-wrap items-center gap-3 text-[11px]">
                   <Legend label="Input" color="var(--chart-plum)" />
@@ -480,7 +668,7 @@ export default function TokenSpenditurePage() {
                 >
                   <BarChart
                     accessibilityLayer
-                    data={sessionData}
+                    data={chartData}
                     barCategoryGap="12%"
                     margin={{ top: 8, right: 4, bottom: 0, left: -8 }}
                   >
@@ -500,7 +688,7 @@ export default function TokenSpenditurePage() {
                       }}
                       tickLine={false}
                       axisLine={false}
-                      interval={0}
+                      interval={chartTickInterval}
                       tickMargin={8}
                     />
                     <YAxis
@@ -525,12 +713,13 @@ export default function TokenSpenditurePage() {
                         <ChartTooltipContent
                           indicator="dot"
                           labelFormatter={(_, payload) => {
-                            // Show the friendly ordinal ("Session S1") in
-                            // the tooltip header, not the raw UUID primary
-                            // key — matches the chart x-axis and Recent
-                            // Records table labels.
+                            // Header reflects the bucket type. "Session S1"
+                            // when granularity is per-session; the bucket's
+                            // own label ("Oct 5", "Jan '26") otherwise. The
+                            // user already knows the scope from the chart
+                            // title — no need to prefix every tooltip.
                             const row = payload?.[0]?.payload as
-                              | SessionBucket
+                              | ChartBucket
                               | undefined;
                             return row?.label ? `Session ${row.label}` : '';
                           }}
@@ -642,7 +831,7 @@ export default function TokenSpenditurePage() {
             <div className="overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)] xl:col-span-3">
               <div className="flex items-center justify-between gap-3 border-b border-[var(--stroke-soft-200)] px-4 py-3.5">
                 <h2 className="truncate text-[13.5px] font-semibold tracking-[-0.01em] text-[var(--neutral-strong-950)]">
-                  With Aegis vs without
+                  With Aegis vs without {chartScopeLabel}
                 </h2>
                 <div className="flex shrink-0 flex-wrap items-center gap-3 text-[11px]">
                   <Legend label="Without Aegis" color="var(--chart-plum)" />
@@ -656,7 +845,7 @@ export default function TokenSpenditurePage() {
                 >
                   <BarChart
                     accessibilityLayer
-                    data={sessionAegisComparison}
+                    data={chartData}
                     barCategoryGap="12%"
                     margin={{ top: 8, right: 4, bottom: 0, left: -8 }}
                   >
@@ -676,7 +865,7 @@ export default function TokenSpenditurePage() {
                       }}
                       tickLine={false}
                       axisLine={false}
-                      interval={0}
+                      interval={chartTickInterval}
                       tickMargin={8}
                     />
                     <YAxis
@@ -701,10 +890,13 @@ export default function TokenSpenditurePage() {
                         <ChartTooltipContent
                           indicator="dot"
                           labelFormatter={(_, payload) => {
+                            // Use the bucket's own label directly — it's
+                            // already friendly ("Oct 5", "Jan '26", or
+                            // "S1") and the chart title states the scope.
                             const row = payload?.[0]?.payload as
-                              | SessionAegisBucket
+                              | ChartBucket
                               | undefined;
-                            return row?.label ? `Session ${row.label}` : '';
+                            return row?.label ?? '';
                           }}
                         />
                       }
@@ -974,7 +1166,12 @@ function MonetarySavingsTile({
   buckets,
   reduce,
 }: {
-  buckets: SessionAegisBucket[];
+  // Structural subset of ChartBucket (and the old SessionAegisBucket) —
+  // the tile only needs the modeled "without Aegis" + metered "with
+  // Aegis" totals to compute savings, so it accepts any bucket shape
+  // that carries them. Lets the time-bucketed chart series feed this
+  // tile without an adapter.
+  buckets: { without_aegis: number; with_aegis: number }[];
   reduce: boolean;
 }) {
   // Total tokens Aegis prevented from being charged for (modeled).
