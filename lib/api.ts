@@ -149,6 +149,57 @@ async function readErrorMessage(res: Response): Promise<string> {
   }
 }
 
+function parseFilenameFromContentDisposition(
+  contentDisposition: string | null,
+  fallback: string,
+): string {
+  if (!contentDisposition) return fallback;
+
+  const utf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8Match?.[1]) {
+    try {
+      return decodeURIComponent(utf8Match[1]);
+    } catch {
+      return utf8Match[1];
+    }
+  }
+
+  const quotedMatch = contentDisposition.match(/filename="([^"]+)"/i);
+  if (quotedMatch?.[1]) return quotedMatch[1];
+
+  const bareMatch = contentDisposition.match(/filename=([^;]+)/i);
+  if (bareMatch?.[1]) return bareMatch[1].trim();
+
+  return fallback;
+}
+
+type AuditExportFilters = {
+  startDate?: string;
+  endDate?: string;
+  agents?: string[];
+  decisions?: string[];
+  repositories?: string[];
+  tools?: string[];
+};
+
+function buildAuditExportUrl(
+  endpoint: "json" | "pdf",
+  filters: AuditExportFilters = {},
+): URL {
+  const url = new URL(`${API_BASE}/audit/export/${endpoint}`);
+
+  if (filters.startDate) url.searchParams.set("start_date", filters.startDate);
+  if (filters.endDate) url.searchParams.set("end_date", filters.endDate);
+  if (filters.agents?.length) url.searchParams.set("agents", filters.agents.join(","));
+  if (filters.decisions?.length)
+    url.searchParams.set("decisions", filters.decisions.join(","));
+  if (filters.repositories?.length)
+    url.searchParams.set("repositories", filters.repositories.join(","));
+  if (filters.tools?.length) url.searchParams.set("tools", filters.tools.join(","));
+
+  return url;
+}
+
 // ── Cache keyed by "userId:page:page_size" so switching pages/accounts works ──
 const _cache = new Map<
   string,
@@ -558,6 +609,42 @@ export const api = {
       const t = new Date(r.timestamp).getTime();
       return t >= start && t <= end;
     });
+  },
+
+  exportAuditJson: async (
+    filters: AuditExportFilters = {},
+  ): Promise<{ blob: Blob; filename: string }> => {
+    const url = buildAuditExportUrl("json", filters);
+    const res = await apiFetch(url.toString());
+    if (!res.ok) {
+      throw new Error(`Failed to export audit JSON: ${await readErrorMessage(res)}`);
+    }
+
+    const blob = await res.blob();
+    const fallback = `aegis-audit-${new Date().toISOString().split("T")[0]}.json`;
+    const filename = parseFilenameFromContentDisposition(
+      res.headers.get("content-disposition"),
+      fallback,
+    );
+    return { blob, filename };
+  },
+
+  exportAuditPdf: async (
+    filters: AuditExportFilters = {},
+  ): Promise<{ blob: Blob; filename: string }> => {
+    const url = buildAuditExportUrl("pdf", filters);
+    const res = await apiFetch(url.toString());
+    if (!res.ok) {
+      throw new Error(`Failed to export audit PDF: ${await readErrorMessage(res)}`);
+    }
+
+    const blob = await res.blob();
+    const fallback = `aegis-audit-${new Date().toISOString().split("T")[0]}.pdf`;
+    const filename = parseFilenameFromContentDisposition(
+      res.headers.get("content-disposition"),
+      fallback,
+    );
+    return { blob, filename };
   },
 
   getRecentActionCount: async (
