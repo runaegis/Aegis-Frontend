@@ -53,6 +53,8 @@ export default function AuditPage() {
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(0);
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
+  const [isExportingJson, setIsExportingJson] = useState(false);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
   const pageSize = 20;
 
   // Filter state — client-side filtering layered over the fetched
@@ -182,33 +184,25 @@ export default function AuditPage() {
   };
 
   const exportJson = async () => {
-    if (!user?.id) {
-      setError('No authenticated user found for export');
-      return;
-    }
+    if (!user?.id) return;
     try {
-      const allEvents = await api.getAuditTrailByDateRange(
-        user.id,
-        `${startDate}T00:00:00Z`,
-        `${endDate}T23:59:59Z`,
-      );
-      const exportData = {
-        exported_at: new Date().toISOString(),
-        exported_by: user?.username || 'unknown',
-        total_records: allEvents.length,
-        events: allEvents,
-      };
-      const blob = new Blob([JSON.stringify(exportData, null, 2)], {
-        type: 'application/json',
+      setIsExportingJson(true);
+      const { blob, filename } = await api.exportAuditJson({
+        startDate: `${startDate}T00:00:00Z`,
+        endDate: `${endDate}T23:59:59Z`,
+        agents: agentFilter,
+        decisions: decisionFilter,
+        repositories: repoFilter,
+        tools: toolFilter,
       });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `aegis-audit-${new Date().toISOString().split('T')[0]}.json`;
+      a.download = filename;
       a.click();
       URL.revokeObjectURL(url);
       toast.success('Audit trail exported', {
-        description: `${allEvents.length.toLocaleString()} events downloaded as JSON.`,
+        description: 'Downloaded from server export API as JSON.',
       });
     } catch (err) {
       setError('Failed to export audit trail');
@@ -218,6 +212,42 @@ export default function AuditPage() {
             ? err.message
             : 'Could not download the audit trail. Try again.',
       });
+    } finally {
+      setIsExportingJson(false);
+    }
+  };
+
+  const exportPdf = async () => {
+    if (!user?.id) return;
+    try {
+      setIsExportingPdf(true);
+      const { blob, filename } = await api.exportAuditPdf({
+        startDate: `${startDate}T00:00:00Z`,
+        endDate: `${endDate}T23:59:59Z`,
+        agents: agentFilter,
+        decisions: decisionFilter,
+        repositories: repoFilter,
+        tools: toolFilter,
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('Audit trail exported', {
+        description: 'Downloaded from server export API as PDF.',
+      });
+    } catch (err) {
+      setError('Failed to export audit trail');
+      toast.error('Export failed', {
+        description:
+          err instanceof Error
+            ? err.message
+            : 'Could not download the audit trail. Try again.',
+      });
+    } finally {
+      setIsExportingPdf(false);
     }
   };
 
@@ -268,7 +298,7 @@ export default function AuditPage() {
             variants={fadeUp}
             className="mt-2 text-[13.5px] text-[var(--neutral-sub-600)]"
           >
-            Every agent action gets a row here. Filter by date, expand for arguments, export as JSON.
+            Every agent action gets a row here. Filter by date, expand for arguments, export as JSON or PDF.
           </motion.p>
         </motion.header>
 
@@ -364,11 +394,20 @@ export default function AuditPage() {
             <Button
               variant="secondary"
               size="sm"
+              onClick={exportPdf}
+              disabled={!user?.id || userLoading || isExportingPdf}
+              leadingIcon={<FileText className="h-3 w-3" strokeWidth={2} />}
+            >
+              {isExportingPdf ? 'Exporting PDF...' : 'Export PDF'}
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={exportJson}
-              disabled={!user?.id || userLoading}
+              disabled={!user?.id || userLoading || isExportingJson}
               leadingIcon={<Download className="h-3 w-3" strokeWidth={2} />}
             >
-              Export JSON
+              {isExportingJson ? 'Exporting JSON...' : 'Export JSON'}
             </Button>
           </div>
           {/* Result-count strip — only shows when filtering is
