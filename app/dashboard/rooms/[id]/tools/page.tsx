@@ -48,65 +48,135 @@ import { fadeUp, staggerContainer } from '@/lib/motion';
 // so we don't redeclare on every render. Order within groups matters
 // for UI scan rhythm: most-common first.
 const TOOL_GROUPS: Record<string, string[]> = {
-  Repository: [
-    'get_file_contents',
-    'create_or_update_file',
-    'create_repository',
-    'fork_repository',
-    'push_files',
-    'search_repositories',
+  'Branch tools': [
+    'create_branch',
+    'list_branches',
   ],
-
-  'Issues & PR': [
-    'get_issue',
-    'list_issues',
-    'create_issue',
-    'update_issue',
-    'add_issue_comment',
-
-    'get_pull_request',
-    'list_pull_requests',
+  'File tools': [
+    'create_or_update_file',
+    'delete_file',
+    'get_file_contents',
+    'push_files',
+  ],
+  'Pull request tools': [
+    'add_comment_to_pending_review',
+    'add_reply_to_pull_request_comment',
     'create_pull_request',
-    'create_pull_request_review',
+    'create_pull_request_with_copilot',
+    'list_pull_requests',
     'merge_pull_request',
-
-    'get_pull_request_comments',
-    'get_pull_request_reviews',
-    'get_pull_request_files',
-    'get_pull_request_status',
-
+    'pull_request_read',
+    'pull_request_review_write',
+    'request_copilot_review',
+    'update_pull_request',
     'update_pull_request_branch',
   ],
-
-  Search: [
+  'Issue tools': [
+    'add_issue_comment',
+    'assign_copilot_to_issue',
+    'issue_read',
+    'issue_write',
+    'list_issue_types',
+    'list_issues',
+    'sub_issue_write',
+  ],
+  'Repository tools': [
+    'create_repository',
+    'fork_repository',
+    'list_repository_collaborators',
+    'search_repositories',
+  ],
+  'Commit, release, and tag tools': [
+    'get_commit',
+    'get_latest_release',
+    'get_release_by_tag',
+    'get_tag',
+    'list_commits',
+    'list_releases',
+    'list_tags',
+    'search_commits',
+  ],
+  'Label tools': [
+    'get_label',
+  ],
+  'User, team, and tool metadata': [
+    'get_copilot_job_status',
+    'get_me',
+    'get_team_members',
+    'get_teams',
+    'get_tool_details',
+    'set_agent_details',
+  ],
+  'Search tools': [
     'search_code',
     'search_issues',
+    'search_pull_requests',
     'search_users',
   ],
-
-  Git: [
-    'create_branch',
-    'list_commits',
+  'Security and workflow secret tools': [
+    'create_workflow_secret',
+    'delete_workflow_secret',
+    'run_secret_scanning',
+    'update_workflow_secret',
   ],
 };
 
-const READ_ONLY_TOOLS = new Set([
+const ALL_TOOLS = Array.from(new Set(Object.values(TOOL_GROUPS).flat()));
+
+const DEVELOPER_DEFAULTS = new Set([
+  'list_branches',
   'get_file_contents',
-  'get_issue',
-  'get_pull_request',
-  'get_pull_request_comments',
-  'get_pull_request_files',
-  'get_pull_request_reviews',
-  'get_pull_request_status',
-  'list_commits',
-  'list_issues',
+  'add_comment_to_pending_review',
+  'add_reply_to_pull_request_comment',
+  'create_pull_request',
   'list_pull_requests',
+  'pull_request_read',
+  'pull_request_review_write',
+  'update_pull_request',
+  'add_issue_comment',
+  'issue_read',
+  'issue_write',
+  'list_issue_types',
+  'list_issues',
+  'sub_issue_write',
+  'list_repository_collaborators',
+  'search_repositories',
+  'get_commit',
+  'get_latest_release',
+  'get_release_by_tag',
+  'get_tag',
+  'list_commits',
+  'list_releases',
+  'list_tags',
+  'search_commits',
+  'get_label',
+  'get_copilot_job_status',
+  'get_me',
+  'get_tool_details',
   'search_code',
   'search_issues',
-  'search_repositories',
+  'search_pull_requests',
   'search_users',
 ]);
-const ALL_TOOLS = Object.values(TOOL_GROUPS).flat();
+
+const ADMIN_DEFAULTS = new Set([
+  ...DEVELOPER_DEFAULTS,
+  'create_branch',
+  'create_or_update_file',
+  'delete_file',
+  'push_files',
+  'create_pull_request_with_copilot',
+  'merge_pull_request',
+  'request_copilot_review',
+  'update_pull_request_branch',
+  'assign_copilot_to_issue',
+  'create_repository',
+  'fork_repository',
+  'get_team_members',
+  'get_teams',
+  'set_agent_details',
+  'run_secret_scanning',
+]);
 
 const ROLE_LEVELS: Record<string, number> = {
   DEVELOPER: 1,
@@ -130,7 +200,7 @@ const TEMPLATES: Record<
     tools: Object.fromEntries(
       ALL_TOOLS.map((t) => [
         t,
-        READ_ONLY_TOOLS.has(t),
+        DEVELOPER_DEFAULTS.has(t),
       ]),
     ),
   },
@@ -138,7 +208,7 @@ const TEMPLATES: Record<
     title: 'Safe write',
     description: 'Adds branches, issues, and PRs. No direct pushes to main.',
     tools: Object.fromEntries(
-      ALL_TOOLS.map((t) => [t, t !== 'push_files']),
+      ALL_TOOLS.map((t) => [t, ADMIN_DEFAULTS.has(t)]),
     ),
   },
   full: {
@@ -583,9 +653,7 @@ function TemplateCard({
         'transition-all duration-200 ease-[cubic-bezier(0.2,0.8,0.2,1)]',
         'shadow-[0_1px_2px_rgba(23,23,23,0.04)]',
         'disabled:cursor-not-allowed disabled:opacity-60',
-        recommended
-          ? 'border-[var(--primary-base)]/30 hover:border-[var(--primary-base)]/60 hover:shadow-[0_4px_12px_rgba(23,23,23,0.06)]'
-          : 'border-[var(--stroke-soft-200)] hover:border-[var(--stroke-sub-300)] hover:shadow-[0_4px_12px_rgba(23,23,23,0.06)]',
+        'border-[var(--stroke-soft-200)] hover:border-[var(--stroke-sub-300)] hover:shadow-[0_4px_12px_rgba(23,23,23,0.06)]',
       )}
     >
       <div className="flex w-full items-center justify-between gap-2">
