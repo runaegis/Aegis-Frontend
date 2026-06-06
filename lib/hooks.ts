@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { User } from './types';
 
 const USER_KEY = 'aegis_user';
@@ -59,17 +59,20 @@ export function useOnboardingStep() {
   return { step, setStep };
 }
 
-export function useAutoRefresh(callback: () => void, intervalMs: number = 30000) {
+export function useAutoRefresh(callback: () => void, intervalMs: number = 60000) {
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+  const callbackRef = useRef(callback);
 
   useEffect(() => {
-    callback();
-    const interval = setInterval(() => {
-      callback();
+    callbackRef.current = callback;
+  }, [callback]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      callbackRef.current();
       setLastUpdated(new Date());
     }, intervalMs);
-    return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => window.clearInterval(interval);
   }, [intervalMs]);
 
   return { lastUpdated };

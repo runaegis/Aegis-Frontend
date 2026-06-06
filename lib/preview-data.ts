@@ -6,6 +6,10 @@
  */
 
 import { api } from './api';
+import {
+  matchesActionDateFilters,
+  type ActionDateFilters,
+} from './dashboardDateRange';
 import type {
   AggregatedSessionAction,
   MCPApproval,
@@ -280,8 +284,6 @@ function aggregateSessions(runs: SessionAction[]): Session[] {
   );
 }
 
-const SESSIONS: Session[] = aggregateSessions(RUNS);
-
 // Approvals
 const APPROVALS: MCPApproval[] = Array.from({ length: 11 }, (_, i) => {
   const status = pickW(APPROVAL_STATUSES);
@@ -515,7 +517,42 @@ function computeMetrics(runs: SessionAction[]): Metrics {
   };
 }
 
-const METRICS = computeMetrics(RUNS);
+function filterRunsByDate(filters: ActionDateFilters = {}): SessionAction[] {
+  return RUNS.filter((run) => matchesActionDateFilters(run.timestamp, filters));
+}
+
+function filterAuditRuns(
+  filters: {
+    startDate?: string;
+    endDate?: string;
+    agents?: string[];
+    decisions?: string[];
+    repositories?: string[];
+    tools?: string[];
+  } = {},
+): SessionAction[] {
+  return filterRunsByDate({
+    startDate: filters.startDate,
+    endDate: filters.endDate,
+  }).filter((run) => {
+    if (filters.agents?.length && !filters.agents.includes(run.agent_name)) {
+      return false;
+    }
+    if (filters.decisions?.length && !filters.decisions.includes(run.decision)) {
+      return false;
+    }
+    if (
+      filters.repositories?.length &&
+      !filters.repositories.includes(run.target_repo ?? '')
+    ) {
+      return false;
+    }
+    if (filters.tools?.length && !filters.tools.includes(run.tool_name)) {
+      return false;
+    }
+    return true;
+  });
+}
 
 // ── install ────────────────────────────────────────────────────────────────
 let installed = false;
@@ -540,9 +577,9 @@ export function installPreviewApi() {
     }
   };
 
-  api.getRuns           = async () => RUNS;
-  api.getSessions       = async () => SESSIONS;
-  api.getMetrics        = async () => METRICS;
+  api.getRuns           = async (_userId, filters = {}) => filterRunsByDate(filters);
+  api.getSessions       = async (_userId, filters = {}) => aggregateSessions(filterRunsByDate(filters));
+  api.getMetrics        = async (_userId, filters = {}) => computeMetrics(filterRunsByDate(filters));
 
   // Paginated variants — these are what `DashboardDataProvider` calls
   // on mount for every dashboard route. Without these mocks, the
@@ -552,15 +589,16 @@ export function installPreviewApi() {
   // the one exception because it reads from `api.getRuns` directly,
   // bypassing the paginated context — that's why ONLY Dashboard
   // appeared populated before this fix.
-  api.getSessionActionsPage = async (_userId, page = 1, page_size = 20) => {
+  api.getSessionActionsPage = async (_userId, page = 1, page_size = 20, filters = {}) => {
+    const filteredRuns = filterRunsByDate(filters);
     const start = (page - 1) * page_size;
-    const items = RUNS.slice(start, start + page_size);
+    const items = filteredRuns.slice(start, start + page_size);
     return {
       items,
-      total: RUNS.length,
+      total: filteredRuns.length,
       page,
       page_size,
-      pages: Math.max(1, Math.ceil(RUNS.length / page_size)),
+      pages: Math.max(1, Math.ceil(filteredRuns.length / page_size)),
     };
   };
 
@@ -568,9 +606,11 @@ export function installPreviewApi() {
   // aggregate plus the constituent runs inlined (`sessions` array). The
   // Sessions page renders the parent row from the aggregate and the
   // expanded child rows from `sessions[]`.
-  api.getAggregatedSessions = async (_userId, page = 1, page_size = 20) => {
-    const aggregated: AggregatedSessionAction[] = SESSIONS.map((s) => {
-      const sessionRuns = RUNS.filter((r) => r.session_id === s.session_id);
+  api.getAggregatedSessions = async (_userId, page = 1, page_size = 20, filters = {}) => {
+    const filteredRuns = filterRunsByDate(filters);
+    const filteredSessions = aggregateSessions(filteredRuns);
+    const aggregated: AggregatedSessionAction[] = filteredSessions.map((s) => {
+      const sessionRuns = filteredRuns.filter((r) => r.session_id === s.session_id);
       const execTimes = sessionRuns.map((r) => r.execution_time ?? 0);
       const tools = Array.from(new Set(sessionRuns.map((r) => r.tool_name)));
       return {
@@ -621,6 +661,19 @@ export function installPreviewApi() {
       const t = new Date(r.timestamp).getTime();
       return t >= start && t <= end;
     });
+  };
+  api.getAuditSessionsPage = async (filters = {}) => {
+    const page = filters.page ?? 1;
+    const page_size = filters.page_size ?? 20;
+    const items = filterAuditRuns(filters);
+    const start = (page - 1) * page_size;
+    return {
+      items: items.slice(start, start + page_size),
+      total: items.length,
+      page,
+      page_size,
+      pages: Math.max(1, Math.ceil(items.length / page_size)),
+    };
   };
   api.getRecentActionCount = async () => [{ count: RUNS.slice(0, 3).length }];
 
