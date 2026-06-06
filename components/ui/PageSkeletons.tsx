@@ -146,15 +146,6 @@ export function DashboardHomeSkeleton() {
         </div>
       </section>
 
-      {/* 6-cell stat strip */}
-      <section className="mb-6 overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
-        <div className="grid grid-cols-2 divide-y divide-[var(--stroke-soft-200)] sm:grid-cols-3 sm:divide-y-0 lg:grid-cols-6 lg:divide-x lg:divide-y-0">
-          {[0, 1, 2, 3, 4, 5].map((i) => (
-            <SkeletonStatCell key={i} />
-          ))}
-        </div>
-      </section>
-
       {/* Two-column: activity feed + approvals */}
       <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
         {/* Activity feed */}

@@ -105,8 +105,9 @@ export default function RoomActivityPage() {
     void fetchLogs();
   }, [fetchLogs]);
 
-  // Auto-refresh the visible page every 30s, mirroring Runs.
-  const { lastUpdated } = useAutoRefresh(fetchLogs, 30000);
+  // Auto-refresh the visible page every minute. Manual refresh is the
+  // primary control, so background polling can stay gentler.
+  const { lastUpdated } = useAutoRefresh(fetchLogs, 60000);
 
   // Room layout shows its own loading state — only short-circuit the
   // activity card when the room itself is in error, so the layout's

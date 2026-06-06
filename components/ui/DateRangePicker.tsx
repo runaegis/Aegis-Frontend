@@ -51,6 +51,37 @@ function formatDate(d: Date): string {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+function isSameLocalDay(a: Date, b: Date): boolean {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
+
+function matchesPreset(range: DateRange | undefined, preset: DatePreset): boolean {
+  if (!range?.from) return false;
+
+  const expected = applyPreset(preset);
+  if (!expected.from) return false;
+
+  const actualTo = range.to ?? range.from;
+  const expectedTo = expected.to ?? expected.from;
+
+  return (
+    isSameLocalDay(range.from, expected.from) &&
+    isSameLocalDay(actualTo, expectedTo)
+  );
+}
+
+function detectPreset(
+  range: DateRange | undefined,
+  fallback: DatePreset | null,
+): DatePreset | null {
+  if (!range?.from) return null;
+  return PRESETS.find((preset) => matchesPreset(range, preset.id))?.id ?? fallback;
+}
+
 function rangeLabel(range: DateRange | undefined, presetLabel?: string): string {
   if (presetLabel) return presetLabel;
   if (!range?.from) return 'Pick a range';
@@ -84,10 +115,15 @@ export function DateRangePicker({
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<DateRange | undefined>(value);
   const [activePreset, setActivePreset] = useState<DatePreset | null>(
-    defaultPreset ?? null,
+    detectPreset(value, defaultPreset ?? null),
   );
   const popoverRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    setDraft(value);
+    setActivePreset(detectPreset(value, null));
+  }, [value]);
 
   useEffect(() => {
     if (!open) return;

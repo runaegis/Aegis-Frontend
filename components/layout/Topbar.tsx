@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import type { DateRange } from 'react-day-picker';
 import { cn } from '@/lib/utils';
+import { getDefaultDashboardDateRange } from '@/lib/dashboardDateRange';
 import { DateRangePicker } from '@/components/ui/DateRangePicker';
 import { CommandPaletteTrigger } from '@/components/ui/CommandPaletteTrigger';
 import { UserMenu } from '@/components/ui/UserMenu';
@@ -26,6 +27,10 @@ interface TopbarProps {
    * time-bound data to filter.
    */
   showDateRange?: boolean;
+  /** Controlled value for pages that wire the picker into real filtering. */
+  dateRangeValue?: DateRange | undefined;
+  /** Controlled change handler paired with `dateRangeValue`. */
+  onDateRangeChange?: (range: DateRange | undefined) => void;
 }
 
 function formatRelative(d: Date) {
@@ -44,19 +49,22 @@ export default function Topbar({
   minimal = false,
   unreadCount = 0,
   showDateRange = false,
+  dateRangeValue,
+  onDateRangeChange,
 }: TopbarProps) {
-  // Date range state only lives here when the picker is actually
-  // rendered. The state is local to the Topbar today (no global
-  // filtering wired up yet) — that's tracked as a follow-up. Pages
-  // that need real filtering (e.g. Audit) embed their own
-  // DateRangePicker in the page body instead.
-  const [range, setRange] = useState<DateRange | undefined>(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const start = new Date(today);
-    start.setDate(start.getDate() - 6);
-    return { from: start, to: today };
-  });
+  // Local fallback state so existing pages can keep rendering the picker
+  // without opting into shared filtering yet.
+  const [localRange, setLocalRange] = useState<DateRange | undefined>(() =>
+    getDefaultDashboardDateRange(),
+  );
+  const range = dateRangeValue ?? localRange;
+  const handleDateRangeChange = (next: DateRange | undefined) => {
+    if (onDateRangeChange) {
+      onDateRangeChange(next);
+      return;
+    }
+    setLocalRange(next);
+  };
 
   // Refresh in-flight state. We track it locally so the icon can
   // spin even when the caller's onRefresh isn't awaitable from here.
@@ -158,8 +166,8 @@ export default function Topbar({
           <div className="hidden sm:inline-flex">
             <DateRangePicker
               value={range}
-              onChange={setRange}
-              defaultPreset="last7"
+              onChange={handleDateRangeChange}
+              defaultPreset="ytd"
               size="sm"
             />
           </div>

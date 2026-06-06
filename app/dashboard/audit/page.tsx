@@ -18,6 +18,10 @@ import {
 } from 'lucide-react';
 import { DateRangePicker } from '@/components/ui/DateRangePicker';
 import { api } from '@/lib/api';
+import {
+  getActionDateFilters,
+  getDefaultDashboardDateRange,
+} from '@/lib/dashboardDateRange';
 import { useUser } from '@/lib/hooks';
 import { SessionAction } from '@/lib/types';
 import { formatFullTimestamp, truncate } from '@/lib/utils';
@@ -49,6 +53,8 @@ export default function AuditPage() {
   const toast = useToast();
   const reduce = useReducedMotion();
   const [events, setEvents] = useState<SessionAction[]>([]);
+  const [eventsTotal, setEventsTotal] = useState(0);
+  const [eventsPages, setEventsPages] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(0);
@@ -69,17 +75,22 @@ export default function AuditPage() {
   const [toolFilter, setToolFilter] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const initialRange = useMemo<DateRange>(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const start = new Date(today);
-    start.setDate(start.getDate() - 6);
-    return { from: start, to: today };
-  }, []);
+  const initialRange = useMemo<DateRange>(() => getDefaultDashboardDateRange(), []);
   const [range, setRange] = useState<DateRange | undefined>(initialRange);
-
-  const startDate = (range?.from ?? initialRange.from!).toISOString().split('T')[0];
-  const endDate = (range?.to ?? range?.from ?? initialRange.to!).toISOString().split('T')[0];
+  const dateFilters = useMemo(
+    () => getActionDateFilters(range ?? initialRange),
+    [range, initialRange],
+  );
+  const auditFilters = useMemo(
+    () => ({
+      ...dateFilters,
+      agents: agentFilter,
+      decisions: decisionFilter,
+      repositories: repoFilter,
+      tools: toolFilter,
+    }),
+    [dateFilters, agentFilter, decisionFilter, repoFilter, toolFilter],
+  );
 
   const fetchData = useCallback(async () => {
     if (!user?.id) {
@@ -91,19 +102,30 @@ export default function AuditPage() {
     }
     setLoading(true);
     try {
-      const data = await api.getAuditTrail(user.id, pageSize, page * pageSize);
-      setEvents(data);
+      const data = await api.getAuditSessionsPage({
+        ...auditFilters,
+        page: page + 1,
+        page_size: pageSize,
+      });
+      setEvents(data.items);
+      setEventsTotal(data.total);
+      setEventsPages(data.pages);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load audit trail');
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, user?.id, userLoading]);
+  }, [auditFilters, page, pageSize, user?.id, userLoading]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  useEffect(() => {
+    setPage(0);
+    setExpandedRow(null);
+  }, [auditFilters]);
 
   // Derive unique filter options from the loaded events. Memoized
   // so we don't rebuild the option arrays on every render — only
@@ -131,24 +153,11 @@ export default function AuditPage() {
     };
   }, [events]);
 
-  // Apply all filters + free-text search to derive the visible rows.
-  // Free-text matches across summary, tool, repo, branch, and agent —
-  // covers most reviewer use cases ("find anything mentioning X").
+  // Server handles date / agent / decision / repo / tool. Free-text stays
+  // client-side because the backend doesn't expose search yet.
   const filteredEvents = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     return events.filter((ev) => {
-      if (agentFilter.length && !agentFilter.includes(ev.agent_name)) {
-        return false;
-      }
-      if (decisionFilter.length && !decisionFilter.includes(ev.decision)) {
-        return false;
-      }
-      if (repoFilter.length && !repoFilter.includes(ev.target_repo ?? '')) {
-        return false;
-      }
-      if (toolFilter.length && !toolFilter.includes(ev.tool_name)) {
-        return false;
-      }
       if (q) {
         const hay = [
           ev.action_summary,
@@ -164,7 +173,7 @@ export default function AuditPage() {
       }
       return true;
     });
-  }, [events, agentFilter, decisionFilter, repoFilter, toolFilter, searchQuery]);
+  }, [events, searchQuery]);
 
   // Tracks whether any non-date filter is active. Drives the
   // "Clear filters" affordance in the filter bar.
@@ -188,8 +197,8 @@ export default function AuditPage() {
     try {
       setIsExportingJson(true);
       const { blob, filename } = await api.exportAuditJson({
-        startDate: `${startDate}T00:00:00Z`,
-        endDate: `${endDate}T23:59:59Z`,
+        startDate: dateFilters.startDate,
+        endDate: dateFilters.endDate,
         agents: agentFilter,
         decisions: decisionFilter,
         repositories: repoFilter,
@@ -222,8 +231,8 @@ export default function AuditPage() {
     try {
       setIsExportingPdf(true);
       const { blob, filename } = await api.exportAuditPdf({
-        startDate: `${startDate}T00:00:00Z`,
-        endDate: `${endDate}T23:59:59Z`,
+        startDate: dateFilters.startDate,
+        endDate: dateFilters.endDate,
         agents: agentFilter,
         decisions: decisionFilter,
         repositories: repoFilter,
@@ -319,7 +328,7 @@ export default function AuditPage() {
             <DateRangePicker
               value={range}
               onChange={setRange}
-              defaultPreset="last7"
+              defaultPreset="ytd"
               size="sm"
             />
             <FilterChip
@@ -416,7 +425,7 @@ export default function AuditPage() {
           {hasActiveFilters && (
             <div className="mt-2.5 text-[11px] text-[var(--neutral-soft-400)]">
               Showing {filteredEvents.length.toLocaleString()} of{' '}
-              {events.length.toLocaleString()} loaded events
+              {eventsTotal.toLocaleString()} filtered events
             </div>
           )}
         </motion.div>
@@ -510,7 +519,7 @@ export default function AuditPage() {
                   size="sm"
                   variant="secondary"
                   onClick={() => setPage((p) => p + 1)}
-                  disabled={events.length < pageSize}
+                  disabled={eventsPages > 0 ? page + 1 >= eventsPages : events.length === 0}
                   trailingIcon={<ChevronRight className="h-3.5 w-3.5" strokeWidth={2} />}
                 >
                   Next
