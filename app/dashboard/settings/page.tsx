@@ -545,7 +545,7 @@ function ProfileSection({
               <p className="text-[11.5px] text-[var(--neutral-soft-400)]">
                 {customAvatar
                   ? 'Custom upload. Remove to use the generative default.'
-                  : 'Auto-generated from your username. Upload to customize.'}
+                  : 'Auto-generated from your username.'}
               </p>
             </div>
             <input
@@ -567,7 +567,7 @@ function ProfileSection({
             <Button
               variant="secondary"
               onClick={() => fileInputRef.current?.click()}
-              disabled={avatarBusy}
+              disabled
               leadingIcon={
                 <Upload className="h-3.5 w-3.5" strokeWidth={2} />
               }
