@@ -165,7 +165,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         const userResponse = !user?.id
           ? await api.getUserDetails()
           : user;
-
+        console.log('User details loaded:', userResponse);
         if (!user?.id && userResponse) {
           setUser(userResponse);
         }
