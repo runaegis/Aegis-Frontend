@@ -28,6 +28,13 @@ type SaveUserPayload = Pick<
   email?: string;
 };
 
+type UpdateUserDetailsPayload = {
+  username?: string;
+  email?: string;
+  github_pat?: string;
+  github_user_id?: number | string;
+};
+
 function getAPIBase(): string {
   let url = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
   if (!url.startsWith("http://") && !url.startsWith("https://")) {
@@ -151,6 +158,46 @@ async function readErrorMessage(res: Response): Promise<string> {
   } catch {
     return 'Network error';
   }
+}
+
+function normalizeUserPayload(
+  raw: Partial<User> & Record<string, unknown>,
+  fallback: UpdateUserDetailsPayload = {},
+): User {
+  const githubUserId =
+    typeof raw.github_user_id === "number"
+      ? raw.github_user_id
+      : typeof raw.github_user_id === "string"
+        ? Number(raw.github_user_id)
+        : typeof fallback.github_user_id === "number"
+          ? fallback.github_user_id
+          : typeof fallback.github_user_id === "string"
+            ? Number(fallback.github_user_id)
+            : 0;
+
+  const accessToken =
+    typeof raw.access_token === "string"
+      ? raw.access_token
+      : typeof raw.github_pat === "string"
+        ? raw.github_pat
+        : fallback.github_pat;
+
+  return {
+    id: typeof raw.id === "string" ? raw.id : undefined,
+    github_user_id: Number.isFinite(githubUserId) ? githubUserId : 0,
+    username:
+      typeof raw.username === "string"
+        ? raw.username
+        : fallback.username ?? "",
+    email:
+      typeof raw.email === "string"
+        ? raw.email
+        : fallback.email ?? "",
+    created_at:
+      typeof raw.created_at === "string" ? raw.created_at : undefined,
+    access_token: accessToken,
+    github_pat: accessToken,
+  };
 }
 
 function parseFilenameFromContentDisposition(
@@ -972,6 +1019,58 @@ export const api = {
     }
 
     throw new Error("Failed to retrieve user after save");
+  },
+
+  updateUserDetails: async (
+    payload: UpdateUserDetailsPayload,
+  ): Promise<User> => {
+    const params = new URLSearchParams();
+
+    if (typeof payload.username === "string" && payload.username.trim()) {
+      params.set("username", payload.username.trim());
+    }
+    if (typeof payload.email === "string" && payload.email.trim()) {
+      params.set("email", payload.email.trim());
+    }
+    if (typeof payload.github_pat === "string" && payload.github_pat.trim()) {
+      params.set("github_pat", payload.github_pat.trim());
+    }
+    if (
+      payload.github_user_id !== undefined &&
+      payload.github_user_id !== null &&
+      String(payload.github_user_id).trim()
+    ) {
+      params.set("github_user_id", String(payload.github_user_id).trim());
+    }
+
+    if (!params.toString()) {
+      throw new Error("Nothing to update.");
+    }
+
+    const res = await apiFetch(`${API_BASE}/auth/user/update?${params.toString()}`, {
+      method: "POST",
+    });
+
+    if (!res.ok) {
+      const message = await readErrorMessage(res);
+      throw new Error(message || "Failed to update user details.");
+    }
+
+    let data: unknown;
+    try {
+      data = await res.json();
+    } catch {
+      throw new Error("Server returned an invalid response.");
+    }
+
+    if (!data || typeof data !== "object") {
+      throw new Error("Server returned an invalid user payload.");
+    }
+
+    return normalizeUserPayload(
+      data as Partial<User> & Record<string, unknown>,
+      payload,
+    );
   },
 
   syncRepos: (github_user_id: number, github_pat: string) =>
