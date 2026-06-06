@@ -168,12 +168,12 @@ export default function DashboardHomePage() {
     const safe = total === 0 ? 1 : total;
     return [
       // `color` stays saturated for the distribution bar (needs to read
-      // clearly at a glance). `dot` is the pastel variant for the legend
-      // swatches — softer, more refined at small sizes.
-      { key: 'allow',    label: 'Allow',    value: metrics.allows,    pct: (metrics.allows / safe) * 100,    color: 'var(--success)',     dot: '#bfe7d2' },
-      { key: 'rewrite',  label: 'Rewrite',  value: metrics.rewrites,  pct: (metrics.rewrites / safe) * 100,  color: 'var(--feature)',     dot: '#d6c9f6' },
-      { key: 'approval', label: 'Approval', value: metrics.approvals, pct: (metrics.approvals / safe) * 100, color: 'var(--warning)',     dot: '#f9dba0' },
-      { key: 'deny',     label: 'Deny',     value: metrics.denies,    pct: (metrics.denies / safe) * 100,    color: 'var(--error)',       dot: '#f5b9be' },
+      // clearly at a glance. Keep the legend dot identical so the
+      // visual mapping is one-to-one.
+      { key: 'allow',    label: 'Allow',    value: metrics.allows,    pct: (metrics.allows / safe) * 100,    color: 'var(--success)',     dot: 'var(--success)' },
+      { key: 'rewrite',  label: 'Rewrite',  value: metrics.rewrites,  pct: (metrics.rewrites / safe) * 100,  color: 'var(--feature)',     dot: 'var(--feature)' },
+      { key: 'approval', label: 'Approval', value: metrics.approvals, pct: (metrics.approvals / safe) * 100, color: 'var(--warning)',     dot: 'var(--warning)' },
+      { key: 'deny',     label: 'Deny',     value: metrics.denies,    pct: (metrics.denies / safe) * 100,    color: 'var(--error)',       dot: 'var(--error)' },
     ];
   }, [metrics]);
 
