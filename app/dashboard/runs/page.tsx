@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { DUR, EASE, fadeUp, staggerContainer } from '@/lib/motion';
 import { useUser } from '@/lib/hooks';
+import { formatDashboardDateRangeLabel } from '@/lib/dashboardDateRange';
 import { SessionAction } from '@/lib/types';
 import { useDashboardData } from '@/lib/dashboardDataContext';
 import {
@@ -42,13 +43,15 @@ import {
 } from '@/components/ui/Table';
 
 export default function RunsPage() {
-  const { user, isLoading: userLoading } = useUser();
+  const { isLoading: userLoading } = useUser();
   const reduce = useReducedMotion();
   const [search, setSearch] = useState('');
   const [decisionFilter, setDecisionFilter] = useState('all');
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
   const {
+  dateRange,
+  setDateRange,
   sessionActions: runs,
   runsLoading,
   runsLoadingMore,
@@ -60,6 +63,10 @@ export default function RunsPage() {
   metrics,
   lastUpdated,
 } = useDashboardData();
+  const rangeLabel = useMemo(
+    () => formatDashboardDateRangeLabel(dateRange, 'All time'),
+    [dateRange],
+  );
 
   const filteredRuns = runs.filter((run) => {
     const matchesSearch =
@@ -135,7 +142,13 @@ export default function RunsPage() {
   if (userLoading || (runsLoading && runs.length === 0)) {
     return (
       <>
-        <Topbar title="Runs" subtitle="Real-time agent activity" showDateRange />
+        <Topbar
+          title="Runs"
+          subtitle="Real-time agent activity"
+          showDateRange
+          dateRangeValue={dateRange}
+          onDateRangeChange={setDateRange}
+        />
         <div className="mx-auto max-w-[1320px] 2xl:max-w-[1480px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
           <RunsSkeleton />
         </div>
@@ -151,6 +164,8 @@ export default function RunsPage() {
         lastUpdated={lastUpdated}
         onRefresh={refreshRuns}
         showDateRange
+        dateRangeValue={dateRange}
+        onDateRangeChange={setDateRange}
       />
       <div className="mx-auto max-w-[1320px] 2xl:max-w-[1480px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
         {runsError && (
@@ -174,7 +189,7 @@ export default function RunsPage() {
             variants={fadeUp}
             className="mb-2 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-[var(--neutral-soft-400)]"
           >
-            Agent activity
+            Agent activity · {rangeLabel}
           </motion.p>
           <motion.h1
             variants={fadeUp}
@@ -186,7 +201,7 @@ export default function RunsPage() {
             variants={fadeUp}
             className="mt-2 text-[13.5px] text-[var(--neutral-sub-600)]"
           >
-            {metrics.total.toLocaleString()} {metrics.total === 1 ? 'decision' : 'decisions'} evaluated · auto-refresh every 30s
+            {metrics.total.toLocaleString()} {metrics.total === 1 ? 'decision' : 'decisions'} evaluated in the selected range · auto-refresh every 30s
           </motion.p>
         </motion.header>
 

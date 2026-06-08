@@ -122,16 +122,16 @@ export default function RoomConnectPage() {
     }
   }, [user?.id, room?.repo_name]);
 
-  // Initial check + 8-second poll while the tab is active. The poll
-  // is deliberately slow — the user just wants to know "it worked,"
-  // not stream actions. The Overview tab is the live view.
+  // Initial check + 1-minute poll while the tab is active. Manual
+  // refresh is available here, so the background verification can be
+  // much lighter on the backend.
   useEffect(() => {
     void checkConnection();
     const id = window.setInterval(() => {
       if (document.visibilityState === 'visible') {
         void checkConnection();
       }
-    }, 8000);
+    }, 60000);
     return () => window.clearInterval(id);
   }, [checkConnection]);
 
@@ -510,7 +510,7 @@ export default function RoomConnectPage() {
                     </p>
                     <p className="mt-0.5 text-[11.5px] text-[var(--neutral-sub-600)]">
                       Run any command in your agent. We&apos;ll detect it
-                      automatically — checks every 8s.
+                      automatically — checks every minute.
                     </p>
                   </>
                 )}

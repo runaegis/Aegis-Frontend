@@ -119,6 +119,9 @@ const TOOL_GROUPS: Record<string, string[]> = {
     'run_secret_scanning',
     'update_workflow_secret',
   ],
+  'Workflow tools': [
+    'workflow_dispatch',
+  ],
 };
 
 const ALL_TOOLS = Array.from(new Set(Object.values(TOOL_GROUPS).flat()));
@@ -176,6 +179,7 @@ const ADMIN_DEFAULTS = new Set([
   'get_teams',
   'set_agent_details',
   'run_secret_scanning',
+  'workflow_dispatch',
 ]);
 
 const ROLE_LEVELS: Record<string, number> = {

@@ -162,7 +162,10 @@ export default function SettingsPage() {
   // every error → toast.error PLUS the inline banner (so it's both
   // glanceable and persistent for hard failures).
   const handleSectionSuccess = useCallback(
-    (message: string) => toast.success(message),
+    (message: string) => {
+      setError(null);
+      toast.success(message);
+    },
     [toast],
   );
   const handleSectionError = useCallback(
@@ -411,7 +414,8 @@ function ProfileSection({
 }) {
   const [username, setUsername] = useState(user?.username || '');
   const [email, setEmail] = useState(user?.email || '');
-  const [token, setToken] = useState(user?.access_token || '');
+  const [githubUserId, setGithubUserId] = useState(String(user?.github_user_id ?? ''));
+  const [token, setToken] = useState(user?.access_token || user?.github_pat || '');
   const [saving, setSaving] = useState(false);
   // Avatar upload — useCustomAvatar() reads localStorage + listens
   // for changes, so the hero updates immediately after upload/remove
@@ -424,7 +428,8 @@ function ProfileSection({
     if (user) {
       setUsername(user.username || '');
       setEmail(user.email || '');
-      setToken(user.access_token || '');
+      setGithubUserId(String(user.github_user_id ?? ''));
+      setToken(user.access_token || user.github_pat || '');
     }
   }, [user]);
 
@@ -450,20 +455,61 @@ function ProfileSection({
     onSuccess('Reverted to generative avatar');
   };
 
-  const save = async () => {
-    if (!user?.github_user_id) return;
+  const applyUpdatedUser = (updatedUser: Awaited<ReturnType<typeof api.updateUserDetails>>) => {
+    setUser({
+      ...(user ?? {}),
+      ...updatedUser,
+      access_token: updatedUser.access_token ?? user?.access_token ?? '',
+      github_pat:
+        updatedUser.github_pat ??
+        updatedUser.access_token ??
+        user?.github_pat ??
+        user?.access_token,
+    });
+  };
+
+  const saveIdentity = async () => {
+    if (!user) return;
+    const trimmedGithubUserId = githubUserId.trim();
+    const originalGithubUserId = String(user.github_user_id ?? '').trim();
+    const githubUserIdChanged = trimmedGithubUserId !== originalGithubUserId;
+
+    if (githubUserIdChanged && !trimmedGithubUserId) {
+      onError('GitHub user ID cannot be empty.');
+      return;
+    }
+
+    if (trimmedGithubUserId && !/^\d+$/.test(trimmedGithubUserId)) {
+      onError('GitHub user ID must contain only numbers.');
+      return;
+    }
+
     setSaving(true);
     try {
-      const updated = await api.saveUser({
-        github_user_id: user.github_user_id,
+      const updated = await api.updateUserDetails({
         username,
         email,
+        github_user_id: githubUserIdChanged ? trimmedGithubUserId : undefined,
+      });
+      applyUpdatedUser(updated);
+      onSuccess('Profile updated');
+    } catch (err) {
+      onError(err instanceof Error ? err.message : 'Failed to update profile');
+    }
+    setSaving(false);
+  };
+
+  const updateToken = async () => {
+    if (!user) return;
+    setSaving(true);
+    try {
+      const updated = await api.updateUserDetails({
         github_pat: token,
       });
-      setUser(updated);
-      onSuccess('Profile updated');
-    } catch {
-      onError('Failed to update profile');
+      applyUpdatedUser(updated);
+      onSuccess('GitHub token updated');
+    } catch (err) {
+      onError(err instanceof Error ? err.message : 'Failed to update GitHub token');
     }
     setSaving(false);
   };
@@ -499,7 +545,7 @@ function ProfileSection({
               <p className="text-[11.5px] text-[var(--neutral-soft-400)]">
                 {customAvatar
                   ? 'Custom upload. Remove to use the generative default.'
-                  : 'Auto-generated from your username. Upload to customize.'}
+                  : 'Auto-generated from your username.'}
               </p>
             </div>
             <input
@@ -521,7 +567,7 @@ function ProfileSection({
             <Button
               variant="secondary"
               onClick={() => fileInputRef.current?.click()}
-              disabled={avatarBusy}
+              disabled
               leadingIcon={
                 <Upload className="h-3.5 w-3.5" strokeWidth={2} />
               }
@@ -536,13 +582,18 @@ function ProfileSection({
           <Field label="Email" hint="Used for approval and incident notifications.">
             <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
           </Field>
-          <Field label="GitHub user ID">
-            <Input value={String(user?.github_user_id || '')} disabled />
+          <Field label="GitHub user ID" hint="Numeric GitHub account ID.">
+            <Input
+              value={githubUserId}
+              onChange={(e) => setGithubUserId(e.target.value.replace(/\D/g, ''))}
+              inputMode="numeric"
+              pattern="[0-9]*"
+            />
           </Field>
           <div className="mt-5 flex items-center justify-end gap-2">
             <Button
               variant="primary"
-              onClick={save}
+              onClick={saveIdentity}
               disabled={saving}
               leadingIcon={
                 saving ? <RefreshCw className="h-3.5 w-3.5 animate-spin" strokeWidth={2} /> : undefined
@@ -576,7 +627,14 @@ function ProfileSection({
               Manage tokens on GitHub
               <ExternalLink className="h-3 w-3" strokeWidth={2} />
             </a>
-            <Button variant="primary" onClick={save} disabled={saving}>
+            <Button
+              variant="primary"
+              onClick={updateToken}
+              disabled={saving}
+              leadingIcon={
+                saving ? <RefreshCw className="h-3.5 w-3.5 animate-spin" strokeWidth={2} /> : undefined
+              }
+            >
               Update token
             </Button>
           </div>

@@ -10,7 +10,12 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import type { DateRange } from 'react-day-picker';
 import { api, invalidateCache } from '@/lib/api';
+import {
+  getActionDateFilters,
+  getDefaultDashboardDateRange,
+} from '@/lib/dashboardDateRange';
 import { useUser } from '@/lib/hooks';
 import type {
   AggregatedSessionAction,
@@ -22,7 +27,7 @@ import type {
 const PAGE_SIZE = 20;
 /** Skip new network requests when re-opening a dashboard route shortly after the last fetch. */
 const NAV_STALE_MS = 15_000;
-const REFRESH_INTERVAL_MS = 30_000;
+const REFRESH_INTERVAL_MS = 60_000;
 
 const EMPTY_AGG: PaginatedResponse<AggregatedSessionAction> = {
   items: [],
@@ -47,7 +52,20 @@ function mergeById(prev: SessionAction[], incoming: SessionAction[]): SessionAct
 
 type ActionsMeta = { total: number; pages: number; page_size: number };
 
+function getAggregatedCacheKey(
+  page: number,
+  filters: { startDate?: string; endDate?: string },
+): string {
+  return [
+    page,
+    filters.startDate ?? '',
+    filters.endDate ?? '',
+  ].join(':');
+}
+
 export type DashboardDataContextValue = {
+  dateRange: DateRange | undefined;
+  setDateRange: (range: DateRange | undefined) => void;
   sessionActions: SessionAction[];
   actionsMeta: ActionsMeta | null;
   runsLoading: boolean;
@@ -72,6 +90,9 @@ const DashboardDataContext = createContext<DashboardDataContextValue | null>(nul
 
 export function DashboardDataProvider({ children }: { children: ReactNode }) {
   const { user, isLoading: userLoading } = useUser();
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(() =>
+    getDefaultDashboardDateRange(),
+  );
 
   const [sessionActions, setSessionActions] = useState<SessionAction[]>([]);
   const [actionsMeta, setActionsMeta] = useState<ActionsMeta | null>(null);
@@ -85,7 +106,7 @@ export function DashboardDataProvider({ children }: { children: ReactNode }) {
   const sessionActionsRef = useRef<SessionAction[]>([]);
   const loadedPagesRef = useRef<Set<number>>(new Set());
   const aggregatedCacheRef = useRef<
-    Map<number, { at: number; data: PaginatedResponse<AggregatedSessionAction> }>
+    Map<string, { at: number; data: PaginatedResponse<AggregatedSessionAction> }>
   >(new Map());
   const [metrics, setMetrics] = useState<Metrics>({
     total: 0,
@@ -94,6 +115,10 @@ export function DashboardDataProvider({ children }: { children: ReactNode }) {
     rewrites: 0,
     approvals: 0,
   });
+  const dateFilters = useMemo(
+    () => getActionDateFilters(dateRange),
+    [dateRange],
+  );
 
   useEffect(() => {
     sessionActionsRef.current = sessionActions;
@@ -135,13 +160,12 @@ export function DashboardDataProvider({ children }: { children: ReactNode }) {
       try {
         if (options.bustHttpCache) invalidateCache(user.id);
         const [res, metricsRes] = await Promise.all([
-          api.getSessionActionsPage(user.id, 1, PAGE_SIZE),
-          api.getMetrics(user.id),
+          api.getSessionActionsPage(user.id, 1, PAGE_SIZE, dateFilters),
+          api.getMetrics(user.id, dateFilters),
         ]);
 
         setSessionActions(sortActions(res.items));
         setMetrics(metricsRes);
-        setSessionActions(sortActions(res.items));
         const nextLoaded = new Set([1]);
         setLoadedPages(nextLoaded);
         loadedPagesRef.current = nextLoaded;
@@ -157,7 +181,7 @@ export function DashboardDataProvider({ children }: { children: ReactNode }) {
         setRunsLoading(false);
       }
     },
-    [user?.id],
+    [user?.id, dateFilters],
   );
 
   const syncRunsFromServer = useCallback(async () => {
@@ -166,8 +190,8 @@ export function DashboardDataProvider({ children }: { children: ReactNode }) {
     aggregatedCacheRef.current.clear();
     try {
       const [res, metricsRes] = await Promise.all([
-        api.getSessionActionsPage(user.id, 1, PAGE_SIZE),
-        api.getMetrics(user.id),
+        api.getSessionActionsPage(user.id, 1, PAGE_SIZE, dateFilters),
+        api.getMetrics(user.id, dateFilters),
       ]);
 
       setSessionActions(sortActions(res.items));
@@ -186,18 +210,13 @@ export function DashboardDataProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       setRunsError(err instanceof Error ? err.message : 'Failed to refresh runs');
     }
-  }, [user?.id]);
-
-  const ensureRunsInitial = useCallback(async () => {
-    if (!user?.id) return;
-    if (sessionActionsRef.current.length > 0) return;
-    await replaceRunsWithPage1({ bustHttpCache: false });
-  }, [user?.id, replaceRunsWithPage1]);
+  }, [user?.id, dateFilters]);
 
   useEffect(() => {
     if (!user?.id || userLoading) return;
-    void ensureRunsInitial();
-  }, [user?.id, userLoading, ensureRunsInitial]);
+    aggregatedCacheRef.current.clear();
+    void replaceRunsWithPage1({ bustHttpCache: true });
+  }, [user?.id, userLoading, replaceRunsWithPage1, dateFilters]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -217,7 +236,12 @@ export function DashboardDataProvider({ children }: { children: ReactNode }) {
     setRunsLoadingMore(true);
     setRunsError(null);
     try {
-      const res = await api.getSessionActionsPage(user.id, nextPage, PAGE_SIZE);
+      const res = await api.getSessionActionsPage(
+        user.id,
+        nextPage,
+        PAGE_SIZE,
+        dateFilters,
+      );
       setSessionActions((prev) => mergeById(prev, res.items));
       setLoadedPages((p) => {
         const n = new Set(p);
@@ -230,21 +254,27 @@ export function DashboardDataProvider({ children }: { children: ReactNode }) {
     } finally {
       setRunsLoadingMore(false);
     }
-  }, [user?.id, actionsMeta]);
+  }, [user?.id, actionsMeta, dateFilters]);
 
   const fetchAggregatedPage = useCallback(
     async (page: number, options?: { force?: boolean }) => {
       if (!user?.id) return EMPTY_AGG;
+      const cacheKey = getAggregatedCacheKey(page, dateFilters);
       const now = Date.now();
-      const hit = aggregatedCacheRef.current.get(page);
+      const hit = aggregatedCacheRef.current.get(cacheKey);
       if (!options?.force && hit && now - hit.at < NAV_STALE_MS) {
         return hit.data;
       }
-      const data = await api.getAggregatedSessions(user.id, page, PAGE_SIZE);
-      aggregatedCacheRef.current.set(page, { at: Date.now(), data });
+      const data = await api.getAggregatedSessions(
+        user.id,
+        page,
+        PAGE_SIZE,
+        dateFilters,
+      );
+      aggregatedCacheRef.current.set(cacheKey, { at: Date.now(), data });
       return data;
     },
-    [user?.id],
+    [user?.id, dateFilters],
   );
 
   const hasMoreRuns =
@@ -254,6 +284,8 @@ export function DashboardDataProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo(
     (): DashboardDataContextValue => ({
+      dateRange,
+      setDateRange,
       sessionActions,
       actionsMeta,
       runsLoading,
@@ -269,6 +301,7 @@ export function DashboardDataProvider({ children }: { children: ReactNode }) {
       fetchAggregatedPage,
     }),
     [
+      dateRange,
       sessionActions,
       actionsMeta,
       runsLoading,

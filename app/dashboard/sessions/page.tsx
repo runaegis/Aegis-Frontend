@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import {
@@ -14,14 +14,13 @@ import {
 } from 'lucide-react';
 import { useUser } from '@/lib/hooks';
 import { useDashboardData } from '@/lib/dashboardDataContext';
+import { formatDashboardDateRangeLabel } from '@/lib/dashboardDateRange';
 import { AggregatedSessionAction, PaginatedResponse } from '@/lib/types';
 import PaginatedLayout from '@/components/ui/PaginatedLayout';
-import { SessionAction } from '@/lib/types';
 import {
   extractPullRequestUrl,
   formatDuration,
   formatExecutionTimeMs,
-  formatRelativeTime,
   readBlastRadius,
 } from '@/lib/utils';
 import { RelativeTime } from '@/components/ui/RelativeTime';
@@ -52,10 +51,18 @@ export default function SessionsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedSession, setExpandedSession] = useState<string | null>(null);
+  const hasSeenEpochRef = useRef(false);
   const { user, isLoading: userLoading } = useUser();
   const reduce = useReducedMotion();
-  const { fetchAggregatedPage, globalDataEpoch, lastUpdated } =
+  const {
+    dateRange,
+    setDateRange,
+    fetchAggregatedPage,
+    globalDataEpoch,
+    lastUpdated,
+  } =
   useDashboardData();
+  const rangeLabel = formatDashboardDateRangeLabel(dateRange, 'All time');
 
   const fetchData = useCallback(
   async (options?: { soft?: boolean }) => {
@@ -77,7 +84,7 @@ export default function SessionsPage() {
 
     try {
       const result = await fetchAggregatedPage(page, {
-        force: false,
+        force: true,
       });
 
       setData(result);
@@ -109,10 +116,30 @@ export default function SessionsPage() {
     }
   }, [user?.id, userLoading, fetchData]);
 
+  useEffect(() => {
+    if (!hasSeenEpochRef.current) {
+      hasSeenEpochRef.current = true;
+      return;
+    }
+    if (!user?.id) return;
+    void fetchData({ soft: true });
+  }, [user?.id, globalDataEpoch, fetchData]);
+
+  useEffect(() => {
+    setPage(1);
+    setExpandedSession(null);
+  }, [dateRange]);
+
   if (userLoading || loading) {
     return (
       <>
-        <Topbar title="Sessions" subtitle="Agent working sessions" showDateRange />
+        <Topbar
+          title="Sessions"
+          subtitle="Agent working sessions"
+          showDateRange
+          dateRangeValue={dateRange}
+          onDateRangeChange={setDateRange}
+        />
         <div className="mx-auto max-w-[1320px] 2xl:max-w-[1480px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
           <SessionsSkeleton />
         </div>
@@ -128,6 +155,8 @@ export default function SessionsPage() {
         lastUpdated={lastUpdated}
         onRefresh={fetchData}
         showDateRange
+        dateRangeValue={dateRange}
+        onDateRangeChange={setDateRange}
       />
       <div className="mx-auto max-w-[1320px] 2xl:max-w-[1480px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
         {error && (
@@ -150,7 +179,7 @@ export default function SessionsPage() {
             variants={fadeUp}
             className="mb-2 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-[var(--neutral-soft-400)]"
           >
-            Agent sessions
+            Agent sessions · {rangeLabel}
           </motion.p>
           <motion.h1
             variants={fadeUp}
@@ -201,7 +230,6 @@ export default function SessionsPage() {
                 <SessionRow
                   key={session.session_id}
                   session={session}
-                  userId={user?.id}
                   isExpanded={expandedSession === session.session_id}
                   onToggle={() =>
                     setExpandedSession(
@@ -220,12 +248,10 @@ export default function SessionsPage() {
 
 function SessionRow({
   session,
-  userId,
   isExpanded,
   onToggle,
 }: {
   session: AggregatedSessionAction;
-  userId?: string;
   isExpanded: boolean;
   onToggle: () => void;
 }) {

@@ -21,10 +21,15 @@ import {
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useAutoRefresh, useUser } from '@/lib/hooks';
-import { MCPApproval, Metrics, SessionAction } from '@/lib/types';
+import {
+  formatDashboardDateRangeLabel,
+  getActionDateFilters,
+  matchesActionDateFilters,
+} from '@/lib/dashboardDateRange';
+import { useDashboardData } from '@/lib/dashboardDataContext';
+import { MCPApproval, SessionAction } from '@/lib/types';
 import {
   formatExecutionTimeMs,
-  formatRelativeTime,
   truncate,
 } from '@/lib/utils';
 import Topbar from '@/components/layout/Topbar';
@@ -38,9 +43,6 @@ import { Button } from '@/components/ui/Button';
 import { CodeChip } from '@/components/ui/CodeChip';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useToast } from '@/components/ui/Toast';
-
-const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
-const ONE_HOUR_MS = 60 * 60 * 1000;
 
 function greeting(now: Date): string {
   const h = now.getHours();
@@ -58,81 +60,77 @@ function normalizeApprovalStatus(status: string): 'pending' | 'approved' | 'reje
 
 export default function DashboardHomePage() {
   const { user, isLoading: userLoading } = useUser();
+  const {
+    dateRange,
+    setDateRange,
+    sessionActions,
+    metrics,
+    runsLoading,
+    runsError,
+    dismissRunsError,
+    refreshRuns,
+    lastUpdated,
+  } = useDashboardData();
   const toast = useToast();
   const reduce = useReducedMotion();
-  const [runs, setRuns] = useState<SessionAction[]>([]);
-  const [metrics, setMetrics] = useState<Metrics>({
-    total: 0,
-    allows: 0,
-    denies: 0,
-    rewrites: 0,
-    approvals: 0,
-  });
+  const dateFilters = useMemo(() => getActionDateFilters(dateRange), [dateRange]);
+  const rangeLabel = useMemo(
+    () => formatDashboardDateRangeLabel(dateRange, 'All time'),
+    [dateRange],
+  );
   const [approvals, setApprovals] = useState<MCPApproval[]>([]);
   const [policyString, setPolicyString] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [auxLoading, setAuxLoading] = useState(true);
+  const [auxError, setAuxError] = useState<string | null>(null);
   const [actioningIds, setActioningIds] = useState<Set<string>>(new Set());
   // Pending Deny confirmation — null when no dialog is open. Same
   // pattern as /dashboard/approvals: gate the destructive path,
   // let Approve fire-and-forget.
   const [pendingDeny, setPendingDeny] = useState<MCPApproval | null>(null);
 
-  const fetchData = useCallback(async () => {
+  const fetchAuxiliaryData = useCallback(async (options?: { soft?: boolean }) => {
     if (!user?.id) return;
-    setLoading(true);
+    if (!options?.soft) setAuxLoading(true);
     try {
-      const [runsData, metricsData, approvalsData, policyData] = await Promise.all([
-        api.getRuns(user.id).catch(() => []),
-        api.getMetrics(user.id).catch(() => ({
-          total: 0, allows: 0, denies: 0, rewrites: 0, approvals: 0,
-        })),
+      const [approvalsData, policyData] = await Promise.all([
         api.getMcpApprovals(user.id).catch(() => []),
         api.getUserPolicy(user.id).catch(() => null),
       ]);
-      setRuns(runsData);
-      setMetrics(metricsData);
-      setApprovals(approvalsData);
+      setApprovals(
+        approvalsData.filter((approval) =>
+          matchesActionDateFilters(approval.created_at, dateFilters),
+        ),
+      );
       setPolicyString(policyData);
-      setError(null);
+      setAuxError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not connect to backend');
+      setAuxError(err instanceof Error ? err.message : 'Could not connect to backend');
     } finally {
-      setLoading(false);
+      if (!options?.soft) setAuxLoading(false);
     }
-  }, [user?.id]);
+  }, [user?.id, dateFilters]);
 
   useEffect(() => {
-    if (user?.id) fetchData();
-    else if (!userLoading) setLoading(false);
-  }, [user?.id, userLoading, fetchData]);
+    if (user?.id) {
+      void fetchAuxiliaryData();
+    } else if (!userLoading) {
+      setAuxLoading(false);
+    }
+  }, [user?.id, userLoading, fetchAuxiliaryData]);
 
-  const { lastUpdated } = useAutoRefresh(fetchData, 30000);
+  useAutoRefresh(() => {
+    void fetchAuxiliaryData({ soft: true });
+  }, 60000);
+
+  const handleRefresh = useCallback(async () => {
+    await Promise.all([
+      refreshRuns(),
+      fetchAuxiliaryData(),
+    ]);
+  }, [refreshRuns, fetchAuxiliaryData]);
 
   // ── Derived metrics ────────────────────────────────────────────────────────
   const stats = useMemo(() => {
-    const now = Date.now();
-    const weekAgo = now - ONE_WEEK_MS;
-    const hourAgo = now - ONE_HOUR_MS;
-
-    const runsThisWeek = runs.filter(
-      (r) => new Date(r.timestamp).getTime() >= weekAgo,
-    );
-
-    const activeSessionIds = new Set(
-      runs
-        .filter((r) => new Date(r.timestamp).getTime() >= hourAgo)
-        .map((r) => r.session_id)
-        .filter(Boolean),
-    );
-
-    const blockedThisWeek = runsThisWeek.filter(
-      (r) => r.decision?.toUpperCase() === 'DENY',
-    ).length;
-    const rewritesThisWeek = runsThisWeek.filter(
-      (r) => r.decision?.toUpperCase() === 'REWRITE',
-    ).length;
-
     const pendingApprovals = approvals.filter(
       (a) => normalizeApprovalStatus(a.status) === 'pending',
     ).length;
@@ -142,14 +140,15 @@ export default function DashboardHomePage() {
       : 10;
 
     return {
-      activeSessions: activeSessionIds.size,
-      runsThisWeek: runsThisWeek.length,
+      sessionsInRange: new Set(
+        sessionActions.map((r) => r.session_id).filter(Boolean),
+      ).size,
       pendingApprovals,
       policiesActive,
-      blockedThisWeek,
-      rewritesThisWeek,
+      blockedInRange: metrics.denies,
+      rewritesInRange: metrics.rewrites,
     };
-  }, [runs, approvals, policyString]);
+  }, [sessionActions, approvals, policyString, metrics.denies, metrics.rewrites]);
 
   const pendingItems = useMemo(
     () =>
@@ -159,7 +158,7 @@ export default function DashboardHomePage() {
     [approvals],
   );
 
-  const recentRuns = useMemo(() => runs.slice(0, 8), [runs]);
+  const recentRuns = useMemo(() => sessionActions.slice(0, 8), [sessionActions]);
   const username = user?.username || 'there';
 
   // Decision distribution percentages
@@ -169,12 +168,12 @@ export default function DashboardHomePage() {
     const safe = total === 0 ? 1 : total;
     return [
       // `color` stays saturated for the distribution bar (needs to read
-      // clearly at a glance). `dot` is the pastel variant for the legend
-      // swatches — softer, more refined at small sizes.
-      { key: 'allow',    label: 'Allow',    value: metrics.allows,    pct: (metrics.allows / safe) * 100,    color: 'var(--success)',     dot: '#bfe7d2' },
-      { key: 'rewrite',  label: 'Rewrite',  value: metrics.rewrites,  pct: (metrics.rewrites / safe) * 100,  color: 'var(--feature)',     dot: '#d6c9f6' },
-      { key: 'approval', label: 'Approval', value: metrics.approvals, pct: (metrics.approvals / safe) * 100, color: 'var(--warning)',     dot: '#f9dba0' },
-      { key: 'deny',     label: 'Deny',     value: metrics.denies,    pct: (metrics.denies / safe) * 100,    color: 'var(--error)',       dot: '#f5b9be' },
+      // clearly at a glance. Keep the legend dot identical so the
+      // visual mapping is one-to-one.
+      { key: 'allow',    label: 'Allow',    value: metrics.allows,    pct: (metrics.allows / safe) * 100,    color: 'var(--success)',     dot: 'var(--success)' },
+      { key: 'rewrite',  label: 'Rewrite',  value: metrics.rewrites,  pct: (metrics.rewrites / safe) * 100,  color: 'var(--feature)',     dot: 'var(--feature)' },
+      { key: 'approval', label: 'Approval', value: metrics.approvals, pct: (metrics.approvals / safe) * 100, color: 'var(--warning)',     dot: 'var(--warning)' },
+      { key: 'deny',     label: 'Deny',     value: metrics.denies,    pct: (metrics.denies / safe) * 100,    color: 'var(--error)',       dot: 'var(--error)' },
     ];
   }, [metrics]);
 
@@ -183,7 +182,7 @@ export default function DashboardHomePage() {
     setActioningIds((prev) => new Set(prev).add(id));
     try {
       await api.executeMcpApproval(id, reject);
-      await fetchData();
+      await handleRefresh();
       // Match the /approvals page toast pattern exactly so a reviewer
       // gets identical feedback regardless of which surface they
       // acted on. Approve = success, deny = warning (denial blocks).
@@ -199,7 +198,7 @@ export default function DashboardHomePage() {
     } catch (err) {
       const msg =
         err instanceof Error ? err.message : 'Failed to update approval';
-      setError(msg);
+      setAuxError(msg);
       toast.error('Approval failed', { description: msg });
     } finally {
       setActioningIds((prev) => {
@@ -210,10 +209,16 @@ export default function DashboardHomePage() {
     }
   };
 
-  if (userLoading || loading) {
+  if (userLoading || runsLoading || auxLoading) {
     return (
       <>
-        <Topbar title="Dashboard" subtitle="Overview" showDateRange />
+        <Topbar
+          title="Dashboard"
+          subtitle="Overview"
+          showDateRange
+          dateRangeValue={dateRange}
+          onDateRangeChange={setDateRange}
+        />
         {/* Same content container as the loaded state (mx-auto +
             max-w-[1320px] 2xl:max-w-[1480px] + horizontal/vertical padding) so the
             skeleton's gray blocks respect the page gutters instead
@@ -232,18 +237,23 @@ export default function DashboardHomePage() {
         title="Dashboard"
         subtitle="Overview"
         lastUpdated={lastUpdated}
-        onRefresh={fetchData}
+        onRefresh={handleRefresh}
         unreadCount={stats.pendingApprovals}
         showDateRange
+        dateRangeValue={dateRange}
+        onDateRangeChange={setDateRange}
       />
 
       <div className="mx-auto max-w-[1320px] 2xl:max-w-[1480px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
-        {error && (
+        {(runsError || auxError) && (
           <div className="mb-6">
             <ErrorBanner
-              message={error}
-              onDismiss={() => setError(null)}
-              onRetry={fetchData}
+              message={runsError || auxError || 'Could not connect to backend'}
+              onDismiss={() => {
+                if (runsError) dismissRunsError();
+                if (auxError) setAuxError(null);
+              }}
+              onRetry={handleRefresh}
             />
           </div>
         )}
@@ -259,7 +269,7 @@ export default function DashboardHomePage() {
             variants={fadeUp}
             className="mb-2 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-[var(--neutral-soft-400)]"
           >
-            Overview · Last 7 days
+            Overview · {rangeLabel}
           </motion.p>
           <motion.h1
             variants={fadeUp}
@@ -273,11 +283,11 @@ export default function DashboardHomePage() {
           >
             You have{' '}
             <ColoredCount value={stats.pendingApprovals} color="var(--primary-base)" />{' '}
-            {stats.pendingApprovals === 1 ? 'approval' : 'approvals'} waiting,{' '}
-            <ColoredCount value={stats.blockedThisWeek} color="var(--error)" />{' '}
-            blocked {stats.blockedThisWeek === 1 ? 'run' : 'runs'} this week, and{' '}
-            <ColoredCount value={stats.activeSessions} color="var(--success)" />{' '}
-            active {stats.activeSessions === 1 ? 'session' : 'sessions'} right now.
+            {stats.pendingApprovals === 1 ? 'approval' : 'approvals'} in this range,{' '}
+            <ColoredCount value={stats.blockedInRange} color="var(--error)" />{' '}
+            blocked {stats.blockedInRange === 1 ? 'run' : 'runs'}, and{' '}
+            <ColoredCount value={stats.sessionsInRange} color="var(--success)" />{' '}
+            {stats.sessionsInRange === 1 ? 'session' : 'sessions'} represented.
           </motion.p>
         </motion.header>
 
@@ -397,7 +407,9 @@ export default function DashboardHomePage() {
           </motion.div>
         </motion.section>
 
-        {/* ─── 6-cell stat strip ───────────────────────────────────── */}
+        {/*
+        ─── 6-cell stat strip ─────────────────────────────────────
+        Commented out per request.
         <motion.section
           className="mb-6 overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]"
           initial={reduce ? false : { opacity: 0, y: 12 }}
@@ -411,12 +423,11 @@ export default function DashboardHomePage() {
             animate="show"
           >
             <StatCell
-              label="Active sessions"
-              value={stats.activeSessions}
-              color={stats.activeSessions > 0 ? 'var(--success)' : undefined}
-              live={stats.activeSessions > 0}
+              label="Sessions in range"
+              value={stats.sessionsInRange}
+              color={stats.sessionsInRange > 0 ? 'var(--success)' : undefined}
             />
-            <StatCell label="Runs this week" value={metrics.total} />
+            <StatCell label="Runs in range" value={metrics.total} />
             <StatCell
               label="Pending approvals"
               value={stats.pendingApprovals}
@@ -424,17 +435,18 @@ export default function DashboardHomePage() {
             />
             <StatCell label="Policies active" value={stats.policiesActive} />
             <StatCell
-              label="Blocked this week"
-              value={stats.blockedThisWeek}
-              color={stats.blockedThisWeek > 0 ? 'var(--error)' : undefined}
+              label="Blocked in range"
+              value={stats.blockedInRange}
+              color={stats.blockedInRange > 0 ? 'var(--error)' : undefined}
             />
             <StatCell
-              label="Rewrites this week"
-              value={stats.rewritesThisWeek}
-              color={stats.rewritesThisWeek > 0 ? 'var(--feature)' : undefined}
+              label="Rewrites in range"
+              value={stats.rewritesInRange}
+              color={stats.rewritesInRange > 0 ? 'var(--feature)' : undefined}
             />
           </motion.div>
         </motion.section>
+        */}
 
         {/* ─── Two-column: activity feed + pending approvals ───────────────
              items-start so each column is its natural height (no stretch
@@ -456,7 +468,7 @@ export default function DashboardHomePage() {
                   Recent activity
                 </h2>
                 <span className="inline-flex h-[18px] items-center justify-center rounded-[5px] bg-[var(--neutral-weak-50)] px-[6px] text-[10.5px] font-bold tabular-nums text-[var(--neutral-sub-600)]">
-                  {runs.length.toLocaleString()}
+                  {sessionActions.length.toLocaleString()}
                 </span>
               </div>
               <Link
@@ -611,42 +623,6 @@ function ColoredCount({ value, color }: { value: number; color: string }) {
     >
       {value.toLocaleString()}
     </span>
-  );
-}
-
-// ── Single stat cell ─────────────────────────────────────────────────────────
-function StatCell({
-  label,
-  value,
-  color,
-  live,
-}: {
-  label: string;
-  value: number;
-  color?: string;
-  live?: boolean;
-}) {
-  return (
-    <div className="px-6 py-4">
-      <div className="flex items-center gap-1.5">
-        <p className="text-[10.5px] font-semibold uppercase tracking-[0.07em] text-[var(--neutral-soft-400)]">
-          {label}
-        </p>
-        {live && (
-          <span
-            className="inline-block h-1.5 w-1.5 rounded-full"
-            style={{ backgroundColor: 'var(--success)' }}
-            aria-hidden
-          />
-        )}
-      </div>
-      <p
-        className="mt-1.5 text-[26px] font-semibold leading-none tracking-[-0.04em] tabular-nums"
-        style={{ color: color ?? 'var(--neutral-strong-950)' }}
-      >
-        {value.toLocaleString()}
-      </p>
-    </div>
   );
 }
 

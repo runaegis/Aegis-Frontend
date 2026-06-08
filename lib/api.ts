@@ -16,12 +16,23 @@ import {
   PaginatedResponse,
 } from "./types";
 import { LogOut } from "lucide-react";
+import {
+  matchesActionDateFilters,
+  type ActionDateFilters,
+} from "./dashboardDateRange";
 
 type SaveUserPayload = Pick<
   User,
   "github_user_id" | "username" | "github_pat"
 > & {
   email?: string;
+};
+
+type UpdateUserDetailsPayload = {
+  username?: string;
+  email?: string;
+  github_pat?: string;
+  github_user_id?: number | string;
 };
 
 function getAPIBase(): string {
@@ -149,6 +160,46 @@ async function readErrorMessage(res: Response): Promise<string> {
   }
 }
 
+function normalizeUserPayload(
+  raw: Partial<User> & Record<string, unknown>,
+  fallback: UpdateUserDetailsPayload = {},
+): User {
+  const githubUserId =
+    typeof raw.github_user_id === "number"
+      ? raw.github_user_id
+      : typeof raw.github_user_id === "string"
+        ? Number(raw.github_user_id)
+        : typeof fallback.github_user_id === "number"
+          ? fallback.github_user_id
+          : typeof fallback.github_user_id === "string"
+            ? Number(fallback.github_user_id)
+            : 0;
+
+  const accessToken =
+    typeof raw.access_token === "string"
+      ? raw.access_token
+      : typeof raw.github_pat === "string"
+        ? raw.github_pat
+        : fallback.github_pat;
+
+  return {
+    id: typeof raw.id === "string" ? raw.id : undefined,
+    github_user_id: Number.isFinite(githubUserId) ? githubUserId : 0,
+    username:
+      typeof raw.username === "string"
+        ? raw.username
+        : fallback.username ?? "",
+    email:
+      typeof raw.email === "string"
+        ? raw.email
+        : fallback.email ?? "",
+    created_at:
+      typeof raw.created_at === "string" ? raw.created_at : undefined,
+    access_token: accessToken,
+    github_pat: accessToken,
+  };
+}
+
 function parseFilenameFromContentDisposition(
   contentDisposition: string | null,
   fallback: string,
@@ -182,6 +233,11 @@ type AuditExportFilters = {
   tools?: string[];
 };
 
+type AuditSessionsFilters = AuditExportFilters & {
+  page?: number;
+  page_size?: number;
+};
+
 function buildAuditExportUrl(
   endpoint: "json" | "pdf",
   filters: AuditExportFilters = {},
@@ -200,18 +256,86 @@ function buildAuditExportUrl(
   return url;
 }
 
+function buildAuditSessionsUrl(
+  filters: AuditSessionsFilters = {},
+): URL {
+  const url = new URL(`${API_BASE}/audit/sessions`);
+
+  if (filters.page) url.searchParams.set("page", String(filters.page));
+  if (filters.page_size) {
+    url.searchParams.set("page_size", String(filters.page_size));
+  }
+  if (filters.startDate) url.searchParams.set("start_date", filters.startDate);
+  if (filters.endDate) url.searchParams.set("end_date", filters.endDate);
+  if (filters.agents?.length) url.searchParams.set("agents", filters.agents.join(","));
+  if (filters.decisions?.length) {
+    url.searchParams.set("decisions", filters.decisions.join(","));
+  }
+  if (filters.repositories?.length) {
+    url.searchParams.set("repositories", filters.repositories.join(","));
+  }
+  if (filters.tools?.length) url.searchParams.set("tools", filters.tools.join(","));
+
+  return url;
+}
+
+function appendActionDateFilters(
+  url: URL,
+  filters: ActionDateFilters = {},
+): void {
+  if (filters.startDate) url.searchParams.set("start_date", filters.startDate);
+  if (filters.endDate) url.searchParams.set("end_date", filters.endDate);
+}
+
+function hasActionDateFilters(filters: ActionDateFilters = {}): boolean {
+  return Boolean(filters.startDate || filters.endDate);
+}
+
+function buildAllActionsCacheKey(
+  userId: string,
+  filters: ActionDateFilters = {},
+): string {
+  return [
+    "all",
+    userId,
+    filters.startDate ?? "",
+    filters.endDate ?? "",
+  ].join(":");
+}
+
 // ── Cache keyed by "userId:page:page_size" so switching pages/accounts works ──
 const _cache = new Map<
   string,
   { data: PaginatedResponse<SessionAction>; time: number }
 >();
+const _allActionsCache = new Map<string, { data: SessionAction[]; time: number }>();
 const CACHE_TTL = 30_000;
+
+function sortActions(items: SessionAction[]): SessionAction[] {
+  return [...items].sort(
+    (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+  );
+}
 
 async function getUserActions(
   userId: string,
-  { page = 1, page_size = 20 }: { page?: number; page_size?: number } = {},
+  {
+    page = 1,
+    page_size = 20,
+    filters = {},
+  }: {
+    page?: number;
+    page_size?: number;
+    filters?: ActionDateFilters;
+  } = {},
 ): Promise<PaginatedResponse<SessionAction>> {
-  const cacheKey = `${userId}:${page}:${page_size}`;
+  const cacheKey = [
+    userId,
+    page,
+    page_size,
+    filters.startDate ?? "",
+    filters.endDate ?? "",
+  ].join(":");
   const now = Date.now();
   const cached = _cache.get(cacheKey);
   if (cached && now - cached.time < CACHE_TTL) return cached.data;
@@ -219,6 +343,7 @@ async function getUserActions(
   const url = new URL(`${API_BASE}/sessions/${encodeURIComponent(userId)}`);
   url.searchParams.set("page", String(page));
   url.searchParams.set("page_size", String(page_size));
+  appendActionDateFilters(url, filters);
 
   const res = await fetch(url.toString());
   if (!res.ok) throw new Error(`Failed to fetch sessions: ${res.statusText}`);
@@ -241,13 +366,22 @@ async function getUserActions(
 
 async function getAggregatedUserActions(
   userId: string,
-  { page = 1, page_size = 20 }: { page?: number; page_size?: number } = {},
+  {
+    page = 1,
+    page_size = 20,
+    filters = {},
+  }: {
+    page?: number;
+    page_size?: number;
+    filters?: ActionDateFilters;
+  } = {},
 ): Promise<PaginatedResponse<AggregatedSessionAction>> {
   const url = new URL(
     `${API_BASE}/sessions/${encodeURIComponent(userId)}/aggregate`,
   );
   url.searchParams.set("page", String(page));
   url.searchParams.set("page_size", String(page_size));
+  appendActionDateFilters(url, filters);
 
   const res = await fetch(url.toString());
   if (!res.ok)
@@ -269,9 +403,57 @@ export function invalidateCache(userId?: string) {
     for (const key of [..._cache.keys()]) {
       if (key.startsWith(`${userId}:`)) _cache.delete(key);
     }
+    for (const key of [..._allActionsCache.keys()]) {
+      if (key.includes(`:${userId}:`)) _allActionsCache.delete(key);
+    }
   } else {
     _cache.clear();
+    _allActionsCache.clear();
   }
+}
+
+async function getAllUserActions(
+  userId: string,
+  filters: ActionDateFilters = {},
+): Promise<SessionAction[]> {
+  const cacheKey = buildAllActionsCacheKey(userId, filters);
+  const now = Date.now();
+  const cached = _allActionsCache.get(cacheKey);
+  if (cached && now - cached.time < CACHE_TTL) return cached.data;
+
+  const page_size = 100;
+  let page = 1;
+  let pages = 1;
+  const rows: SessionAction[] = [];
+
+  while (page <= pages) {
+    const batch = await getUserActions(userId, {
+      page,
+      page_size,
+      filters,
+    });
+    rows.push(...batch.items);
+
+    const pagesFromApi =
+      typeof batch.pages === "number" && batch.pages >= 1 ? batch.pages : null;
+    const pagesFromTotal =
+      batch.total > 0 ? Math.max(1, Math.ceil(batch.total / page_size)) : 1;
+    pages = pagesFromApi ?? pagesFromTotal;
+
+    if (batch.items.length < page_size || page >= pages) break;
+    page += 1;
+    if (page > 5000) break;
+  }
+
+  const filtered = hasActionDateFilters(filters)
+    ? rows.filter((row) => matchesActionDateFilters(row.timestamp, filters))
+    : rows;
+
+  const deduped = sortActions(
+    Array.from(new Map(filtered.map((row) => [row.id, row])).values()),
+  );
+  _allActionsCache.set(cacheKey, { data: deduped, time: now });
+  return deduped;
 }
 
 // ── Session aggregation helper ────────────────────────────────────────────────
@@ -321,6 +503,43 @@ function aggregateSessions(actions: SessionAction[]): Session[] {
   );
 }
 
+function computeMetricsFromActions(actions: SessionAction[]): Metrics {
+  return {
+    total: actions.length,
+    allows: actions.filter((row) => row.decision?.toUpperCase() === "ALLOW").length,
+    denies: actions.filter((row) => row.decision?.toUpperCase() === "DENY").length,
+    rewrites: actions.filter((row) => row.decision?.toUpperCase() === "REWRITE").length,
+    approvals: actions.filter((row) =>
+      row.decision?.toUpperCase().includes("APPROVAL"),
+    ).length,
+  };
+}
+
+function aggregateSessionActions(
+  actions: SessionAction[],
+): AggregatedSessionAction[] {
+  return aggregateSessions(actions).map((session) => {
+    const sessionRuns = actions
+      .filter((row) => row.session_id === session.session_id)
+      .sort(
+        (a, b) =>
+          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+      );
+    const executionTimes = sessionRuns.map((row) => row.execution_time ?? 0);
+
+    return {
+      session_id: session.session_id,
+      user_id: session.user_id,
+      action_count: sessionRuns.length,
+      started_at: session.started_at,
+      ended_at: session.last_action_at,
+      total_execution_time: executionTimes.reduce((sum, value) => sum + value, 0),
+      tools_used: Array.from(new Set(sessionRuns.map((row) => row.tool_name))),
+      sessions: sessionRuns,
+    };
+  });
+}
+
 /** Token meter pagination rejects large page_size (422). Use modest pages and merge client-side. */
 async function fetchUserTokenMeterPage(
   userId: string,
@@ -364,9 +583,15 @@ export const api = {
     }
   },
 
-  getRuns: async (userId?: string): Promise<SessionAction[]> => {
+  getRuns: async (
+    userId?: string,
+    filters: ActionDateFilters = {},
+  ): Promise<SessionAction[]> => {
     if (!userId) return [];
-    const { items } = await getUserActions(userId);
+    if (hasActionDateFilters(filters)) {
+      return getAllUserActions(userId, filters);
+    }
+    const { items } = await getUserActions(userId, { filters });
     return [...items].sort(
       (a, b) =>
         new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
@@ -378,8 +603,20 @@ export const api = {
     userId: string,
     page = 1,
     page_size = 20,
+    filters: ActionDateFilters = {},
   ): Promise<PaginatedResponse<SessionAction>> => {
-    const data = await getUserActions(userId, { page, page_size });
+    if (hasActionDateFilters(filters)) {
+      const items = await getAllUserActions(userId, filters);
+      const start = (page - 1) * page_size;
+      return {
+        items: items.slice(start, start + page_size),
+        total: items.length,
+        page,
+        page_size,
+        pages: Math.max(1, Math.ceil(items.length / page_size)),
+      };
+    }
+    const data = await getUserActions(userId, { page, page_size, filters });
     return {
       ...data,
       items: [...data.items].sort(
@@ -389,20 +626,31 @@ export const api = {
     };
   },
 
-  getSessions: async (userId?: string): Promise<Session[]> => {
+  getSessions: async (
+    userId?: string,
+    filters: ActionDateFilters = {},
+  ): Promise<Session[]> => {
     if (!userId) return [];
-    const { items } = await getUserActions(userId);
-    return aggregateSessions(items);
+    return aggregateSessions(await getAllUserActions(userId, filters));
   },
 
   getAggregatedSessions: async (
     userId?: string,
     page = 1,
     page_size = 20,
+    filters: ActionDateFilters = {},
   ): Promise<PaginatedResponse<AggregatedSessionAction>> => {
     if (!userId)
       return { items: [], total: 0, page: 1, page_size: 20, pages: 0 };
-    return getAggregatedUserActions(userId, { page, page_size });
+    const items = aggregateSessionActions(await getAllUserActions(userId, filters));
+    const start = (page - 1) * page_size;
+    return {
+      items: items.slice(start, start + page_size),
+      total: items.length,
+      page,
+      page_size,
+      pages: Math.max(1, Math.ceil(items.length / page_size)),
+    };
   },
 
   getRoomTools: (roomId: string, role: string) =>
@@ -497,10 +745,17 @@ export const api = {
     ) as SessionAction[];
   },
 
-  getMetrics: async (userId: string): Promise<Metrics> => {
-    const res = await apiFetch(
-      `${API_BASE}/metrics`
-    );
+  getMetrics: async (
+    userId: string,
+    filters: ActionDateFilters = {},
+  ): Promise<Metrics> => {
+    if (hasActionDateFilters(filters)) {
+      return computeMetricsFromActions(await getAllUserActions(userId, filters));
+    }
+    const url = new URL(`${API_BASE}/metrics`);
+    appendActionDateFilters(url, filters);
+
+    const res = await apiFetch(url.toString());
 
     if (!res.ok) {
       throw new Error(`Failed to fetch metrics`);
@@ -647,6 +902,27 @@ export const api = {
     return { blob, filename };
   },
 
+  getAuditSessionsPage: async (
+    filters: AuditSessionsFilters = {},
+  ): Promise<PaginatedResponse<SessionAction>> => {
+    const url = buildAuditSessionsUrl(filters);
+    const res = await apiFetch(url.toString());
+    if (!res.ok) {
+      throw new Error(`Failed to fetch audit trail: ${await readErrorMessage(res)}`);
+    }
+
+    const payload = await res.json();
+    return {
+      items: Array.isArray(payload?.items)
+        ? payload.items.map((row: unknown) => parseRow(row) as SessionAction)
+        : [],
+      total: Number(payload?.total ?? 0),
+      page: Number(payload?.page ?? filters.page ?? 1),
+      page_size: Number(payload?.page_size ?? filters.page_size ?? 20),
+      pages: Number(payload?.pages ?? 0),
+    };
+  },
+
   getRecentActionCount: async (
     userId: string,
     username: string,
@@ -743,6 +1019,58 @@ export const api = {
     }
 
     throw new Error("Failed to retrieve user after save");
+  },
+
+  updateUserDetails: async (
+    payload: UpdateUserDetailsPayload,
+  ): Promise<User> => {
+    const params = new URLSearchParams();
+
+    if (typeof payload.username === "string" && payload.username.trim()) {
+      params.set("username", payload.username.trim());
+    }
+    if (typeof payload.email === "string" && payload.email.trim()) {
+      params.set("email", payload.email.trim());
+    }
+    if (typeof payload.github_pat === "string" && payload.github_pat.trim()) {
+      params.set("github_pat", payload.github_pat.trim());
+    }
+    if (
+      payload.github_user_id !== undefined &&
+      payload.github_user_id !== null &&
+      String(payload.github_user_id).trim()
+    ) {
+      params.set("github_user_id", String(payload.github_user_id).trim());
+    }
+
+    if (!params.toString()) {
+      throw new Error("Nothing to update.");
+    }
+
+    const res = await apiFetch(`${API_BASE}/auth/user/update?${params.toString()}`, {
+      method: "POST",
+    });
+
+    if (!res.ok) {
+      const message = await readErrorMessage(res);
+      throw new Error(message || "Failed to update user details.");
+    }
+
+    let data: unknown;
+    try {
+      data = await res.json();
+    } catch {
+      throw new Error("Server returned an invalid response.");
+    }
+
+    if (!data || typeof data !== "object") {
+      throw new Error("Server returned an invalid user payload.");
+    }
+
+    return normalizeUserPayload(
+      data as Partial<User> & Record<string, unknown>,
+      payload,
+    );
   },
 
   syncRepos: (github_user_id: number, github_pat: string) =>
