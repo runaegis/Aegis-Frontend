@@ -42,6 +42,7 @@ import { RelativeTime } from '@/components/ui/RelativeTime';
 import { Button } from '@/components/ui/Button';
 import { CodeChip } from '@/components/ui/CodeChip';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import GithubPatStatus from '@/components/ui/GithubPatStatus';
 import { useToast } from '@/components/ui/Toast';
 
 function greeting(now: Date): string {
@@ -290,6 +291,19 @@ export default function DashboardHomePage() {
             {stats.sessionsInRange === 1 ? 'session' : 'sessions'} represented.
           </motion.p>
         </motion.header>
+
+        {/* ─── GitHub token health ──────────────────────────────────────
+             Surfaces whether the classic PAT Aegis holds (user.access_token)
+             is still accepted by GitHub. Checked client-side against the
+             GitHub API on load so an expired/revoked token is obvious. */}
+        <motion.section
+          className="mb-6"
+          initial={reduce ? false : { opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: DUR.slow, ease: EASE.out, delay: 0.12 }}
+        >
+          <GithubPatStatus />
+        </motion.section>
 
         {/* ─── Hero — Decision distribution ─────────────────────────── */}
         <motion.section
