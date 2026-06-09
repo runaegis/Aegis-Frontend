@@ -33,24 +33,24 @@ type ConnectorStatus = 'live' | 'in-progress' | 'coming-soon';
 
 const STATUS_BY_ID: Record<ConnectorId, ConnectorStatus> = {
   github: 'live',
+  'github-actions': 'live',
   slack: 'in-progress',
+  postgres: 'in-progress',
   linear: 'coming-soon',
   jira: 'coming-soon',
-  'github-actions': 'coming-soon',
   terraform: 'coming-soon',
-  postgres: 'coming-soon',
 };
 
 // Display order — Live first, then In Progress, then queued in the
 // priority order from the Notion roadmap.
 const DISPLAY_ORDER: ConnectorId[] = [
   'github',
+  'github-actions',
   'slack',
+  'postgres',
   'linear',
   'jira',
-  'github-actions',
   'terraform',
-  'postgres',
 ];
 
 export default function ConnectorsPage() {

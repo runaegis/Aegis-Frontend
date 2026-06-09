@@ -140,11 +140,12 @@ export const CONNECTORS: Record<ConnectorId, ConnectorDef> = {
 
 interface ConnectorMarkProps {
   id: ConnectorId;
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'xs' | 'sm' | 'md' | 'lg';
   className?: string;
 }
 
 const SIZE_MAP = {
+  xs: { box: 20, icon: 13, radius: 6 },
   sm: { box: 28, icon: 18, radius: 8 },
   md: { box: 40, icon: 24, radius: 10 },
   lg: { box: 56, icon: 32, radius: 14 },
@@ -184,9 +185,11 @@ export function ConnectorMark({ id, size = 'md', className }: ConnectorMarkProps
         borderRadius: d.radius,
         background: '#ffffff',
         boxShadow:
-          'inset 0 1px 0 0 rgba(255,255,255,0.8),' +
-          '0 1px 1px rgba(23,23,23,0.04),' +
-          '0 4px 12px rgba(23,23,23,0.10)',
+          size === 'xs'
+            ? 'inset 0 0 0 1px rgba(23,23,23,0.07), 0 1px 1.5px rgba(23,23,23,0.06)'
+            : 'inset 0 1px 0 0 rgba(255,255,255,0.8),' +
+              '0 1px 1px rgba(23,23,23,0.04),' +
+              '0 4px 12px rgba(23,23,23,0.10)',
       }}
     >
       {/* Full-color brand logo. VectorLogoZone supplies multi-color
