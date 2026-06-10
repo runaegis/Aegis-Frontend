@@ -104,6 +104,9 @@ function formatExpiry(date: Date): string {
   });
 }
 
+/** Dashboard only surfaces token health when GitHub won't accept the PAT. */
+const ALERT_STATES: GithubPatState[] = ['invalid', 'expired', 'no_token'];
+
 export default function GithubPatStatus({ className }: { className?: string }) {
   const { user, isLoading: userLoading } = useUser();
   const [status, setStatus] = useState<PatStatus | null>(null);
@@ -134,6 +137,12 @@ export default function GithubPatStatus({ className }: { className?: string }) {
   const description = status?.message || view.fallbackDescription;
   const showManageLink =
     state === 'expired' || state === 'invalid' || state === 'no_token' || state === 'expiring_soon';
+
+  // Healthy, unknown, or transient states stay off the dashboard — only
+  // surface when the token is missing or GitHub rejects it.
+  if (userLoading || checking || !status || !ALERT_STATES.includes(state)) {
+    return null;
+  }
 
   return (
     <Card accent={view.accent} className={className}>
