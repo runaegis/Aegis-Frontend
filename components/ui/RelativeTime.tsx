@@ -23,7 +23,12 @@ interface RelativeTimeProps {
 export function RelativeTime({ timestamp, className }: RelativeTimeProps) {
   if (!timestamp) return null;
 
-  const parsed = parseApiUtcTimestamp(timestamp);
+  // Ensure timestamp is parsed as UTC: if it lacks a timezone offset, append +00:00
+  const normalizedTimestamp = timestamp.includes('+') || timestamp.includes('Z')
+    ? timestamp
+    : `${timestamp}+00:00`;
+
+  const parsed = new Date(normalizedTimestamp);
   const isValid = !Number.isNaN(parsed.getTime());
 
   // Full local timestamp with timezone for the tooltip. Example:
@@ -42,11 +47,11 @@ export function RelativeTime({ timestamp, className }: RelativeTimeProps) {
 
   return (
     <time
-      dateTime={normalizeApiTimestamp(timestamp)}
+      dateTime={normalizedTimestamp}
       title={fullLocal}
       className={className}
     >
-      {formatRelativeTime(timestamp)}
+      {formatRelativeTime(normalizedTimestamp)}
     </time>
   );
 }
