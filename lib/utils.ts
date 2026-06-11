@@ -1,6 +1,10 @@
 export function formatRelativeTime(timestamp: string): string {
   const now = Date.now();
-  const then = new Date(timestamp).getTime();
+  // Ensure timestamp is parsed as UTC: if it lacks a timezone offset, append +00:00
+  const normalizedTimestamp = timestamp.includes('+') || timestamp.includes('Z')
+    ? timestamp
+    : `${timestamp}+00:00`;
+  const then = new Date(normalizedTimestamp).getTime();
   const diffMs = now - then;
   const diffSec = Math.floor(diffMs / 1000);
   const diffMin = Math.floor(diffSec / 60);
@@ -13,7 +17,7 @@ export function formatRelativeTime(timestamp: string): string {
   if (diffHr < 24) return `${diffHr}h ago`;
   if (diffDay === 1) return 'Yesterday';
   if (diffDay < 7) return `${diffDay}d ago`;
-  return new Date(timestamp).toLocaleDateString();
+  return new Date(normalizedTimestamp).toLocaleDateString();
 }
 
 export function formatFullTimestamp(timestamp: string): string {
