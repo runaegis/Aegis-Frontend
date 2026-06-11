@@ -32,6 +32,7 @@ import { useToast } from '@/components/ui/Toast';
 import { useRoom } from '@/lib/roomContext';
 import { motion, useReducedMotion } from 'motion/react';
 import { fadeUp, staggerContainer } from '@/lib/motion';
+import { parseApiUtcTimestamp } from '@/lib/utils';
 
 export default function RoomSettingsPage() {
   const { roomId, room, role, loading } = useRoom();
@@ -128,7 +129,7 @@ export default function RoomSettingsPage() {
                 label="Created"
                 value={
                   <span className="text-[12.5px] text-[var(--neutral-sub-600)]">
-                    {new Date(room.created_at).toLocaleString()}
+                    {parseApiUtcTimestamp(room.created_at).toLocaleString()}
                   </span>
                 }
               />

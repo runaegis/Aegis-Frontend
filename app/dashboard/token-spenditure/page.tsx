@@ -28,6 +28,7 @@ import { useAutoRefresh, useUser } from '@/lib/hooks';
 import { api } from '@/lib/api';
 import { TokenMeterResponse } from '@/lib/types';
 import { DUR, EASE, fadeUp, staggerContainer } from '@/lib/motion';
+import { parseApiUtcTimestamp } from '@/lib/utils';
 
 type SessionBucket = {
   label: string;
@@ -105,14 +106,6 @@ const chartConfig = {
 
 const TZ_IST = 'Asia/Kolkata';
 
-function parseApiDate(value: string): Date {
-  const s = value.trim();
-  if (!s) return new Date(NaN);
-  if (/[zZ]$|[+-]\d{2}:?\d{2}$/.test(s)) return new Date(s);
-  const normalized = s.includes('T') ? s : s.replace(' ', 'T');
-  if (normalized.includes('T')) return new Date(`${normalized}Z`);
-  return new Date(s);
-}
 
 function toNumber(v: unknown): number {
   const parsed = Number(v);
@@ -130,7 +123,7 @@ function formatDateKeyIST(d: Date): string {
 
 function formatTimeIST(value?: string): string {
   if (!value) return '—';
-  const d = parseApiDate(value);
+  const d = parseApiUtcTimestamp(value);
   if (Number.isNaN(d.getTime())) return '—';
   return new Intl.DateTimeFormat('en-IN', {
     timeZone: TZ_IST,
@@ -165,7 +158,7 @@ function rowMatchesUsageRange(row: TokenMeterResponse, range: UsageRange, todayK
   if (range === 'all') return true;
   const source = row.timestamp ?? row.created_at;
   if (!source) return false;
-  const d = parseApiDate(source);
+  const d = parseApiUtcTimestamp(source);
   if (Number.isNaN(d.getTime())) return false;
   const rowKey = formatDateKeyIST(d);
   if (range === 'today') return rowKey === todayKey;
@@ -259,7 +252,7 @@ export default function TokenSpenditurePage() {
     for (const row of displayRows) {
       const sid = row.session_id || 'unknown';
       const tsRaw = row.timestamp ?? row.created_at ?? '';
-      const tsMs = tsRaw ? parseApiDate(tsRaw).getTime() : NaN;
+      const tsMs = tsRaw ? parseApiUtcTimestamp(tsRaw).getTime() : NaN;
       if (!map.has(sid)) {
         map.set(sid, {
           // Label assigned after sort below — using ordinals (S1, S2, …)
