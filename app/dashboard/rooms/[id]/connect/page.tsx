@@ -11,6 +11,8 @@
  *   1. Pick your agent (Cursor / Claude Code / VS Code / Other)
  *   2. Copy the MCP URL
  *   3. Paste the tool-specific config snippet
+ *   4. Add AGENTS.md so the agent uses Aegis GitHub tools
+ *   5. Verify the connection
  *
  * Each step is its own visually-numbered block so a new user can
  * see exactly where they are in the flow. The snippet for each
@@ -33,7 +35,7 @@ import { useToast } from '@/components/ui/Toast';
 import { useUser } from '@/lib/hooks';
 import { useRoom } from '@/lib/roomContext';
 import type { SessionAction } from '@/lib/types';
-import { cn } from '@/lib/utils';
+import { cn, parseApiUtcTimestamp } from '@/lib/utils';
 import { fadeUp, staggerContainer } from '@/lib/motion';
 
 type AgentTool = 'cursor' | 'claude-code' | 'vscode-copilot' | 'other';
@@ -64,6 +66,27 @@ const AGENTS: Array<{
   },
 ];
 
+const AGENTS_MD_SNIPPET = `# Aegis GitHub tools
+
+This repo is wired to Aegis MCP. Use Aegis tools for GitHub and CI work — not the terminal, \`gh\`, or ad-hoc shell git commands.
+
+## Use Aegis MCP for
+
+- **Repository work** — read files, edit code, commit, push, open PRs, manage branches, and handle issues through the Aegis GitHub tools.
+- **GitHub Actions** — inspect workflows, runs, logs, and job status through the Aegis GitHub Actions tools.
+
+## Do not use by default
+
+- GitHub CLI (\`gh\`)
+- Terminal git push / PR / branch operations
+- Shell commands that duplicate what an Aegis tool already covers
+
+Only fall back to terminal or \`gh\` when no Aegis tool covers the task or the user explicitly asks for the shell.
+
+## Why
+
+Several GitHub integrations are exclusive to Aegis in this room. Terminal and \`gh\` bypass room policy, may be denied for your role, and will not show up in the audit trail.`;
+
 export default function RoomConnectPage() {
   const { roomId, room, loading: roomLoading } = useRoom();
   const { user } = useUser();
@@ -73,9 +96,9 @@ export default function RoomConnectPage() {
   const [integrationUrl, setIntegrationUrl] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [selectedAgent, setSelectedAgent] = useState<AgentTool>('cursor');
-  const [copiedSection, setCopiedSection] = useState<'url' | 'config' | null>(
-    null,
-  );
+  const [copiedSection, setCopiedSection] = useState<
+    'url' | 'config' | 'agents-md' | null
+  >(null);
   // Verification state — the latest run we've seen for this room's
   // repo. Null until the first fetch succeeds. We record the mount
   // time so we can highlight runs that landed AFTER the user
@@ -139,7 +162,10 @@ export default function RoomConnectPage() {
   // user opened this tab — that's the moment the wiring worked.
   const justConnected = useMemo(() => {
     if (!latestRun) return false;
-    return new Date(latestRun.timestamp).getTime() >= mountTimeRef.current;
+    return (
+      parseApiUtcTimestamp(latestRun.timestamp).getTime() >=
+      mountTimeRef.current
+    );
   }, [latestRun]);
 
   // Generate the agent-specific config snippet from the integration
@@ -181,20 +207,29 @@ export default function RoomConnectPage() {
     return JSON.stringify(mcpEntry, null, 2);
   }, [integrationUrl, selectedAgent]);
 
-  const copyTo = async (section: 'url' | 'config', text: string) => {
+  const copyTo = async (
+    section: 'url' | 'config' | 'agents-md',
+    text: string,
+  ) => {
     try {
       await navigator.clipboard.writeText(text);
       setCopiedSection(section);
       window.setTimeout(() => setCopiedSection(null), 2000);
-      toast.success(
-        section === 'url' ? 'MCP URL copied' : 'Config copied',
-        {
-          description:
-            section === 'url'
-              ? 'Paste it into your agent settings.'
-              : 'Paste this snippet into your agent settings file.',
+      const toastCopy = {
+        url: {
+          title: 'MCP URL copied',
+          description: 'Paste it into your agent settings.',
         },
-      );
+        config: {
+          title: 'Config copied',
+          description: 'Paste this snippet into your agent settings file.',
+        },
+        'agents-md': {
+          title: 'Instructions copied',
+          description: 'Paste into AGENTS.md at your project root.',
+        },
+      }[section];
+      toast.success(toastCopy.title, { description: toastCopy.description });
     } catch {
       toast.error('Could not copy', {
         description: 'Your browser blocked clipboard access.',
@@ -415,12 +450,69 @@ export default function RoomConnectPage() {
           </div>
         </motion.section>
 
-        {/* Step 4 — Verify the connection works.
-            Previously the user had no feedback loop: paste config,
-            then bounce between tabs hoping to see activity. This
-            panel polls runs filtered to this room's repo so the
-            user gets a real "did it work?" answer without leaving
-            the wizard. Three states:
+        {/* Step 4 — AGENTS.md instructions so the agent reaches for
+            Aegis MCP tools instead of gh / terminal git. */}
+        <motion.section
+          variants={fadeUp}
+          className="overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]"
+        >
+          <StepHeader
+            number={4}
+            title="Add agent instructions"
+            subtitle="Create AGENTS.md at your project root and paste the snippet below."
+          />
+          <div className="space-y-3 p-4">
+            <p className="text-[11.5px] leading-[1.5] text-[var(--neutral-sub-600)]">
+              Your agent reads this file every session. These rules steer it
+              toward Aegis GitHub + GitHub Actions tools and away from{' '}
+              <code className="text-[var(--neutral-strong-950)] [font-family:var(--font-geist-mono),ui-monospace,monospace]">
+                gh
+              </code>{' '}
+              and terminal workflows that bypass room policy.
+            </p>
+            <div className="relative overflow-hidden rounded-[10px] border border-[var(--stroke-soft-200)] bg-[var(--neutral-weak-50)]">
+              <pre className="max-h-[320px] overflow-auto whitespace-pre-wrap p-4 text-[11.5px] leading-[1.55] text-[var(--neutral-strong-950)] [font-family:var(--font-geist-mono),ui-monospace,monospace]">
+                {AGENTS_MD_SNIPPET}
+              </pre>
+              <button
+                type="button"
+                onClick={() => copyTo('agents-md', AGENTS_MD_SNIPPET)}
+                aria-label="Copy AGENTS.md instructions"
+                className={cn(
+                  'absolute right-3 top-3 inline-flex h-7 items-center gap-1.5 rounded-[6px] border border-[var(--stroke-soft-200)] bg-white px-2 text-[11px] font-medium text-[var(--neutral-sub-600)]',
+                  'shadow-[var(--shadow-regular-xs)] transition-colors hover:bg-[var(--neutral-weak-50)] hover:text-[var(--neutral-strong-950)]',
+                )}
+              >
+                {copiedSection === 'agents-md' ? (
+                  <>
+                    <Check
+                      className="h-3 w-3 text-[var(--success)]"
+                      strokeWidth={2.5}
+                      aria-hidden
+                    />
+                    Copied
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-3 w-3" strokeWidth={2} aria-hidden />
+                    Copy
+                  </>
+                )}
+              </button>
+            </div>
+            <p className="text-[11.5px] leading-[1.5] text-[var(--neutral-soft-400)]">
+              Commit{' '}
+              <span className="font-semibold text-[var(--neutral-sub-600)]">
+                AGENTS.md
+              </span>{' '}
+              so every teammate&apos;s agent picks up the same guidance.
+            </p>
+          </div>
+        </motion.section>
+
+        {/* Step 5 — Verify the connection works. Lives at the bottom
+            so users finish wiring + AGENTS.md before we ask them to
+            trigger a test action. Three states:
               • Just-connected (run after mount) → green success
               • Older activity (last run before mount) → neutral info
               • No activity → waiting pulse */}
@@ -429,7 +521,7 @@ export default function RoomConnectPage() {
           className="overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]"
         >
           <StepHeader
-            number={4}
+            number={5}
             title="Verify the connection"
             subtitle="Run a single command in your agent — Aegis will pick it up here."
           />
@@ -456,9 +548,6 @@ export default function RoomConnectPage() {
                   />
                 </span>
               ) : (
-                // Pulsing dot — visual cue that we're listening.
-                // Reduces "is this thing even doing anything?"
-                // anxiety while the user wires up the agent.
                 <span
                   className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--neutral-weak-50)]"
                   aria-hidden

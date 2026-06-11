@@ -1,6 +1,28 @@
+/**
+ * Parse API timestamps. The backend stores UTC but often serializes
+ * without a timezone suffix (e.g. "2026-06-11 09:00:00"). Browsers
+ * treat those as local time, which skews relative labels.
+ */
+export function parseApiUtcTimestamp(value: string): Date {
+  const s = value.trim();
+  if (!s) return new Date(NaN);
+  if (/[zZ]$|[+-]\d{2}:?\d{2}$/.test(s)) return new Date(s);
+  const normalized = s.includes('T') ? s : s.replace(' ', 'T');
+  return new Date(`${normalized}Z`);
+}
+
+/** Normalize a UTC API timestamp to an ISO-8601 string with `Z`. */
+export function normalizeApiTimestamp(value: string): string {
+  const s = value.trim();
+  if (!s) return value;
+  if (/[zZ]$|[+-]\d{2}:?\d{2}$/.test(s)) return s;
+  const normalized = s.includes('T') ? s : s.replace(' ', 'T');
+  return `${normalized}Z`;
+}
+
 export function formatRelativeTime(timestamp: string): string {
   const now = Date.now();
-  const then = new Date(timestamp).getTime();
+  const then = parseApiUtcTimestamp(timestamp).getTime();
   const diffMs = now - then;
   const diffSec = Math.floor(diffMs / 1000);
   const diffMin = Math.floor(diffSec / 60);
@@ -13,11 +35,11 @@ export function formatRelativeTime(timestamp: string): string {
   if (diffHr < 24) return `${diffHr}h ago`;
   if (diffDay === 1) return 'Yesterday';
   if (diffDay < 7) return `${diffDay}d ago`;
-  return new Date(timestamp).toLocaleDateString();
+  return parseApiUtcTimestamp(timestamp).toLocaleDateString();
 }
 
 export function formatFullTimestamp(timestamp: string): string {
-  return new Date(timestamp).toLocaleString('en-US', {
+  return parseApiUtcTimestamp(timestamp).toLocaleString('en-US', {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
@@ -325,6 +347,16 @@ export function formatBlastRadius(value?: string | null): BlastRadiusDisplay {
     default:
       return { level, label: value?.trim() || 'Unknown', tone: 'neutral' };
   }
+}
+
+/** Human-readable room slug: `{repo_name}_{first 5 uuid chars}`. */
+export function getRoomSlug(
+  roomName: string | undefined | null,
+  roomId: string,
+): string {
+  const name = roomName?.trim() || 'room';
+  const idPrefix = roomId.replace(/-/g, '').slice(0, 5).toLowerCase();
+  return idPrefix ? `${name}_${idPrefix}` : name;
 }
 
 // ── Room roles ────────────────────────────────────────────────────────────

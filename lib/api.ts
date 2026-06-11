@@ -20,6 +20,7 @@ import {
   matchesActionDateFilters,
   type ActionDateFilters,
 } from "./dashboardDateRange";
+import { normalizeApiTimestamp } from "./utils";
 
 type SaveUserPayload = Pick<
   User,
@@ -98,19 +99,21 @@ function parseDatetime(value: any): string | any {
     /datetime\.datetime\((\d+),\s*(\d+),\s*(\d+),\s*(\d+),\s*(\d+),\s*(\d+),\s*(\d+)/,
   );
   if (datetimeMatch) {
-    const [, year, month, day, hour, minute, second, microsecond] =
+    const [, year, month, day, hour, minute, second, microsecond = "0"] =
       datetimeMatch;
     return new Date(
-      parseInt(year),
-      parseInt(month) - 1,
-      parseInt(day),
-      parseInt(hour),
-      parseInt(minute),
-      parseInt(second),
-      parseInt(microsecond) / 1000,
+      Date.UTC(
+        parseInt(year),
+        parseInt(month) - 1,
+        parseInt(day),
+        parseInt(hour),
+        parseInt(minute),
+        parseInt(second),
+        parseInt(microsecond) / 1000,
+      ),
     ).toISOString();
   }
-  return value;
+  return normalizeApiTimestamp(value);
 }
 
 function parseRow(row: unknown, columns?: string[]): unknown {
