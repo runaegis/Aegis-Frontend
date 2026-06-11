@@ -54,7 +54,7 @@ import { RelativeTime } from '@/components/ui/RelativeTime';
 import { RoomsSkeleton } from '@/components/ui/PageSkeletons';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
-import { cn, getRoomRoleBadgeTone } from '@/lib/utils';
+import { cn, getRoomRoleBadgeTone, getRoomSlug } from '@/lib/utils';
 import { fadeUp, fadeUpSm, staggerContainer } from '@/lib/motion';
 
 const getRoomId = (room: RoomSummary): string =>
@@ -588,6 +588,7 @@ export default function RoomsIndexPage() {
             >
               {rooms.map((room) => {
                 const id = getRoomId(room);
+                const slug = getRoomSlug(room.repo_name, id);
                 return (
                   <motion.li
                     key={id}
@@ -616,19 +617,9 @@ export default function RoomsIndexPage() {
                         <p className="truncate text-[14px] font-semibold tracking-[-0.005em] text-[var(--neutral-strong-950)]">
                           {room.repo_name || id}
                         </p>
-                        {/* Metadata line. The room ID used to be wrapped
-                            in font-mono, which gave the mono glyphs a
-                            different vertical baseline from the
-                            surrounding sans text — the "ID" prefix
-                            and "· created…" tail bounced ~1px above
-                            the mono span. Dropping mono here keeps the
-                            entire line on one baseline; the "ID" prefix
-                            still signals "this is the identifier" without
-                            needing the typography switch. */}
                         <p className="mt-0.5 truncate text-[11.5px] text-[var(--neutral-soft-400)]">
-                          ID{' '}
                           <span className="text-[var(--neutral-sub-600)]">
-                            {id}
+                            {slug}
                           </span>
                           {room.created_at && (
                             <>
