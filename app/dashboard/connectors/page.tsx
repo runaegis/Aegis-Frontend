@@ -28,18 +28,7 @@ import { ConnectorMark, CONNECTORS, type ConnectorId } from '@/components/ui/Con
 import { Button } from '@/components/ui/Button';
 import { cn } from '@/lib/utils';
 import { DUR, EASE, fadeUp, staggerContainer } from '@/lib/motion';
-
-type ConnectorStatus = 'live' | 'in-progress' | 'coming-soon';
-
-const STATUS_BY_ID: Record<ConnectorId, ConnectorStatus> = {
-  github: 'live',
-  'github-actions': 'live',
-  slack: 'in-progress',
-  postgres: 'in-progress',
-  linear: 'coming-soon',
-  jira: 'coming-soon',
-  terraform: 'coming-soon',
-};
+import { STATUS_BY_ID, type ConnectorStatus } from '@/lib/connectorCatalog';
 
 // Display order — Live first, then In Progress, then queued in the
 // priority order from the Notion roadmap.
@@ -217,13 +206,13 @@ function ConnectorCard({
               <ShieldCheck className="h-3.5 w-3.5" strokeWidth={2} />
               Live today
             </span>
-            <Link href="/dashboard/rooms">
+            <Link href={`/dashboard/connectors/${id}`}>
               <Button
                 variant="secondary"
                 size="sm"
                 trailingIcon={<ArrowUpRight className="h-3 w-3" strokeWidth={2.25} />}
               >
-                Configure
+                View connector
               </Button>
             </Link>
           </>
