@@ -152,6 +152,10 @@ export interface RoomSummary {
   role?: string;
   is_active?: boolean;
 
+  /** Room creation time (UTC). Prefer over membership join time when present. */
+  room_created_at?: string;
+  /** Membership join time — only used when room_created_at is absent. */
+  joined_at?: string;
   created_at?: string;
 }
 export interface RoomDetails extends RoomSummary {

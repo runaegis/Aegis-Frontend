@@ -54,7 +54,12 @@ import { RelativeTime } from '@/components/ui/RelativeTime';
 import { RoomsSkeleton } from '@/components/ui/PageSkeletons';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
-import { cn, getRoomRoleBadgeTone, getRoomSlug } from '@/lib/utils';
+import {
+  cn,
+  getRoomCreatedAt,
+  getRoomRoleBadgeTone,
+  getRoomSlug,
+} from '@/lib/utils';
 import { fadeUp, fadeUpSm, staggerContainer } from '@/lib/motion';
 
 const getRoomId = (room: RoomSummary): string =>
@@ -589,6 +594,7 @@ export default function RoomsIndexPage() {
               {rooms.map((room) => {
                 const id = getRoomId(room);
                 const slug = getRoomSlug(room.repo_name, id);
+                const createdAt = getRoomCreatedAt(room);
                 return (
                   <motion.li
                     key={id}
@@ -621,11 +627,11 @@ export default function RoomsIndexPage() {
                           <span className="text-[var(--neutral-sub-600)]">
                             {slug}
                           </span>
-                          {room.created_at && (
+                          {createdAt && (
                             <>
                               {' · created '}
                               <RelativeTime
-                                timestamp={room.created_at}
+                                timestamp={createdAt}
                                 className="inline"
                               />
                             </>
