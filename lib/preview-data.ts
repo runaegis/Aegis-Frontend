@@ -723,9 +723,13 @@ export function installPreviewApi() {
   // field on the rooms page. Without this mock the Promise.all on
   // /dashboard/rooms rejects and the whole detail panel goes empty.
   // Format mirrors the real shape: a stable per-room slug + opaque token.
-  api.getRoomIntegrationConfig = async (roomId: string) => ({
-    url: `https://mcp.runaegis.co/r/${roomId}/aeg_${roomId.replace('room_', '')}_preview_token`,
-  });
+  api.getRoomIntegrationConfig = async (roomId: string) => {
+    const details = PREVIEW_ROOM_DETAILS[roomId] ?? PREVIEW_ROOMS[0];
+    return {
+      ...details,
+      url: `https://mcp.runaegis.co/r/${roomId}/aeg_${roomId.replace('room_', '')}_preview_token`,
+    };
+  };
   // Create a room AND seed it correctly into the in-memory mock store
   // so the user-just-created flow works end-to-end:
   //   • getMyRooms() returns the new room (so the RoomSwitcher + index
