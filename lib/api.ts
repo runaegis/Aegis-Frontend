@@ -20,7 +20,7 @@ import {
   matchesActionDateFilters,
   type ActionDateFilters,
 } from "./dashboardDateRange";
-import { normalizeApiTimestamp } from "./utils";
+import { normalizeApiTimestamp, normalizeDecision } from "./utils";
 
 type SaveUserPayload = Pick<
   User,
@@ -128,10 +128,16 @@ function parseRow(row: unknown, columns?: string[]): unknown {
     "started_at",
     "last_action_at",
     "created_at",
+    "room_created_at",
+    "joined_at",
     "approved_at",
+    "expires_at",
   ];
   for (const field of datetimeFields) {
     if (obj[field]) obj[field] = parseDatetime(String(obj[field]));
+  }
+  if (typeof obj.decision === "string") {
+    obj.decision = normalizeDecision(obj.decision);
   }
   return obj;
 }
@@ -492,11 +498,11 @@ function aggregateSessions(actions: SessionAction[]): Session[] {
     if (row.target_repo && !(s.repos as string[]).includes(row.target_repo)) {
       (s.repos as string[]).push(row.target_repo);
     }
-    const d = row.decision?.toUpperCase() || "";
+    const d = normalizeDecision(row.decision);
     if (d === "ALLOW") s.allows = (Number(s.allows) || 0) + 1;
     else if (d === "DENY") s.denies = (Number(s.denies) || 0) + 1;
     else if (d === "REWRITE") s.rewrites = (Number(s.rewrites) || 0) + 1;
-    if (d.includes("APPROVAL")) s.approvals = (Number(s.approvals) || 0) + 1;
+    if (d === "REQUIRE_APPROVAL") s.approvals = (Number(s.approvals) || 0) + 1;
   }
 
   return Array.from(map.values()).sort(
@@ -509,11 +515,11 @@ function aggregateSessions(actions: SessionAction[]): Session[] {
 function computeMetricsFromActions(actions: SessionAction[]): Metrics {
   return {
     total: actions.length,
-    allows: actions.filter((row) => row.decision?.toUpperCase() === "ALLOW").length,
-    denies: actions.filter((row) => row.decision?.toUpperCase() === "DENY").length,
-    rewrites: actions.filter((row) => row.decision?.toUpperCase() === "REWRITE").length,
+    allows: actions.filter((row) => normalizeDecision(row.decision) === "ALLOW").length,
+    denies: actions.filter((row) => normalizeDecision(row.decision) === "DENY").length,
+    rewrites: actions.filter((row) => normalizeDecision(row.decision) === "REWRITE").length,
     approvals: actions.filter((row) =>
-      row.decision?.toUpperCase().includes("APPROVAL"),
+      normalizeDecision(row.decision) === "REQUIRE_APPROVAL",
     ).length,
   };
 }
@@ -769,7 +775,7 @@ export const api = {
   getApprovals: async (userId?: string): Promise<SessionAction[]> => {
     if (!userId) return [];
     const { items: rows } = await getUserActions(userId);
-    return rows.filter((r) => r.decision?.toUpperCase().includes("APPROVAL"));
+    return rows.filter((r) => normalizeDecision(r.decision) === "REQUIRE_APPROVAL");
   },
 
   getMcpApprovals: async (userId?: string): Promise<MCPApproval[]> => {
@@ -1186,7 +1192,7 @@ export const api = {
       throw new Error(await readErrorMessage(res));
     }
 
-    return res.json();
+    return parseRow(await res.json()) as RoomDetails;
   },
   createRoom: async (repoName: string): Promise<RoomDetails> => {
     const res = await apiFetch(`${API_BASE}/room/`, {
@@ -1200,7 +1206,7 @@ export const api = {
       throw new Error(`Failed to create room: ${await readErrorMessage(res)}`);
     }
 
-    return res.json();
+    return parseRow(await res.json()) as RoomDetails;
   },
 
   getMyRooms: async (): Promise<RoomSummary[]> => {
@@ -1213,7 +1219,24 @@ export const api = {
     }
 
     const data = await res.json();
-    return Array.isArray(data) ? data : [];
+    const rooms = Array.isArray(data) ? data : [];
+    const normalized = rooms.map((room) => parseRow(room) as RoomSummary);
+
+    if (typeof window !== "undefined") {
+      console.log(
+        "[Aegis Rooms] created_at from DB",
+        rooms.map((room: Record<string, unknown>, index: number) => ({
+          repo: room.repo_name,
+          id: room.id ?? room.room_id,
+          created_at_raw: room.created_at,
+          created_at_normalized: (normalized[index] as RoomSummary).created_at,
+          room_created_at: room.room_created_at,
+          joined_at: room.joined_at,
+        })),
+      );
+    }
+
+    return normalized;
   },
 
   getRoomDetails: async (roomId: string): Promise<RoomDetails> => {
@@ -1228,7 +1251,7 @@ export const api = {
       throw new Error(`Failed to load room: ${await readErrorMessage(res)}`);
     }
 
-    return res.json();
+    return parseRow(await res.json()) as RoomDetails;
   },
 
   getRoomMembers: async (roomId: string): Promise<RoomMember[]> => {
@@ -1292,7 +1315,9 @@ export const api = {
 
     const data = await res.json();
     return {
-      items: Array.isArray(data?.items) ? data.items : [],
+      items: Array.isArray(data?.items)
+        ? data.items.map((row: unknown) => parseRow(row) as RoomSessionAction)
+        : [],
       total: Number(data?.total ?? 0),
       page: Number(data?.page ?? page),
       page_size: Number(data?.page_size ?? pageSize),

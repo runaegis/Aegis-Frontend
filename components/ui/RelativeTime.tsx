@@ -23,6 +23,7 @@ interface RelativeTimeProps {
 export function RelativeTime({ timestamp, className }: RelativeTimeProps) {
   if (!timestamp) return null;
 
+  const normalizedTimestamp = normalizeApiTimestamp(timestamp);
   const parsed = parseApiUtcTimestamp(timestamp);
   const isValid = !Number.isNaN(parsed.getTime());
 
@@ -42,7 +43,7 @@ export function RelativeTime({ timestamp, className }: RelativeTimeProps) {
 
   return (
     <time
-      dateTime={normalizeApiTimestamp(timestamp)}
+      dateTime={normalizedTimestamp}
       title={fullLocal}
       className={className}
     >

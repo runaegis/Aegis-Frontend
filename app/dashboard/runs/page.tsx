@@ -14,12 +14,14 @@ import {
   extractPullRequestUrl,
   formatExecutionTimeMs,
   formatFullTimestamp,
+  normalizeDecision,
   readBlastRadius,
 } from '@/lib/utils';
 import { RelativeTime } from '@/components/ui/RelativeTime';
 import Topbar from '@/components/layout/Topbar';
 import { AgentMark } from '@/components/ui/AgentMark';
-import { ConnectorMark, CONNECTORS, type ConnectorId } from '@/components/ui/ConnectorMark';
+import { ConnectorMark, CONNECTORS } from '@/components/ui/ConnectorMark';
+import { connectorForTool, isPostgresTool } from '@/lib/toolConnectors';
 import DecisionBadge, { decisionColor } from '@/components/ui/DecisionBadge';
 import EmptyState from '@/components/ui/EmptyState';
 import ErrorBanner from '@/components/ui/ErrorBanner';
@@ -42,22 +44,6 @@ import {
   TRExpanded,
   type SortDirection,
 } from '@/components/ui/Table';
-
-// Which connector surface a given tool belongs to. GitHub Actions has its
-// own small set of workflow/secret tools; everything else routes through
-// the core GitHub connector. Surfacing the brand mark per-row makes Aegis'
-// reach across distinct tool surfaces legible at a glance.
-const GITHUB_ACTIONS_TOOLS = new Set([
-  'workflow_dispatch',
-  'create_workflow_secret',
-  'delete_workflow_secret',
-  'update_workflow_secret',
-]);
-
-function connectorForTool(toolName?: string | null): ConnectorId {
-  const t = (toolName ?? '').trim().toLowerCase();
-  return GITHUB_ACTIONS_TOOLS.has(t) ? 'github-actions' : 'github';
-}
 
 export default function RunsPage() {
   const { isLoading: userLoading } = useUser();
@@ -93,11 +79,12 @@ export default function RunsPage() {
       run.target_repo?.toLowerCase().includes(search.toLowerCase()) ||
       run.action_summary?.toLowerCase().includes(search.toLowerCase());
 
+    const canonical = normalizeDecision(run.decision);
     const matchesDecision =
       decisionFilter === 'all' ||
       (decisionFilter === 'approval'
-        ? run.decision?.toUpperCase().includes('APPROVAL')
-        : run.decision?.toUpperCase() === decisionFilter.toUpperCase());
+        ? canonical === 'REQUIRE_APPROVAL'
+        : canonical === decisionFilter);
 
     return matchesSearch && matchesDecision;
   });
@@ -421,7 +408,7 @@ function RunRow({
           {run.target_repo}
         </TD>
         <TD className="max-w-[200px]">
-          {run.target_branch ? (
+          {!isPostgresTool(run.tool_name) && run.target_branch ? (
             <CodeChip>{run.target_branch}</CodeChip>
           ) : null}
         </TD>

@@ -1,5 +1,6 @@
 'use client';
 
+import { normalizeDecision } from '@/lib/utils';
 import { Badge, type BadgeTone } from './Badge';
 
 type DecisionStyle = { tone: BadgeTone; label: string };
@@ -17,12 +18,9 @@ const STYLES: Record<string, DecisionStyle> = {
 };
 
 function resolve(decision: string): DecisionStyle {
-  const upper = (decision ?? '').toUpperCase();
-  if (STYLES[upper]) return STYLES[upper];
-  if (upper.includes('APPROVAL')) return STYLES.REQUIRE_APPROVAL;
-  if (upper.includes('ERROR')) return STYLES.ERROR;
-  if (upper.includes('REWRITE')) return STYLES.REWRITE;
-  return { tone: 'neutral', label: upper || 'UNKNOWN' };
+  const canonical = normalizeDecision(decision);
+  if (canonical !== 'UNKNOWN' && STYLES[canonical]) return STYLES[canonical];
+  return { tone: 'neutral', label: canonical };
 }
 
 interface DecisionBadgeProps {
@@ -48,20 +46,32 @@ export function decisionAccent(decision: string):
   | 'warning'
   | 'feature'
   | 'neutral' {
-  const upper = (decision ?? '').toUpperCase();
-  if (upper === 'ALLOW') return 'success';
-  if (upper === 'DENY' || upper === 'REJECTED' || upper === 'DENIED') return 'error';
-  if (upper === 'REWRITE') return 'feature';
-  if (upper.includes('APPROVAL') || upper === 'PENDING') return 'warning';
-  return 'neutral';
+  switch (normalizeDecision(decision)) {
+    case 'ALLOW':
+      return 'success';
+    case 'DENY':
+      return 'error';
+    case 'REWRITE':
+      return 'feature';
+    case 'REQUIRE_APPROVAL':
+      return 'warning';
+    default:
+      return 'neutral';
+  }
 }
 
 /** Map a decision string to its semantic color CSS variable. */
 export function decisionColor(decision: string): string {
-  const upper = (decision ?? '').toUpperCase();
-  if (upper === 'ALLOW' || upper === 'APPROVED') return 'var(--success)';
-  if (upper === 'DENY' || upper === 'REJECTED' || upper === 'DENIED') return 'var(--error)';
-  if (upper === 'REWRITE') return 'var(--feature)';
-  if (upper.includes('APPROVAL') || upper === 'PENDING') return 'var(--warning)';
-  return 'var(--neutral-soft-400)';
+  switch (normalizeDecision(decision)) {
+    case 'ALLOW':
+      return 'var(--success)';
+    case 'DENY':
+      return 'var(--error)';
+    case 'REWRITE':
+      return 'var(--feature)';
+    case 'REQUIRE_APPROVAL':
+      return 'var(--warning)';
+    default:
+      return 'var(--neutral-soft-400)';
+  }
 }

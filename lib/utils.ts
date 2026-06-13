@@ -7,6 +7,8 @@ export function parseApiUtcTimestamp(value: string): Date {
   const s = value.trim();
   if (!s) return new Date(NaN);
   if (/[zZ]$|[+-]\d{2}:?\d{2}$/.test(s)) return new Date(s);
+  // Date-only values from the DB (e.g. "2026-05-22") → UTC midnight.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return new Date(`${s}T00:00:00Z`);
   const normalized = s.includes('T') ? s : s.replace(' ', 'T');
   return new Date(`${normalized}Z`);
 }
@@ -16,13 +18,29 @@ export function normalizeApiTimestamp(value: string): string {
   const s = value.trim();
   if (!s) return value;
   if (/[zZ]$|[+-]\d{2}:?\d{2}$/.test(s)) return s;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return `${s}T00:00:00Z`;
   const normalized = s.includes('T') ? s : s.replace(' ', 'T');
   return `${normalized}Z`;
 }
 
+/** Prefer the room's own creation time over membership join time. */
+export function getRoomCreatedAt(room: {
+  created_at?: string | null;
+  room_created_at?: string | null;
+}): string | undefined {
+  const roomCreated =
+    typeof room.room_created_at === 'string' ? room.room_created_at.trim() : '';
+  const created =
+    typeof room.created_at === 'string' ? room.created_at.trim() : '';
+  return roomCreated || created || undefined;
+}
+
 export function formatRelativeTime(timestamp: string): string {
+  const parsed = parseApiUtcTimestamp(timestamp);
+  const then = parsed.getTime();
+  if (Number.isNaN(then)) return '—';
+
   const now = Date.now();
-  const then = parseApiUtcTimestamp(timestamp).getTime();
   const diffMs = now - then;
   const diffSec = Math.floor(diffMs / 1000);
   const diffMin = Math.floor(diffSec / 60);
@@ -35,7 +53,7 @@ export function formatRelativeTime(timestamp: string): string {
   if (diffHr < 24) return `${diffHr}h ago`;
   if (diffDay === 1) return 'Yesterday';
   if (diffDay < 7) return `${diffDay}d ago`;
-  return parseApiUtcTimestamp(timestamp).toLocaleDateString();
+  return parsed.toLocaleDateString();
 }
 
 export function formatFullTimestamp(timestamp: string): string {
@@ -244,6 +262,55 @@ const PR_URL_RE = /https?:\/\/[^\s"'<>)\]]+\/pull\/\d+(?:\/[^\s"'<>)\]]*)?/i;
  * without needing per-tenant config in the frontend.
  */
 const GITHUB_HOST_FALLBACK = 'github.com';
+
+// ── Decision verdict ────────────────────────────────────────────────────────
+
+export type CanonicalDecision =
+  | 'ALLOW'
+  | 'DENY'
+  | 'REWRITE'
+  | 'REQUIRE_APPROVAL'
+  | 'ERROR'
+  | 'UNKNOWN';
+
+/**
+ * Normalize free-form backend `decision` strings to a canonical bucket.
+ *
+ * The backend may emit title-case or past-tense variants (`"Denied"`,
+ * `"Allowed"`) rather than the enum-style labels the UI expects (`"DENY"`,
+ * `"ALLOW"`). Lowercase first, then map — same pattern as {@link normalizePolicy}.
+ */
+export function normalizeDecision(value?: string | null): CanonicalDecision {
+  if (!value) return 'UNKNOWN';
+  const v = value.toLowerCase().trim();
+  if (!v) return 'UNKNOWN';
+
+  if (v === 'allow' || v === 'allowed' || v === 'approved' || v === 'pass' || v === 'passed' || v === 'ok') {
+    return 'ALLOW';
+  }
+  if (v === 'deny' || v === 'denied' || v === 'rejected' || v === 'reject') {
+    return 'DENY';
+  }
+  if (v === 'rewrite' || v === 'rewritten') {
+    return 'REWRITE';
+  }
+  if (v.includes('approval') || v === 'pending' || v === 'require_approval') {
+    return 'REQUIRE_APPROVAL';
+  }
+  if (v === 'error') {
+    return 'ERROR';
+  }
+
+  const upper = value.toUpperCase().trim();
+  if (upper === 'ALLOW' || upper === 'DENY' || upper === 'REWRITE' || upper === 'REQUIRE_APPROVAL' || upper === 'ERROR') {
+    return upper;
+  }
+  if (upper === 'DENIED' || upper === 'REJECTED') return 'DENY';
+  if (upper === 'ALLOWED' || upper === 'APPROVED') return 'ALLOW';
+  if (upper.includes('APPROVAL') || upper === 'PENDING') return 'REQUIRE_APPROVAL';
+
+  return 'UNKNOWN';
+}
 
 // ── Policy verdict ─────────────────────────────────────────────────────────
 
