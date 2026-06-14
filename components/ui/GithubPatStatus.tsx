@@ -1,11 +1,12 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import {
   AlertTriangle,
+  ArrowRight,
   CheckCircle2,
   ExternalLink,
-  GitBranch,
   KeyRound,
   RefreshCw,
   ShieldAlert,
@@ -18,7 +19,8 @@ import {
   type GithubPatState,
   type GithubPatStatus as PatStatus,
 } from '@/lib/githubPat';
-import { Card, CardBody, CardHeader, CardTitle, CardEyebrow } from '@/components/ui/Card';
+import { Card } from '@/components/ui/Card';
+import { ConnectorMark } from '@/components/ui/ConnectorMark';
 import { Badge, type BadgeTone } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { CodeChip } from '@/components/ui/CodeChip';
@@ -133,73 +135,72 @@ export default function GithubPatStatus({ className }: { className?: string }) {
 
   const state = status?.state ?? 'no_token';
   const view = PRESENTATION[state];
-  const Icon = view.icon;
   const description = status?.message || view.fallbackDescription;
-  const showManageLink =
-    state === 'expired' || state === 'invalid' || state === 'no_token' || state === 'expiring_soon';
+
+  // Demo workspace has no real GitHub connection, so token health would be
+  // meaningless noise there — never surface it in demo mode. The root
+  // `data-demo` attribute is set by the dashboard layout (and the early
+  // inline script) for exactly this kind of demo-aware component.
+  const isDemoWorkspace =
+    typeof document !== 'undefined' &&
+    document.documentElement.dataset.demo === 'true';
 
   // Healthy, unknown, or transient states stay off the dashboard — only
   // surface when the token is missing or GitHub rejects it.
-  if (userLoading || checking || !status || !ALERT_STATES.includes(state)) {
+  if (
+    isDemoWorkspace ||
+    userLoading ||
+    checking ||
+    !status ||
+    !ALERT_STATES.includes(state)
+  ) {
     return null;
   }
 
+  // Only reached for no_token / expired / invalid — all three want the same
+  // two resolution actions, rendered unconditionally below.
+  const actionLabel = state === 'no_token' ? 'Add token' : 'Update token';
+  const accentColor = `var(--${accentVar(view.accent)})`;
+  const hasCredentialDetail =
+    !!status?.login || !!status?.expiresAt || (status?.scopes?.length ?? 0) > 0;
+
   return (
     <Card accent={view.accent} className={className}>
-      <CardHeader>
-        <div className="flex min-w-0 items-center gap-2">
-          <GitBranch className="h-4 w-4 shrink-0 text-[var(--neutral-strong-950)]" strokeWidth={2} aria-hidden />
-          <div className="min-w-0">
-            <CardEyebrow className="mb-0.5">GitHub access token</CardEyebrow>
-            <CardTitle>Token health</CardTitle>
-          </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <Badge tone={view.tone} uppercase leadingDot>
-            {checking ? 'Checking' : view.label}
-          </Badge>
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={() => void runCheck()}
-            disabled={checking}
-            aria-label="Re-check token"
-            leadingIcon={
-              <RefreshCw
-                className={`h-3.5 w-3.5 ${checking ? 'animate-spin' : ''}`}
-                strokeWidth={2}
-              />
-            }
-          >
-            Re-check
-          </Button>
-        </div>
-      </CardHeader>
-
-      <CardBody>
-        <div className="flex items-start gap-3">
-          <span
-            className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px]"
-            style={{ backgroundColor: 'var(--neutral-weak-50)' }}
-          >
-            <Icon
-              className="h-4 w-4"
-              style={{ color: `var(--${accentVar(view.accent)})` }}
-              strokeWidth={2}
+      <div className="p-4 sm:p-[18px]">
+        <div className="flex items-start gap-3.5">
+          {/* GitHub identity with a tone-coded health dot — reads as a
+              live connection/credential, not a generic alert banner. */}
+          <div className="relative shrink-0">
+            <ConnectorMark id="github" size="md" className="cursor-default" />
+            <span
+              className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full ring-[2.5px] ring-white"
+              style={{ backgroundColor: accentColor }}
               aria-hidden
             />
-          </span>
+          </div>
+
           <div className="min-w-0 flex-1">
-            <p className="text-[13.5px] font-semibold tracking-[-0.01em] text-[var(--neutral-strong-950)]">
-              {view.title}
-            </p>
-            <p className="mt-0.5 text-[12.5px] leading-[1.5] text-[var(--neutral-sub-600)]">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[10.5px] font-semibold uppercase tracking-[0.07em] text-[var(--neutral-soft-400)]">
+                  GitHub access token
+                </p>
+                <p className="mt-0.5 text-[14px] font-semibold tracking-[-0.01em] text-[var(--neutral-strong-950)]">
+                  {view.title}
+                </p>
+              </div>
+              <Badge tone={view.tone} uppercase leadingDot>
+                {view.label}
+              </Badge>
+            </div>
+
+            <p className="mt-1.5 max-w-[58ch] text-[12.5px] leading-[1.55] text-[var(--neutral-sub-600)]">
               {description}
             </p>
 
-            {/* Detail rows for a token GitHub actually authenticated. */}
-            {(status?.login || status?.expiresAt || (status?.scopes?.length ?? 0) > 0) && (
-              <div className="mt-3 space-y-2 border-t border-[var(--stroke-soft-200)] pt-3">
+            {/* Detail panel for a token GitHub actually authenticated. */}
+            {hasCredentialDetail && (
+              <div className="mt-3 space-y-2 rounded-[8px] border border-[var(--stroke-soft-200)] bg-[var(--neutral-weak-50)] px-3 py-2.5">
                 {status?.login && (
                   <DetailRow label="Authenticated as">
                     <CodeChip>{status.login}</CodeChip>
@@ -217,14 +218,9 @@ export default function GithubPatStatus({ className }: { className?: string }) {
                     </span>
                   </DetailRow>
                 )}
-                {status?.expiresAt === null && status?.state === 'valid' && (
-                  <DetailRow label="Expires">
-                    <span className="text-[12.5px] text-[var(--neutral-sub-600)]">No expiration set</span>
-                  </DetailRow>
-                )}
                 {(status?.scopes?.length ?? 0) > 0 && (
                   <DetailRow label="Scopes">
-                    <div className="flex flex-wrap gap-1">
+                    <div className="flex flex-wrap justify-end gap-1">
                       {status!.scopes!.map((scope) => (
                         <CodeChip key={scope}>{scope}</CodeChip>
                       ))}
@@ -234,28 +230,44 @@ export default function GithubPatStatus({ className }: { className?: string }) {
               </div>
             )}
 
-            {showManageLink && (
-              <div className="mt-3 flex flex-wrap items-center gap-3">
-                <a
-                  href="https://github.com/settings/tokens"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-[12.5px] font-medium text-[var(--primary-base)] hover:underline"
-                >
-                  Manage tokens on GitHub
-                  <ExternalLink className="h-3 w-3" strokeWidth={2} />
-                </a>
-                <a
-                  href="/dashboard/settings#profile"
-                  className="inline-flex items-center gap-1 text-[12.5px] font-medium text-[var(--neutral-sub-600)] hover:text-[var(--primary-base)]"
-                >
-                  Update token in Settings
-                </a>
-              </div>
-            )}
+            {/* Resolution actions: fix in-app, generate on GitHub, re-verify. */}
+            <div className="mt-3.5 flex flex-wrap items-center gap-x-3 gap-y-2">
+              <Link
+                href="/dashboard/settings#profile"
+                className="inline-flex h-8 items-center gap-1.5 rounded-[8px] border border-[var(--stroke-sub-300)] bg-white px-3 text-[12.5px] font-medium text-[var(--neutral-strong-950)] shadow-[0_1px_2px_rgba(23,23,23,0.04)] transition-colors hover:bg-[var(--neutral-weak-50)]"
+              >
+                {actionLabel}
+                <ArrowRight className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+              </Link>
+              <a
+                href="https://github.com/settings/tokens"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-[12.5px] font-medium text-[var(--neutral-sub-600)] transition-colors hover:text-[var(--neutral-strong-950)]"
+              >
+                Generate on GitHub
+                <ExternalLink className="h-3 w-3" strokeWidth={2} aria-hidden />
+              </a>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => void runCheck()}
+                disabled={checking}
+                aria-label="Re-check token"
+                className="ml-auto"
+                leadingIcon={
+                  <RefreshCw
+                    className={`h-3.5 w-3.5 ${checking ? 'animate-spin' : ''}`}
+                    strokeWidth={2}
+                  />
+                }
+              >
+                Re-check
+              </Button>
+            </div>
           </div>
         </div>
-      </CardBody>
+      </div>
     </Card>
   );
 }
@@ -271,7 +283,7 @@ function DetailRow({ label, children }: { label: string; children: React.ReactNo
   );
 }
 
-// Map the Card accent name to the matching CSS color variable for the icon.
+// Map the Card accent name to the matching CSS color variable for the dot.
 function accentVar(accent: Accent): string {
   switch (accent) {
     case 'success':

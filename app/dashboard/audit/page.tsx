@@ -35,7 +35,9 @@ import { AuditSkeleton } from '@/components/ui/PageSkeletons';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { Button } from '@/components/ui/Button';
 import { CodeChip } from '@/components/ui/CodeChip';
+import { CONNECTORS, ConnectorMark } from '@/components/ui/ConnectorMark';
 import { FilterChip } from '@/components/ui/FilterChip';
+import { connectorForTool, deriveTarget } from '@/lib/runConnector';
 import { useToast } from '@/components/ui/Toast';
 import {
   Table,
@@ -162,6 +164,7 @@ export default function AuditPage() {
         const hay = [
           ev.action_summary,
           ev.tool_name,
+          CONNECTORS[connectorForTool(ev.tool_name)].name,
           ev.target_repo,
           ev.target_branch,
           ev.agent_name,
@@ -477,16 +480,20 @@ export default function AuditPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: DUR.slow, ease: EASE.out, delay: 0.26 }}
           >
-            <Table>
+            {/* lg:table-fixed so the Summary column truncates to a single
+                line instead of wrapping and ballooning the row height.
+                Every other column gets an explicit width; Summary takes the
+                remaining space and ellipsizes. */}
+            <Table className="lg:table-fixed">
               <THead>
                 <tr>
-                  <TH className="w-[180px]">Timestamp</TH>
-                  <TH>Agent</TH>
-                  <TH>Tool</TH>
+                  <TH className="w-[200px]">Timestamp</TH>
+                  <TH className="w-[196px]">Agent</TH>
+                  <TH className="w-[164px]">Tool</TH>
                   <TH>Summary</TH>
-                  <TH>Repository</TH>
-                  <TH>Decision</TH>
-                  <TH aria-label="Expand" className="w-8" />
+                  <TH className="w-[236px]">Target</TH>
+                  <TH className="w-[124px]">Decision</TH>
+                  <TH aria-label="Expand" className="w-10" />
                 </tr>
               </THead>
               <TBody>
@@ -582,10 +589,10 @@ function AuditRow({
           {formatFullTimestamp(event.timestamp)}
         </TD>
         <TD>
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 items-center gap-2">
             <DecisionIcon decision={event.decision} />
             <AgentMark name={event.agent_name || ''} size="xs" />
-            <span className="font-medium text-[var(--neutral-strong-950)]">
+            <span className="truncate font-medium text-[var(--neutral-strong-950)]">
               {event.agent_name || 'Unknown'}
             </span>
           </div>
@@ -594,9 +601,37 @@ function AuditRow({
           <CodeChip>{event.tool_name}</CodeChip>
         </TD>
         <TD className="text-[var(--neutral-sub-600)]">
-          {truncate(event.action_summary, 40)}
+          <div className="truncate" title={event.action_summary}>
+            {event.action_summary}
+          </div>
         </TD>
-        <TD className="text-[var(--neutral-sub-600)]">{event.target_repo}</TD>
+        <TD>
+          {(() => {
+            const cid = connectorForTool(event.tool_name);
+            const tgt = deriveTarget(event);
+            return (
+              <div
+                className="flex min-w-0 items-center gap-2 overflow-hidden"
+                title={`${CONNECTORS[cid].name} connector`}
+              >
+                <ConnectorMark id={cid} size="xs" className="cursor-default" />
+                {tgt.primary && (
+                  <span
+                    className="truncate text-[var(--neutral-sub-600)]"
+                    title={tgt.primary}
+                  >
+                    {tgt.primary}
+                  </span>
+                )}
+                {tgt.secondary && (
+                  <CodeChip className="min-w-0 shrink">
+                    <span className="truncate">{tgt.secondary}</span>
+                  </CodeChip>
+                )}
+              </div>
+            );
+          })()}
+        </TD>
         <TD>
           <DecisionBadge decision={event.decision} />
         </TD>

@@ -242,7 +242,209 @@ function makeRun(seq: number): SessionAction {
   };
 }
 
-const RUNS: SessionAction[] = Array.from({ length: 96 }, (_, i) => makeRun(i + 1)).sort(
+// Generate the GitHub-shaped runs first so the PRNG stream (and every
+// downstream slice like TOKEN_METER) stays byte-identical to before.
+const GENERATED_RUNS: SessionAction[] = Array.from({ length: 96 }, (_, i) => makeRun(i + 1));
+
+// ── multi-connector showcase rows ──────────────────────────────────────────
+// The generated runs above are GitHub-shaped (repo + branch). These
+// hand-authored rows prove the Runs feed is connector-agnostic: Postgres,
+// Terraform, Slack, Linear, Jira and GitHub Actions actions, each carrying
+// connector-appropriate `arguments` so `deriveTarget` renders the right
+// resource (database + table, workspace + resource, #channel, project +
+// issue, repo + workflow). Recent timestamps so they surface at the top of
+// the feed during a demo, and a deliberate spread of decisions per connector
+// so the redesign shows ALLOW / DENY / REWRITE / REQUIRE_APPROVAL beyond
+// GitHub. `target_repo` is the originating (repo-scoped) Room; it is not what
+// the Target column shows for non-GitHub connectors.
+let mcSeq = 200;
+function mc(p: {
+  agent_name: string;
+  tool_name: string;
+  arguments: Record<string, any>;
+  action_summary: string;
+  decision: string;
+  target_repo: string;
+  minutesAgo: number;
+  target_branch?: string | null;
+  policy?: string;
+  blast_redius?: string;
+}): SessionAction {
+  mcSeq += 1;
+  return {
+    id: uuid(),
+    session_id: SESSION_IDS[mcSeq % SESSION_IDS.length],
+    agent_name: p.agent_name,
+    tool_name: p.tool_name,
+    arguments: p.arguments,
+    action_summary: p.action_summary,
+    result: p.decision,
+    decision: p.decision,
+    target_repo: p.target_repo,
+    target_branch: p.target_branch ?? null,
+    sequence_order: mcSeq,
+    timestamp: new Date(NOW - p.minutesAgo * 60 * 1000).toISOString(),
+    user_id: 'preview-user',
+    execution_time: Math.floor(120 + rand() * 900),
+    policy: p.policy ?? policyForDecision(p.decision),
+    blast_redius: p.blast_redius ?? blastRadiusForDecision(p.decision),
+  };
+}
+
+const MULTI_CONNECTOR_RUNS: SessionAction[] = [
+  // Terraform — destroy the production database. The canonical incident.
+  mc({
+    agent_name: 'claude-sonnet-4',
+    tool_name: 'terraform_destroy',
+    arguments: { workspace: 'prod-us-east-1', resource: 'aws_db_instance.primary' },
+    action_summary: 'Destroy the primary production database instance',
+    decision: 'DENY',
+    target_repo: 'runaegis/infra',
+    minutesAgo: 6,
+    policy: 'IAC_HARD_LOCK',
+    blast_redius: 'Critical',
+  }),
+  // Postgres — DROP TABLE against prod.
+  mc({
+    agent_name: 'gpt-4o',
+    tool_name: 'query',
+    arguments: { database: 'aegis_prod', query: 'DROP TABLE users;' },
+    action_summary: 'Drop the users table from the production database',
+    decision: 'DENY',
+    target_repo: 'runaegis/api',
+    minutesAgo: 11,
+    policy: 'MIGRATION_GATE',
+    blast_redius: 'Critical',
+  }),
+  // GitHub — push straight to main, rewritten to a PR. The moat.
+  mc({
+    agent_name: 'cursor-agent',
+    tool_name: 'push_files',
+    arguments: { repo: 'runaegis/api', branch: 'main' },
+    action_summary: 'Push three commits straight to the main branch',
+    decision: 'REWRITE',
+    target_repo: 'runaegis/api',
+    target_branch: 'main',
+    minutesAgo: 18,
+    policy: 'PROTECTED_BRANCH',
+    blast_redius: 'Medium',
+  }),
+  // Slack — message carrying a credential, redacted on the way out.
+  mc({
+    agent_name: 'claude-sonnet-4',
+    tool_name: 'post_message',
+    arguments: { channel: '#incidents' },
+    action_summary: 'Post the incident dump that included a database URL',
+    decision: 'REWRITE',
+    target_repo: 'runaegis/api',
+    minutesAgo: 27,
+    policy: 'SECRET_SCAN',
+    blast_redius: 'Medium',
+  }),
+  // GitHub Actions — dispatch the production deploy workflow during a freeze.
+  mc({
+    agent_name: 'devin',
+    tool_name: 'workflow_dispatch',
+    arguments: { repo: 'runaegis/api', workflow: 'deploy-prod.yml' },
+    action_summary: 'Trigger the production deploy workflow',
+    decision: 'REQUIRE_APPROVAL',
+    target_repo: 'runaegis/api',
+    target_branch: 'main',
+    minutesAgo: 35,
+    policy: 'FREEZE_WINDOW',
+    blast_redius: 'High',
+  }),
+  // Postgres — schema migration on prod, rewritten into a reviewed migration.
+  mc({
+    agent_name: 'cursor-agent',
+    tool_name: 'execute_migration',
+    arguments: {
+      database: 'aegis_prod',
+      table: 'audit_log',
+      statement: 'ALTER TABLE audit_log ADD COLUMN trace_id text',
+    },
+    action_summary: 'Run a schema migration against the audit_log table',
+    decision: 'REWRITE',
+    target_repo: 'runaegis/api',
+    minutesAgo: 52,
+    policy: 'MIGRATION_GATE',
+    blast_redius: 'Medium',
+  }),
+  // GitHub Actions — write a cloud secret into CI.
+  mc({
+    agent_name: 'windsurf-cascade',
+    tool_name: 'create_workflow_secret',
+    arguments: { repo: 'runaegis/api', workflow: 'ci.yml', secret: 'AWS_SECRET_ACCESS_KEY' },
+    action_summary: 'Add an AWS secret to the CI workflow',
+    decision: 'DENY',
+    target_repo: 'runaegis/api',
+    minutesAgo: 68,
+    policy: 'SECRET_SCAN',
+    blast_redius: 'High',
+  }),
+  // Linear — file a follow-up issue.
+  mc({
+    agent_name: 'claude-sonnet-4',
+    tool_name: 'linear_create_issue',
+    arguments: { project: 'ENG', issue: 'ENG-482' },
+    action_summary: 'File a follow-up issue for the rate-limit regression',
+    decision: 'ALLOW',
+    target_repo: 'runaegis/api',
+    minutesAgo: 84,
+    policy: 'pass',
+    blast_redius: 'Low',
+  }),
+  // Terraform — apply a network change to staging.
+  mc({
+    agent_name: 'aider',
+    tool_name: 'terraform_apply',
+    arguments: { workspace: 'staging-us-east-1', resource: 'module.network' },
+    action_summary: 'Apply a network module change to the staging workspace',
+    decision: 'REQUIRE_APPROVAL',
+    target_repo: 'runaegis/infra',
+    minutesAgo: 103,
+    policy: 'IAC_CHANGE_GATE',
+    blast_redius: 'High',
+  }),
+  // Postgres — read-only analytics query.
+  mc({
+    agent_name: 'gpt-4o',
+    tool_name: 'query',
+    arguments: { database: 'analytics', query: 'SELECT count(*) FROM events WHERE day = current_date' },
+    action_summary: 'Count event volume for the daily metrics rollup',
+    decision: 'ALLOW',
+    target_repo: 'runaegis/api',
+    minutesAgo: 126,
+    policy: 'pass',
+    blast_redius: 'Low',
+  }),
+  // Slack — routine release note.
+  mc({
+    agent_name: 'replit-agent',
+    tool_name: 'send_message',
+    arguments: { channel: 'eng-releases' },
+    action_summary: 'Post the release notes to the engineering channel',
+    decision: 'ALLOW',
+    target_repo: 'runaegis/api',
+    minutesAgo: 152,
+    policy: 'pass',
+    blast_redius: 'Low',
+  }),
+  // Jira — open an ops ticket.
+  mc({
+    agent_name: 'devin',
+    tool_name: 'jira_create_issue',
+    arguments: { project: 'OPS', issue: 'OPS-211' },
+    action_summary: 'Open an ops ticket for the failed nightly deploy',
+    decision: 'ALLOW',
+    target_repo: 'runaegis/infra',
+    minutesAgo: 181,
+    policy: 'pass',
+    blast_redius: 'Low',
+  }),
+];
+
+const RUNS: SessionAction[] = [...MULTI_CONNECTOR_RUNS, ...GENERATED_RUNS].sort(
   (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
 );
 
@@ -285,7 +487,57 @@ function aggregateSessions(runs: SessionAction[]): Session[] {
 }
 
 // Approvals
-const APPROVALS: MCPApproval[] = Array.from({ length: 11 }, (_, i) => {
+//
+// A few non-GitHub pending approvals so the approvals queue + detail panel
+// demonstrate the connector-aware Connector / Target cells (Terraform,
+// GitHub Actions, Postgres), not just GitHub repo + branch. Recent
+// timestamps so they sort to the top of the pending list.
+const MULTI_CONNECTOR_APPROVALS: MCPApproval[] = [
+  {
+    id: `apv_tf_${uuid()}`,
+    user_id: 'preview-user',
+    tool_name: 'terraform_apply',
+    arguments: { workspace: 'staging-us-east-1', resource: 'module.network' },
+    status: 'pending',
+    created_at: new Date(NOW - 12 * 60 * 1000).toISOString(),
+    approved_at: null,
+    result: null,
+    context: { user: 'aider', conversation_id: `conv_${uuid().slice(0, 6)}`, model: 'aider' },
+    action_summary: 'Apply a network module change to the staging workspace',
+  },
+  {
+    id: `apv_gha_${uuid()}`,
+    user_id: 'preview-user',
+    tool_name: 'workflow_dispatch',
+    arguments: { repo: 'runaegis/api', workflow: 'deploy-prod.yml' },
+    status: 'pending',
+    created_at: new Date(NOW - 26 * 60 * 1000).toISOString(),
+    approved_at: null,
+    result: null,
+    context: { user: 'devin', conversation_id: `conv_${uuid().slice(0, 6)}`, model: 'devin' },
+    action_summary: 'Trigger the production deploy workflow',
+  },
+  {
+    id: `apv_pg_${uuid()}`,
+    user_id: 'preview-user',
+    tool_name: 'execute_migration',
+    arguments: {
+      database: 'aegis_prod',
+      table: 'audit_log',
+      statement: 'ALTER TABLE audit_log ADD COLUMN trace_id text',
+    },
+    status: 'pending',
+    created_at: new Date(NOW - 44 * 60 * 1000).toISOString(),
+    approved_at: null,
+    result: null,
+    context: { user: 'cursor-agent', conversation_id: `conv_${uuid().slice(0, 6)}`, model: 'cursor-agent' },
+    action_summary: 'Run a schema migration against the audit_log table',
+  },
+];
+
+const APPROVALS: MCPApproval[] = [
+  ...MULTI_CONNECTOR_APPROVALS,
+  ...Array.from({ length: 11 }, (_, i) => {
   const status = pickW(APPROVAL_STATUSES);
   const ageHours = rand() * 72;
   const created_at = new Date(NOW - ageHours * 60 * 60 * 1000).toISOString();
@@ -309,7 +561,8 @@ const APPROVALS: MCPApproval[] = Array.from({ length: 11 }, (_, i) => {
     context: { user: agent, conversation_id: `conv_${uuid().slice(0, 6)}`, model: agent },
     action_summary: pick(ACTION_PHRASES),
   };
-}).sort(
+  }),
+].sort(
   (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
 );
 
@@ -451,6 +704,77 @@ function makeRoomAction(
   };
 }
 
+// A few non-GitHub actions for room_api (runaegis/api) so a Room's activity
+// also shows the connector-aware Target column (Postgres, Slack), not only
+// GitHub branches. An agent scoped to a repo's Room still touches that
+// service's database, channels, etc. Pinned recent so they head the list.
+const ROOM_API_MULTI_CONNECTOR: RoomSessionAction[] = [
+  {
+    id: uuid(),
+    session_id: SESSION_IDS[0],
+    agent_name: 'gpt-4o',
+    tool_name: 'query',
+    arguments: { database: 'aegis_prod', query: 'DROP TABLE users;' },
+    action_summary: 'Drop the users table from the production database',
+    result: 'DENY',
+    decision: 'DENY',
+    target_repo: 'runaegis/api',
+    target_branch: null,
+    sequence_order: 101,
+    timestamp: new Date(NOW - 9 * 60 * 1000).toISOString(),
+    user_id: 'preview-user',
+    execution_time: 95,
+    policy: 'MIGRATION_GATE',
+    blast_redius: 'Critical',
+    room_id: 'room_api',
+    username: 'demo',
+  },
+  {
+    id: uuid(),
+    session_id: SESSION_IDS[1],
+    agent_name: 'cursor-agent',
+    tool_name: 'execute_migration',
+    arguments: {
+      database: 'aegis_prod',
+      table: 'audit_log',
+      statement: 'ALTER TABLE audit_log ADD COLUMN trace_id text',
+    },
+    action_summary: 'Run a schema migration against the audit_log table',
+    result: 'REWRITE',
+    decision: 'REWRITE',
+    target_repo: 'runaegis/api',
+    target_branch: null,
+    sequence_order: 102,
+    timestamp: new Date(NOW - 21 * 60 * 1000).toISOString(),
+    user_id: 'preview-user',
+    execution_time: 420,
+    policy: 'MIGRATION_GATE',
+    blast_redius: 'Medium',
+    room_id: 'room_api',
+    username: 'demo',
+  },
+  {
+    id: uuid(),
+    session_id: SESSION_IDS[2],
+    agent_name: 'claude-sonnet-4',
+    tool_name: 'post_message',
+    arguments: { channel: '#incidents' },
+    action_summary: 'Post the incident dump that included a database URL',
+    result: 'REWRITE',
+    decision: 'REWRITE',
+    target_repo: 'runaegis/api',
+    target_branch: null,
+    sequence_order: 103,
+    timestamp: new Date(NOW - 38 * 60 * 1000).toISOString(),
+    user_id: 'preview-user',
+    execution_time: 180,
+    policy: 'SECRET_SCAN',
+    blast_redius: 'Medium',
+    room_id: 'room_api',
+    username: 'demo',
+  },
+];
+
 // Build all rooms' activity once at module init so re-renders are stable.
 const PREVIEW_ROOM_ACTIONS: Record<string, RoomSessionAction[]> = (() => {
   const out: Record<string, RoomSessionAction[]> = {};
@@ -471,7 +795,8 @@ const PREVIEW_ROOM_ACTIONS: Record<string, RoomSessionAction[]> = (() => {
       // Newest first — matches the order the table renders by default.
       (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
     );
-    out[id] = actions;
+    out[id] =
+      id === 'room_api' ? [...ROOM_API_MULTI_CONNECTOR, ...actions] : actions;
   }
   return out;
 })();
@@ -692,7 +1017,7 @@ export function installPreviewApi() {
   api.setPermission = async () => ({ success: true });
   api.setPermissions = async () => ({ success: true });
 
-  api.getUserPolicy = async () => '1111111101'; // 9 of 10 armed by default
+  api.getUserPolicy = async () => '111111110111'; // 11 of 12 armed (secret_detection off); new connector policies armed
   api.upsertUserPolicy = async () => undefined;
 
   api.getMyRooms = async () => PREVIEW_ROOMS;

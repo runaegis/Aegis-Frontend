@@ -117,11 +117,9 @@ export default function ConnectorDetailPage() {
                 <h1 className="text-[24px] font-semibold leading-tight tracking-[-0.025em] text-[var(--neutral-strong-950)] sm:text-[28px]">{def.name}</h1>
                 <StatusPill status={status} />
               </div>
-              <div className="mt-2.5 max-w-[72ch] space-y-1 text-[14px] leading-[1.6] text-[var(--neutral-sub-600)]">
-                {def.description.split(/(?<=\.)\s+/).map((sentence, i) => (
-                  <p key={i}>{sentence}</p>
-                ))}
-              </div>
+              <p className="mt-2.5 max-w-[64ch] text-balance text-[14px] leading-[1.5] text-[var(--neutral-sub-600)]">
+                {def.description}
+              </p>
             </div>
           </div>
         </motion.section>

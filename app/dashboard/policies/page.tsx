@@ -6,12 +6,14 @@ import {
   AlertTriangle,
   Check,
   Clock,
+  Database,
   Eye,
   FileCode,
   GitBranch,
   Lock,
   Mail,
   Scale,
+  Server,
   Shield,
   Zap,
   type LucideIcon,
@@ -48,6 +50,8 @@ const policies: PolicyDef[] = [
   { key: 'sensitive_path_approval',  name: 'Sensitive Path Approval',   decision: 'REQUIRE_APPROVAL', description: 'Changes to CI/CD, infrastructure, and auth paths require approval.',                     icon: AlertTriangle, category: 'safety' },
   { key: 'secret_detection',         name: 'Secret Detection',          decision: 'DENY',          description: 'Every diff is scanned for API keys, tokens, and credentials.',                               icon: Lock,          category: 'compliance' },
   { key: 'blast_radius_gate',        name: 'Blast Radius Gate',         decision: 'REQUIRE_APPROVAL', description: 'Large source changes require approval.',                                                  icon: Scale,         category: 'safety' },
+  { key: 'migration_gate',           name: 'Migration Gate',            decision: 'REQUIRE_APPROVAL', description: 'Schema migrations and destructive SQL against production databases are gated for review.', icon: Database,      category: 'safety' },
+  { key: 'iac_hard_lock',            name: 'IaC Hard Lock',             decision: 'DENY',          description: 'Destroy and replace operations on production infrastructure are blocked outright.',         icon: Server,        category: 'safety' },
 ];
 
 const decodePolicyString = (s: string): Record<string, boolean> => {
