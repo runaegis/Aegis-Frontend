@@ -20,8 +20,8 @@ import {
 import { RelativeTime } from '@/components/ui/RelativeTime';
 import Topbar from '@/components/layout/Topbar';
 import { AgentMark } from '@/components/ui/AgentMark';
-import { ConnectorMark, CONNECTORS } from '@/components/ui/ConnectorMark';
-import { connectorForTool, isPostgresTool } from '@/lib/toolConnectors';
+import { ConnectorMark, CONNECTORS, type ConnectorId } from '@/components/ui/ConnectorMark';
+import { connectorForTool, deriveTarget, RUN_CONNECTOR_FILTERS, isPostgresTool } from '@/lib/runConnector';
 import DecisionBadge, { decisionColor } from '@/components/ui/DecisionBadge';
 import EmptyState from '@/components/ui/EmptyState';
 import ErrorBanner from '@/components/ui/ErrorBanner';
@@ -45,11 +45,17 @@ import {
   type SortDirection,
 } from '@/components/ui/Table';
 
+// Tool -> connector mapping and connector-aware target derivation live in
+// lib/runConnector.ts, so the Runs, Sessions and Audit surfaces share one
+// source of truth for actions that span GitHub, Postgres, Terraform, Slack
+// and the rest. The Runs table no longer assumes a repo/branch shape.
+
 export default function RunsPage() {
   const { isLoading: userLoading } = useUser();
   const reduce = useReducedMotion();
   const [search, setSearch] = useState('');
   const [decisionFilter, setDecisionFilter] = useState('all');
+  const [connectorFilter, setConnectorFilter] = useState('all');
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
   const {
@@ -72,12 +78,17 @@ export default function RunsPage() {
   );
 
   const filteredRuns = runs.filter((run) => {
+    const connectorId = connectorForTool(run.tool_name);
+    const target = deriveTarget(run);
+    const q = search.toLowerCase();
     const matchesSearch =
       !search ||
-      run.agent_name?.toLowerCase().includes(search.toLowerCase()) ||
-      run.tool_name?.toLowerCase().includes(search.toLowerCase()) ||
-      run.target_repo?.toLowerCase().includes(search.toLowerCase()) ||
-      run.action_summary?.toLowerCase().includes(search.toLowerCase());
+      run.agent_name?.toLowerCase().includes(q) ||
+      run.tool_name?.toLowerCase().includes(q) ||
+      CONNECTORS[connectorId].name.toLowerCase().includes(q) ||
+      (target.primary ?? '').toLowerCase().includes(q) ||
+      (target.secondary ?? '').toLowerCase().includes(q) ||
+      run.action_summary?.toLowerCase().includes(q);
 
     const canonical = normalizeDecision(run.decision);
     const matchesDecision =
@@ -86,7 +97,10 @@ export default function RunsPage() {
         ? canonical === 'REQUIRE_APPROVAL'
         : canonical === decisionFilter);
 
-    return matchesSearch && matchesDecision;
+    const matchesConnector =
+      connectorFilter === 'all' || connectorId === connectorFilter;
+
+    return matchesSearch && matchesDecision && matchesConnector;
   });
 
   // Client-side sort layered on top of the filter. Default is null
@@ -98,7 +112,7 @@ export default function RunsPage() {
   // `risk` sorts by blast-radius severity rank (most severe last in
   // asc / first in desc) — more product-meaningful than sorting by
   // the textual blast-radius label.
-  type SortKey = 'agent' | 'tool' | 'repo' | 'policy' | 'risk' | 'decision' | 'time';
+  type SortKey = 'agent' | 'tool' | 'connector' | 'target' | 'policy' | 'risk' | 'decision' | 'time';
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<SortDirection>(null);
   const onSort = useCallback(
@@ -120,13 +134,14 @@ export default function RunsPage() {
     if (!sortKey || sortDir === null) return filteredRuns;
     const acc = (r: typeof filteredRuns[number]): string | number => {
       switch (sortKey) {
-        case 'agent':    return r.agent_name?.toLowerCase() ?? '';
-        case 'tool':     return r.tool_name?.toLowerCase() ?? '';
-        case 'repo':     return r.target_repo?.toLowerCase() ?? '';
-        case 'policy':   return String(r.policy ?? '').toLowerCase();
-        case 'risk':     return blastRadiusRank(readBlastRadius(r));
-        case 'decision': return r.decision ?? '';
-        case 'time':     return new Date(r.timestamp).getTime();
+        case 'agent':     return r.agent_name?.toLowerCase() ?? '';
+        case 'tool':      return r.tool_name?.toLowerCase() ?? '';
+        case 'connector': return CONNECTORS[connectorForTool(r.tool_name)].name.toLowerCase();
+        case 'target':    return (deriveTarget(r).primary ?? '').toLowerCase();
+        case 'policy':    return String(r.policy ?? '').toLowerCase();
+        case 'risk':      return blastRadiusRank(readBlastRadius(r));
+        case 'decision':  return r.decision ?? '';
+        case 'time':      return new Date(r.timestamp).getTime();
       }
     };
     const arr = [...filteredRuns];
@@ -250,12 +265,27 @@ export default function RunsPage() {
               <div className="min-w-[220px] flex-1 sm:min-w-[260px]">
                 <Input
                   type="text"
-                  placeholder="Search by agent, tool, repo, summary…"
+                  placeholder="Search by agent, tool, connector, target, summary…"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   leadingIcon={<Search className="h-3.5 w-3.5" strokeWidth={2} />}
                 />
               </div>
+              <SelectMenu
+                value={connectorFilter}
+                onChange={setConnectorFilter}
+                ariaLabel="Filter by connector"
+                minWidth={190}
+                align="end"
+                options={[
+                  { value: 'all', label: 'All connectors', leading: <Swatch color="var(--neutral-soft-400)" /> },
+                  ...RUN_CONNECTOR_FILTERS.map((id) => ({
+                    value: id,
+                    label: CONNECTORS[id].name,
+                    leading: <ConnectorMark id={id} size="xs" className="cursor-default" />,
+                  })),
+                ]}
+              />
               <SelectMenu
                 value={decisionFilter}
                 onChange={setDecisionFilter}
@@ -282,8 +312,8 @@ export default function RunsPage() {
                 <tr>
                   <TH sortable sortDirection={dirFor('agent')} onSort={() => onSort('agent')}>Agent</TH>
                   <TH sortable sortDirection={dirFor('tool')} onSort={() => onSort('tool')}>Tool</TH>
-                  <TH sortable sortDirection={dirFor('repo')} onSort={() => onSort('repo')}>Repository</TH>
-                  <TH>Branch</TH>
+                  <TH sortable sortDirection={dirFor('connector')} onSort={() => onSort('connector')}>Connector</TH>
+                  <TH sortable sortDirection={dirFor('target')} onSort={() => onSort('target')}>Target</TH>
                   <TH sortable sortDirection={dirFor('policy')} onSort={() => onSort('policy')}>Policy</TH>
                   <TH sortable sortDirection={dirFor('risk')} onSort={() => onSort('risk')}>Blast Radius</TH>
                   <TH sortable sortDirection={dirFor('decision')} onSort={() => onSort('decision')}>Decision</TH>
@@ -384,33 +414,42 @@ function RunRow({
           </div>
         </TD>
         <TD>
+          <CodeChip>{run.tool_name}</CodeChip>
+        </TD>
+        <TD className="whitespace-nowrap">
           {(() => {
             const connectorId = connectorForTool(run.tool_name);
             return (
-              <div className="flex items-center gap-2">
-                <span
-                  className="inline-flex"
-                  title={`${CONNECTORS[connectorId].name} connector`}
-                >
-                  <ConnectorMark
-                    id={connectorId}
-                    size="xs"
-                    className="cursor-default"
-                  />
+              <div
+                className="flex items-center gap-2"
+                title={`${CONNECTORS[connectorId].name} connector`}
+              >
+                <ConnectorMark id={connectorId} size="xs" className="cursor-default" />
+                <span className="text-[12.5px] text-[var(--neutral-sub-600)]">
+                  {CONNECTORS[connectorId].name}
                 </span>
-                <CodeChip>{run.tool_name}</CodeChip>
-                <span className="sr-only">via {CONNECTORS[connectorId].name}</span>
               </div>
             );
           })()}
         </TD>
-        <TD className="text-[12.5px] font-normal text-[var(--neutral-sub-600)]">
-          {run.target_repo}
-        </TD>
-        <TD className="max-w-[200px]">
-          {!isPostgresTool(run.tool_name) && run.target_branch ? (
-            <CodeChip>{run.target_branch}</CodeChip>
-          ) : null}
+        <TD className="max-w-[260px]">
+          {(() => {
+            const tgt = deriveTarget(run);
+            if (!tgt.primary && !tgt.secondary) return null;
+            return (
+              <div className="flex min-w-0 items-center gap-2">
+                {tgt.primary && (
+                  <span
+                    className="truncate text-[12.5px] text-[var(--neutral-sub-600)]"
+                    title={tgt.primary}
+                  >
+                    {tgt.primary}
+                  </span>
+                )}
+                {tgt.secondary && <CodeChip>{tgt.secondary}</CodeChip>}
+              </div>
+            );
+          })()}
         </TD>
         <TD className="whitespace-nowrap">
           <PolicyChip policy={run.policy} />
