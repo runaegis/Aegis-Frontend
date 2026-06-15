@@ -14,13 +14,14 @@ import {
   extractPullRequestUrl,
   formatExecutionTimeMs,
   formatFullTimestamp,
+  normalizeDecision,
   readBlastRadius,
 } from '@/lib/utils';
 import { RelativeTime } from '@/components/ui/RelativeTime';
 import Topbar from '@/components/layout/Topbar';
 import { AgentMark } from '@/components/ui/AgentMark';
 import { ConnectorMark, CONNECTORS, type ConnectorId } from '@/components/ui/ConnectorMark';
-import { connectorForTool, deriveTarget, RUN_CONNECTOR_FILTERS } from '@/lib/runConnector';
+import { connectorForTool, deriveTarget, RUN_CONNECTOR_FILTERS, isPostgresTool } from '@/lib/runConnector';
 import DecisionBadge, { decisionColor } from '@/components/ui/DecisionBadge';
 import EmptyState from '@/components/ui/EmptyState';
 import ErrorBanner from '@/components/ui/ErrorBanner';
@@ -89,11 +90,12 @@ export default function RunsPage() {
       (target.secondary ?? '').toLowerCase().includes(q) ||
       run.action_summary?.toLowerCase().includes(q);
 
+    const canonical = normalizeDecision(run.decision);
     const matchesDecision =
       decisionFilter === 'all' ||
       (decisionFilter === 'approval'
-        ? run.decision?.toUpperCase().includes('APPROVAL')
-        : run.decision?.toUpperCase() === decisionFilter.toUpperCase());
+        ? canonical === 'REQUIRE_APPROVAL'
+        : canonical === decisionFilter);
 
     const matchesConnector =
       connectorFilter === 'all' || connectorId === connectorFilter;
