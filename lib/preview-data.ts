@@ -566,6 +566,28 @@ const APPROVALS: MCPApproval[] = [
   (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
 );
 
+function cloneApproval(approval: MCPApproval): MCPApproval {
+  return {
+    ...approval,
+    arguments:
+      approval.arguments && typeof approval.arguments === 'object'
+        ? { ...approval.arguments }
+        : approval.arguments,
+    context:
+      approval.context && typeof approval.context === 'object'
+        ? { ...approval.context }
+        : approval.context,
+    action_pointers: Array.isArray(approval.action_pointers)
+      ? [...approval.action_pointers]
+      : approval.action_pointers,
+    result: Array.isArray(approval.result)
+      ? approval.result.map((entry) =>
+          entry && typeof entry === 'object' ? { ...entry } : entry,
+        )
+      : approval.result,
+  };
+}
+
 // Repos
 const FULL_REPO_NAMES = [
   'aegis/dashboard',
@@ -964,11 +986,11 @@ export function installPreviewApi() {
       (a, b) => (a.sequence_order ?? 0) - (b.sequence_order ?? 0),
     );
   api.getApprovals      = async () => RUNS.filter((r) => r.decision.includes('APPROVAL'));
-  api.getMcpApprovals   = async () => APPROVALS;
+  api.getMcpApprovals   = async () => APPROVALS.map(cloneApproval);
   api.executeMcpApproval = async (id: string, reject: boolean) => {
     const a = APPROVALS.find((x) => x.id === id);
     if (a) {
-      a.status = reject ? 'rejected' : 'approved';
+      a.status = reject ? 'denied' : 'executed';
       a.approved_at = new Date().toISOString();
     }
     return { success: true };

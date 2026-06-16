@@ -864,8 +864,9 @@ export const api = {
     if (!userId) return [];
 
     const params = new URLSearchParams({ user_id: userId });
-    const res = await fetch(
+    const res = await apiFetch(
       `${API_BASE}/get_mcp_approvals?${params.toString()}`,
+      { cache: "no-store" },
     );
     if (!res.ok)
       throw new Error(`Failed to fetch MCP approvals: ${res.statusText}`);
@@ -892,8 +893,9 @@ export const api = {
       reject: String(reject),
     });
 
-    const res = await fetch(
+    const res = await apiFetch(
       `${API_BASE}/execute_tool_call?${params.toString()}`,
+      { cache: "no-store" },
     );
     if (!res.ok)
       throw new Error(`Failed to update approval: ${res.statusText}`);
@@ -903,6 +905,12 @@ export const api = {
 
     if (body?.failure) {
       throw new Error(body.failure);
+    }
+    if (body?.success === false) {
+      throw new Error(body?.error || "Failed to update approval");
+    }
+    if (body?.error) {
+      throw new Error(body.error);
     }
 
     return body;

@@ -1,6 +1,6 @@
 'use client';
 
-import { normalizeDecision } from '@/lib/utils';
+import { normalizeApprovalStatus, normalizeDecision } from '@/lib/utils';
 import { Badge, type BadgeTone } from './Badge';
 
 type DecisionStyle = { tone: BadgeTone; label: string };
@@ -12,12 +12,28 @@ const STYLES: Record<string, DecisionStyle> = {
   REQUIRE_APPROVAL: { tone: 'warning', label: 'APPROVAL' },
   PENDING:          { tone: 'warning', label: 'PENDING' },
   APPROVED:         { tone: 'success', label: 'APPROVED' },
+  EXECUTED:         { tone: 'success', label: 'EXECUTED' },
   REJECTED:         { tone: 'error',   label: 'DENIED' },
   DENIED:           { tone: 'error',   label: 'DENIED' },
   ERROR:            { tone: 'neutral', label: 'ERROR' },
 };
 
 function resolve(decision: string): DecisionStyle {
+  const raw = (decision ?? '').trim().toLowerCase();
+  if (
+    raw === 'pending' ||
+    raw === 'approved' ||
+    raw === 'denied' ||
+    raw === 'rejected' ||
+    raw === 'executed'
+  ) {
+    const normalizedApproval = normalizeApprovalStatus(decision);
+    if (normalizedApproval === 'pending') return STYLES.PENDING;
+    if (normalizedApproval === 'approved') return STYLES.APPROVED;
+    if (normalizedApproval === 'rejected') return STYLES.DENIED;
+    if (normalizedApproval === 'executed') return STYLES.EXECUTED;
+  }
+
   const canonical = normalizeDecision(decision);
   if (canonical !== 'UNKNOWN' && STYLES[canonical]) return STYLES[canonical];
   return { tone: 'neutral', label: canonical };

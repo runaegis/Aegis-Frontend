@@ -30,6 +30,7 @@ import { useDashboardData } from '@/lib/dashboardDataContext';
 import { MCPApproval, SessionAction } from '@/lib/types';
 import {
   formatExecutionTimeMs,
+  normalizeApprovalStatus,
   truncate,
 } from '@/lib/utils';
 import Topbar from '@/components/layout/Topbar';
@@ -55,10 +56,13 @@ function greeting(now: Date): string {
   return 'Good evening';
 }
 
-function normalizeApprovalStatus(status: string): 'pending' | 'approved' | 'rejected' {
-  const v = (status ?? '').toLowerCase();
-  if (v === 'approved' || v === 'rejected') return v;
-  return 'pending';
+function approvalBucket(
+  approval: Pick<MCPApproval, 'status' | 'approved_at'>,
+): 'pending' | 'approved' | 'rejected' {
+  const normalized = normalizeApprovalStatus(approval.status, approval.approved_at);
+  if (normalized === 'pending') return 'pending';
+  if (normalized === 'rejected') return 'rejected';
+  return 'approved';
 }
 
 export default function DashboardHomePage() {
@@ -135,7 +139,7 @@ export default function DashboardHomePage() {
   // ── Derived metrics ────────────────────────────────────────────────────────
   const stats = useMemo(() => {
     const pendingApprovals = approvals.filter(
-      (a) => normalizeApprovalStatus(a.status) === 'pending',
+      (a) => approvalBucket(a) === 'pending',
     ).length;
 
     const policiesActive = policyString
@@ -156,7 +160,7 @@ export default function DashboardHomePage() {
   const pendingItems = useMemo(
     () =>
       approvals
-        .filter((a) => normalizeApprovalStatus(a.status) === 'pending')
+        .filter((a) => approvalBucket(a) === 'pending')
         .slice(0, 5),
     [approvals],
   );

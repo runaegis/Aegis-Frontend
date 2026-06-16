@@ -273,6 +273,13 @@ export type CanonicalDecision =
   | 'ERROR'
   | 'UNKNOWN';
 
+export type CanonicalApprovalStatus =
+  | 'pending'
+  | 'approved'
+  | 'rejected'
+  | 'executed'
+  | 'unknown';
+
 /**
  * Normalize free-form backend `decision` strings to a canonical bucket.
  *
@@ -310,6 +317,46 @@ export function normalizeDecision(value?: string | null): CanonicalDecision {
   if (upper.includes('APPROVAL') || upper === 'PENDING') return 'REQUIRE_APPROVAL';
 
   return 'UNKNOWN';
+}
+
+/**
+ * Normalize backend MCP approval statuses into a stable set the UI can
+ * reason about. The backend currently emits `pending`, `approved`,
+ * `denied`, and `executed`; older / adjacent flows may still surface
+ * decision-like labels such as `ALLOW`, `DENY`, or `REQUIRE_APPROVAL`.
+ */
+export function normalizeApprovalStatus(
+  value?: string | null,
+  approvedAt?: string | null,
+): CanonicalApprovalStatus {
+  if (!value) {
+    return approvedAt ? 'executed' : 'unknown';
+  }
+
+  const v = value.toLowerCase().trim();
+  if (!v) {
+    return approvedAt ? 'executed' : 'unknown';
+  }
+
+  if (v === 'pending' || v === 'require_approval' || v.includes('approval')) {
+    return 'pending';
+  }
+  if (v === 'approved' || v === 'approve') {
+    return 'approved';
+  }
+  if (v === 'denied' || v === 'deny' || v === 'rejected' || v === 'reject') {
+    return 'rejected';
+  }
+  if (v === 'executed' || v === 'completed' || v === 'complete' || v === 'done') {
+    return 'executed';
+  }
+
+  const decision = normalizeDecision(value);
+  if (decision === 'REQUIRE_APPROVAL') return 'pending';
+  if (decision === 'ALLOW') return 'approved';
+  if (decision === 'DENY') return 'rejected';
+
+  return approvedAt ? 'executed' : 'unknown';
 }
 
 // ── Policy verdict ─────────────────────────────────────────────────────────

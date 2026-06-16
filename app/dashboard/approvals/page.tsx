@@ -6,7 +6,7 @@ import { Bell, Check, ChevronDown, ChevronRight, Clock, Minus, X } from 'lucide-
 import { api } from '@/lib/api';
 import { useAutoRefresh, useUser } from '@/lib/hooks';
 import { MCPApproval } from '@/lib/types';
-import { extractPullRequestUrl, formatRelativeTime } from '@/lib/utils';
+import { extractPullRequestUrl, normalizeApprovalStatus } from '@/lib/utils';
 import { RelativeTime } from '@/components/ui/RelativeTime';
 import Topbar from '@/components/layout/Topbar';
 import { AgentMark } from '@/components/ui/AgentMark';
@@ -55,10 +55,13 @@ const APPROVAL_CARD_GRADIENTS = {
     'linear-gradient(180deg, rgba(250, 115, 25, 0.14) 0%, rgba(250, 115, 25, 0.07) 28%, rgba(255, 255, 255, 0) 65%)',
 } as const;
 
-function normalizeStatus(status: string): 'pending' | 'approved' | 'rejected' {
-  const value = (status ?? '').toLowerCase();
-  if (value === 'approved' || value === 'rejected') return value;
-  return 'pending';
+function normalizeStatus(
+  approval: Pick<MCPApproval, 'status' | 'approved_at'>,
+): 'pending' | 'approved' | 'rejected' {
+  const normalized = normalizeApprovalStatus(approval.status, approval.approved_at);
+  if (normalized === 'pending') return 'pending';
+  if (normalized === 'rejected') return 'rejected';
+  return 'approved';
 }
 
 const FILTER_TABS: { value: ApprovalFilter; label: string }[] = [
@@ -122,7 +125,7 @@ export default function ApprovalsPage() {
       // first fetch (seen set empty) primes the seen set silently
       // so we don't flash "N new" for the initial load.
       const currentPending = data
-        .filter((a) => normalizeStatus(a.status) === 'pending')
+        .filter((a) => normalizeStatus(a) === 'pending')
         .map((a) => a.id);
       if (seenPendingIdsRef.current.size === 0) {
         // First fetch — prime, don't count.
@@ -148,7 +151,7 @@ export default function ApprovalsPage() {
     } finally {
       setLoading(false);
     }
-  }, [user?.id, userLoading]);
+  }, [router, user?.id, userLoading]);
 
   useEffect(() => {
     if (user?.id) fetchData();
@@ -272,7 +275,7 @@ export default function ApprovalsPage() {
     () =>
       approvals.reduce(
         (acc, approval) => {
-          const normalized = normalizeStatus(approval.status);
+          const normalized = normalizeStatus(approval);
           acc[normalized] += 1;
           return acc;
         },
@@ -288,7 +291,7 @@ export default function ApprovalsPage() {
     () =>
       approvals.filter((approval) => {
         if (statusFilter === 'all') return true;
-        return normalizeStatus(approval.status) === statusFilter;
+        return normalizeStatus(approval) === statusFilter;
       }),
     [approvals, statusFilter],
   );
@@ -313,7 +316,7 @@ export default function ApprovalsPage() {
   const visiblePendingIds = useMemo(
     () =>
       filteredApprovals
-        .filter((a) => normalizeStatus(a.status) === 'pending')
+        .filter((a) => normalizeStatus(a) === 'pending')
         .map((a) => a.id),
     [filteredApprovals],
   );
@@ -374,7 +377,7 @@ export default function ApprovalsPage() {
           // on the freshest items.
           seenPendingIdsRef.current = new Set(
             approvals
-              .filter((a) => normalizeStatus(a.status) === 'pending')
+              .filter((a) => normalizeStatus(a) === 'pending')
               .map((a) => a.id),
           );
           setNewCount(0);
@@ -532,7 +535,7 @@ export default function ApprovalsPage() {
             animate="show"
           >
             {filteredApprovals.map((approval) => {
-              const approvalStatus = normalizeStatus(approval.status);
+              const approvalStatus = normalizeStatus(approval);
               const isPending = approvalStatus === 'pending';
               const isActioning = actioningIds.has(approval.id);
               const isExpanded = expanded.has(approval.id);
