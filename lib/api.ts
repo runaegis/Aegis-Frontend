@@ -34,6 +34,7 @@ type UpdateUserDetailsPayload = {
   email?: string;
   github_pat?: string;
   github_user_id?: number | string;
+  postgres_connection_string?: string;
 };
 
 function getAPIBase(): string {
@@ -206,7 +207,59 @@ function normalizeUserPayload(
       typeof raw.created_at === "string" ? raw.created_at : undefined,
     access_token: accessToken,
     github_pat: accessToken,
+    postgres_connection_string:
+      typeof raw.postgres_connection_string === "string"
+        ? raw.postgres_connection_string
+        : fallback.postgres_connection_string,
   };
+}
+
+function hasUserPayloadShape(raw: Record<string, unknown>): boolean {
+  return [
+    "id",
+    "github_user_id",
+    "username",
+    "email",
+    "access_token",
+    "github_pat",
+    "created_at",
+    "postgres_connection_string",
+  ].some((key) => key in raw);
+}
+
+function extractUserPayload(data: unknown): (Partial<User> & Record<string, unknown>) | null {
+  if (!data || typeof data !== "object") {
+    return null;
+  }
+
+  const raw = data as Record<string, unknown>;
+
+  if (hasUserPayloadShape(raw)) {
+    return raw as Partial<User> & Record<string, unknown>;
+  }
+
+  if (raw.user && typeof raw.user === "object") {
+    const nestedUser = raw.user as Record<string, unknown>;
+    if (hasUserPayloadShape(nestedUser)) {
+      return nestedUser as Partial<User> & Record<string, unknown>;
+    }
+  }
+
+  if (raw.data && typeof raw.data === "object") {
+    const nestedData = raw.data as Record<string, unknown>;
+    if (hasUserPayloadShape(nestedData)) {
+      return nestedData as Partial<User> & Record<string, unknown>;
+    }
+  }
+
+  if (Array.isArray(data) && data.length > 0) {
+    const first = data[0];
+    if (first && typeof first === "object" && hasUserPayloadShape(first as Record<string, unknown>)) {
+      return first as Partial<User> & Record<string, unknown>;
+    }
+  }
+
+  return null;
 }
 
 function parseFilenameFromContentDisposition(
@@ -722,10 +775,39 @@ export const api = {
       // credentials: 'include',
     }).then((res) => res.json()),
 
-  getUserDetails: () =>
-    apiFetch(`${API_BASE}/auth/user`, {
-      // credentials: 'include',
-    }).then((res) => res.json()),
+  getUserDetails: async (): Promise<User> => {
+    const endpoints = [`${API_BASE}/user`, `${API_BASE}/auth/user`];
+    let lastError: string | null = null;
+
+    for (const endpoint of endpoints) {
+      const res = await apiFetch(endpoint, {
+        // credentials: 'include',
+      });
+
+      if (!res.ok) {
+        lastError = await readErrorMessage(res);
+        continue;
+      }
+
+      let data: unknown;
+      try {
+        data = await res.json();
+      } catch {
+        lastError = "Server returned an invalid user payload.";
+        continue;
+      }
+
+      const raw = extractUserPayload(data);
+      if (!raw) {
+        lastError = "Server returned an incomplete user payload.";
+        continue;
+      }
+
+      return normalizeUserPayload(raw);
+    }
+
+    throw new Error(lastError || "Failed to load user details.");
+  },
 
   getSessionActions: async (
     sessionId: string,
@@ -1043,6 +1125,15 @@ export const api = {
     }
     if (typeof payload.github_pat === "string" && payload.github_pat.trim()) {
       params.set("github_pat", payload.github_pat.trim());
+    }
+    if (
+      typeof payload.postgres_connection_string === "string" &&
+      payload.postgres_connection_string.trim()
+    ) {
+      params.set(
+        "postgres_connection_string",
+        payload.postgres_connection_string.trim(),
+      );
     }
     if (
       payload.github_user_id !== undefined &&

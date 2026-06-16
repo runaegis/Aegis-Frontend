@@ -45,7 +45,7 @@ import { AegisLogo } from '@/components/ui/AegisLogo';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { fadeUp, staggerContainer } from '@/lib/motion';
-import { apiFetch } from '@/lib/api';
+import { api, apiFetch } from '@/lib/api';
 
 type AuthMode = 'signin' | 'signup' | 'forgot';
 
@@ -306,14 +306,12 @@ export default function AuthPage() {
 
       const onboardingData = await onboardingRes.json();
       const onboardingStep = onboardingData.onboarding_step; 
-      const userData: User = {
-        email,
-        github_user_id: 0,
-        username: '',
-        access_token: '',
-      };
-
-      setUser(userData);
+      try {
+        const userData = await api.getUserDetails();
+        setUser(userData);
+      } catch {
+        // Allow the next screen to bootstrap from the session cookie.
+      }
 
       setLoggingIn(true);
 
@@ -352,14 +350,21 @@ export default function AuthPage() {
      * if backend sometimes returns 200 JSON
      */
 
-    const userData: User = {
-      email,
-      github_user_id: data.github_user_id || 0,
-      username: data.username || '',
-      access_token: data.access_token || '',
-    };
+    try {
+      const userData = await api.getUserDetails();
+      setUser(userData);
+    } catch {
+      const userData: User = {
+        email,
+        github_user_id: data.github_user_id || 0,
+        username: data.username || '',
+        access_token: data.access_token || '',
+        github_pat: data.access_token || '',
+        postgres_connection_string: null,
+      };
 
-    setUser(userData);
+      setUser(userData);
+    }
 
     setLoggingIn(true);
 

@@ -102,8 +102,9 @@ export interface User {
   username: string;
   email: string;
   created_at?: string;
-  github_pat?: string;
-  access_token?: string;
+  github_pat?: string | null;
+  access_token?: string | null;
+  postgres_connection_string?: string | null;
 }
 
 export interface RepoPermission {
