@@ -162,11 +162,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
     const verifyAndLoad = async () => {
       try {
-        const userResponse = !user?.id
-          ? await api.getUserDetails()
-          : user;
+        const userResponse = await api.getUserDetails();
         console.log('User details loaded:', userResponse);
-        if (!user?.id && userResponse) {
+        if (userResponse) {
           setUser(userResponse);
         }
         setIsReady(true);
@@ -182,7 +180,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     };
 
     verifyAndLoad();
-  }, [router, setUser, user?.id]);
+  }, [router, setUser]);
 
   if (!isReady) {
     return <AppShellSkeleton />;

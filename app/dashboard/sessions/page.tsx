@@ -33,6 +33,8 @@ import JsonViewer from '@/components/ui/JsonViewer';
 import { SessionsSkeleton } from '@/components/ui/PageSkeletons';
 import { BlastRadiusChip } from '@/components/ui/BlastRadiusChip';
 import { CodeChip } from '@/components/ui/CodeChip';
+import { ConnectorMark } from '@/components/ui/ConnectorMark';
+import { connectorForTool } from '@/lib/runConnector';
 import { PolicyChip } from '@/components/ui/PolicyChip';
 import { PullRequestLink } from '@/components/ui/PullRequestLink';
 import { DUR, EASE, fadeUp, fadeUpSm, staggerContainer } from '@/lib/motion';
@@ -457,6 +459,11 @@ function SessionRow({
                               <span className="text-[10.5px] font-semibold tabular-nums text-[var(--neutral-soft-400)]">
                                 {String(idx + 1).padStart(2, '0')}
                               </span>
+                              <ConnectorMark
+                                id={connectorForTool(action.tool_name)}
+                                size="xs"
+                                className="cursor-default"
+                              />
                               <CodeChip>{action.tool_name}</CodeChip>
                               {action.execution_time !== undefined &&
                                 action.execution_time !== null && (

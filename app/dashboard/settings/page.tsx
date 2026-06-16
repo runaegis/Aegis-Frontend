@@ -416,6 +416,9 @@ function ProfileSection({
   const [email, setEmail] = useState(user?.email || '');
   const [githubUserId, setGithubUserId] = useState(String(user?.github_user_id ?? ''));
   const [token, setToken] = useState(user?.access_token || user?.github_pat || '');
+  const [postgresConnectionString, setPostgresConnectionString] = useState(
+    user?.postgres_connection_string || '',
+  );
   const [saving, setSaving] = useState(false);
   // Avatar upload — useCustomAvatar() reads localStorage + listens
   // for changes, so the hero updates immediately after upload/remove
@@ -430,6 +433,7 @@ function ProfileSection({
       setEmail(user.email || '');
       setGithubUserId(String(user.github_user_id ?? ''));
       setToken(user.access_token || user.github_pat || '');
+      setPostgresConnectionString(user.postgres_connection_string || '');
     }
   }, [user]);
 
@@ -465,6 +469,10 @@ function ProfileSection({
         updatedUser.access_token ??
         user?.github_pat ??
         user?.access_token,
+      postgres_connection_string:
+        updatedUser.postgres_connection_string ??
+        user?.postgres_connection_string ??
+        '',
     });
   };
 
@@ -499,17 +507,18 @@ function ProfileSection({
     setSaving(false);
   };
 
-  const updateToken = async () => {
+  const updateSecrets = async () => {
     if (!user) return;
     setSaving(true);
     try {
       const updated = await api.updateUserDetails({
         github_pat: token,
+        postgres_connection_string: postgresConnectionString,
       });
       applyUpdatedUser(updated);
-      onSuccess('GitHub token updated');
+      onSuccess('Credentials updated');
     } catch (err) {
-      onError(err instanceof Error ? err.message : 'Failed to update GitHub token');
+      onError(err instanceof Error ? err.message : 'Failed to update credentials');
     }
     setSaving(false);
   };
@@ -607,14 +616,24 @@ function ProfileSection({
 
       <motion.div variants={fadeUp}>
         <SettingsCard
-          title="Personal access token"
-          description="Used by Aegis to talk to GitHub on your behalf."
+          title="Credentials"
+          description="Secrets Aegis uses to reach GitHub and your Postgres database."
         >
           <Field label="GitHub PAT" hint="Treat this like a password. Rotate it if exposed.">
             <Input
               type="password"
               value={token}
               onChange={(e) => setToken(e.target.value)}
+            />
+          </Field>
+          <Field
+            label="Postgres connection string"
+            hint="Stored as a secret. Example: postgresql://user:password@host:5432/dbname"
+          >
+            <Input
+              type="password"
+              value={postgresConnectionString}
+              onChange={(e) => setPostgresConnectionString(e.target.value)}
             />
           </Field>
           <div className="flex items-center justify-between">
@@ -629,13 +648,13 @@ function ProfileSection({
             </a>
             <Button
               variant="primary"
-              onClick={updateToken}
+              onClick={updateSecrets}
               disabled={saving}
               leadingIcon={
                 saving ? <RefreshCw className="h-3.5 w-3.5 animate-spin" strokeWidth={2} /> : undefined
               }
             >
-              Update token
+              Update credentials
             </Button>
           </div>
         </SettingsCard>

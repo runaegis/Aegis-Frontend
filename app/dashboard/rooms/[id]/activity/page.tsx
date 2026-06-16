@@ -43,6 +43,7 @@ import { DUR, EASE } from '@/lib/motion';
 import AgentAvatar from '@/components/ui/AgentAvatar';
 import { BlastRadiusChip } from '@/components/ui/BlastRadiusChip';
 import { CodeChip } from '@/components/ui/CodeChip';
+import { CONNECTORS, ConnectorMark } from '@/components/ui/ConnectorMark';
 import DecisionBadge, { decisionColor } from '@/components/ui/DecisionBadge';
 import EmptyState from '@/components/ui/EmptyState';
 import ErrorBanner from '@/components/ui/ErrorBanner';
@@ -54,6 +55,7 @@ import { PullRequestLink } from '@/components/ui/PullRequestLink';
 import { RelativeTime } from '@/components/ui/RelativeTime';
 import { Table, TBody, TD, TH, THead, TR, TRExpanded } from '@/components/ui/Table';
 import { ToolLogo, getAgentToolId } from '@/components/ui/ToolLogo';
+import { connectorForTool, deriveTarget } from '@/lib/runConnector';
 
 const PAGE_SIZE = 20;
 
@@ -219,7 +221,7 @@ export default function RoomActivityPage() {
                 <tr>
                   <TH>User</TH>
                   <TH>Tool</TH>
-                  <TH>Branch</TH>
+                  <TH>Target</TH>
                   {/* Combined Policy + Blast radius. Stacked chips
                       inside a single column so the Time column on the
                       right has room to breathe — matches the Runs
@@ -315,11 +317,39 @@ function RoomActivityRow({
           <CodeChip>{action.tool_name}</CodeChip>
         </TD>
         <TD>
-          {action.target_branch ? (
-            <CodeChip className="max-w-[220px]">
-              <span className="truncate">{action.target_branch}</span>
-            </CodeChip>
-          ) : null}
+          {(() => {
+            const cid = connectorForTool(action.tool_name);
+            const tgt = deriveTarget(action);
+            const isGithub = cid === 'github' || cid === 'github-actions';
+            // In a room (= one repo) the repo is implied by context, so
+            // GitHub rows show just the sub-scope (branch / workflow); other
+            // connectors show their own primary resource (database, #channel,
+            // workspace, project). The mark always renders so the connector
+            // is identifiable at a glance and non-GitHub rows stand out.
+            const lead = isGithub ? null : tgt.primary;
+            const chip = tgt.secondary;
+            return (
+              <div
+                className="flex min-w-0 items-center gap-2"
+                title={`${CONNECTORS[cid].name} connector`}
+              >
+                <ConnectorMark id={cid} size="xs" className="cursor-default" />
+                {lead && (
+                  <span
+                    className="truncate text-[12.5px] text-[var(--neutral-sub-600)]"
+                    title={lead}
+                  >
+                    {lead}
+                  </span>
+                )}
+                {chip && (
+                  <CodeChip className="max-w-[200px]">
+                    <span className="truncate">{chip}</span>
+                  </CodeChip>
+                )}
+              </div>
+            );
+          })()}
         </TD>
         <TD className="whitespace-nowrap">
           {/* Stacked Policy + Blast radius. Both chips return null

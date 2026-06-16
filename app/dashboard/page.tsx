@@ -41,6 +41,8 @@ import { DashboardHomeSkeleton } from '@/components/ui/PageSkeletons';
 import { RelativeTime } from '@/components/ui/RelativeTime';
 import { Button } from '@/components/ui/Button';
 import { CodeChip } from '@/components/ui/CodeChip';
+import { ConnectorMark } from '@/components/ui/ConnectorMark';
+import { connectorForTool } from '@/lib/runConnector';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import GithubPatStatus from '@/components/ui/GithubPatStatus';
 import { useToast } from '@/components/ui/Toast';
@@ -666,7 +668,12 @@ function ActivityRow({ run }: { run: SessionAction }) {
         <span className="shrink-0 text-[13px] font-medium text-[var(--neutral-strong-950)]">
           {run.agent_name || 'Unknown'}
         </span>
-        <span className="hidden sm:inline-flex">
+        <span className="hidden items-center gap-1.5 sm:inline-flex">
+          <ConnectorMark
+            id={connectorForTool(run.tool_name)}
+            size="xs"
+            className="cursor-default"
+          />
           <CodeChip>{run.tool_name}</CodeChip>
         </span>
         <span className="min-w-0 flex-1 truncate text-[12.5px] text-[var(--neutral-sub-600)]">
@@ -745,6 +752,11 @@ function ApprovalRow({
       </p>
 
       <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+        <ConnectorMark
+          id={connectorForTool(approval.tool_name)}
+          size="xs"
+          className="cursor-default"
+        />
         <CodeChip>{approval.tool_name}</CodeChip>
         {branch && <CodeChip>{branch}</CodeChip>}
         {repo && <CodeChip>{repo}</CodeChip>}

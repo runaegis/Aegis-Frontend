@@ -18,9 +18,11 @@ import { ApprovalsSkeleton } from '@/components/ui/PageSkeletons';
 import { BulkActionBar } from '@/components/ui/BulkActionBar';
 import { Button } from '@/components/ui/Button';
 import { CodeChip } from '@/components/ui/CodeChip';
+import { CONNECTORS, ConnectorMark } from '@/components/ui/ConnectorMark';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { FreshnessBanner } from '@/components/ui/FreshnessBanner';
 import { PullRequestLink } from '@/components/ui/PullRequestLink';
+import { connectorForTool, deriveTarget } from '@/lib/runConnector';
 import { useToast } from '@/components/ui/Toast';
 import { DUR, EASE, fadeUp, fadeUpSm, staggerContainer } from '@/lib/motion';
 import { AuthError } from '@/lib/api';
@@ -849,16 +851,34 @@ function ApprovalItem({
           <MetaCell label="Tool">
             <CodeChip>{approval.tool_name}</CodeChip>
           </MetaCell>
-          {repo && (
-            <MetaCell label="Repository">
-              <CodeChip>{repo}</CodeChip>
-            </MetaCell>
-          )}
-          {branch && (
-            <MetaCell label="Branch">
-              <CodeChip>{branch}</CodeChip>
-            </MetaCell>
-          )}
+          <MetaCell label="Connector">
+            <span className="inline-flex items-center gap-1.5">
+              <ConnectorMark
+                id={connectorForTool(approval.tool_name)}
+                size="xs"
+                className="cursor-default"
+              />
+              <span className="text-[13px] text-[var(--neutral-strong-950)]">
+                {CONNECTORS[connectorForTool(approval.tool_name)].name}
+              </span>
+            </span>
+          </MetaCell>
+          {(() => {
+            // Connector-aware target — repo+branch for GitHub, but also
+            // database+table, workspace+resource, #channel, project+issue
+            // for the other connectors that now flow through approvals
+            // (e.g. terraform_apply, workflow_dispatch).
+            const tgt = deriveTarget(approval);
+            if (!tgt.primary && !tgt.secondary) return null;
+            return (
+              <MetaCell label="Target">
+                <span className="inline-flex flex-wrap items-center gap-1.5">
+                  {tgt.primary && <CodeChip>{tgt.primary}</CodeChip>}
+                  {tgt.secondary && <CodeChip>{tgt.secondary}</CodeChip>}
+                </span>
+              </MetaCell>
+            );
+          })()}
           {approval.context?.model && (
             <MetaCell label="Model">
               <CodeChip>{String(approval.context.model)}</CodeChip>
