@@ -122,6 +122,11 @@ const TOOL_GROUPS: Record<string, string[]> = {
   'Workflow tools': [
     'workflow_dispatch',
   ],
+  'Postgres tools': [
+    'execute_sql',
+    'list_tables',
+    'list_schemas',
+  ],
 };
 
 const ALL_TOOLS = Array.from(new Set(Object.values(TOOL_GROUPS).flat()));
@@ -160,6 +165,8 @@ const DEVELOPER_DEFAULTS = new Set([
   'search_issues',
   'search_pull_requests',
   'search_users',
+  'list_tables',
+  'list_schemas',
 ]);
 
 const ADMIN_DEFAULTS = new Set([
