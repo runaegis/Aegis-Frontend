@@ -44,6 +44,63 @@ import { useRoom } from '@/lib/roomContext';
 import { cn } from '@/lib/utils';
 import { fadeUp, staggerContainer } from '@/lib/motion';
 
+const jiraTool = (name: string) => `mcp_aegis-server2_jira_${name}`;
+
+// Jira reads are safe to include in the lower-risk baseline: search,
+// project/board discovery, issue inspection, service desk lookups, and
+// form/attachment fetches.
+const JIRA_READ_TOOLS = [
+  jiraTool('batch_get_changelogs'),
+  jiraTool('download_attachments'),
+  jiraTool('get_agile_boards'),
+  jiraTool('get_all_projects'),
+  jiraTool('get_board_issues'),
+  jiraTool('get_field_options'),
+  jiraTool('get_issue'),
+  jiraTool('get_issue_dates'),
+  jiraTool('get_issue_development_info'),
+  jiraTool('get_issue_images'),
+  jiraTool('get_issue_proforma_forms'),
+  jiraTool('get_issue_sla'),
+  jiraTool('get_issue_watchers'),
+  jiraTool('get_issues_development_info'),
+  jiraTool('get_link_types'),
+  jiraTool('get_proforma_form_details'),
+  jiraTool('get_project_components'),
+  jiraTool('get_project_issues'),
+  jiraTool('get_project_versions'),
+  jiraTool('get_queue_issues'),
+  jiraTool('get_service_desk_for_project'),
+  jiraTool('get_service_desk_queues'),
+  jiraTool('get_sprint_issues'),
+  jiraTool('get_sprints_from_board'),
+  jiraTool('get_transitions'),
+  jiraTool('get_user_profile'),
+  jiraTool('get_worklog'),
+  jiraTool('search'),
+  jiraTool('search_fields'),
+];
+
+// Safe-write Jira actions focus on day-to-day collaboration and issue
+// workflow updates. We deliberately leave out destructive or high-blast
+// operations like delete, bulk create, sprint creation, and version admin.
+const JIRA_SAFE_WRITE_TOOLS = [
+  jiraTool('add_comment'),
+  jiraTool('add_issues_to_sprint'),
+  jiraTool('add_watcher'),
+  jiraTool('add_worklog'),
+  jiraTool('create_issue'),
+  jiraTool('create_issue_link'),
+  jiraTool('create_remote_issue_link'),
+  jiraTool('edit_comment'),
+  jiraTool('link_to_epic'),
+  jiraTool('remove_issue_link'),
+  jiraTool('remove_watcher'),
+  jiraTool('transition_issue'),
+  jiraTool('update_issue'),
+  jiraTool('update_proforma_form_answers'),
+];
+
 // Tool registry — same shape as the old page; lifted into a const
 // so we don't redeclare on every render. Order within groups matters
 // for UI scan rhythm: most-common first.
@@ -127,6 +184,67 @@ const TOOL_GROUPS: Record<string, string[]> = {
     'list_tables',
     'list_schemas',
   ],
+  'Jira read and search tools': [
+    jiraTool('search'),
+    jiraTool('search_fields'),
+    jiraTool('get_issue'),
+    jiraTool('get_issue_dates'),
+    jiraTool('get_issue_development_info'),
+    jiraTool('get_issues_development_info'),
+    jiraTool('batch_get_changelogs'),
+    jiraTool('get_issue_watchers'),
+    jiraTool('get_worklog'),
+    jiraTool('get_transitions'),
+    jiraTool('get_user_profile'),
+  ],
+  'Jira issue write tools': [
+    jiraTool('create_issue'),
+    jiraTool('batch_create_issues'),
+    jiraTool('update_issue'),
+    jiraTool('transition_issue'),
+    jiraTool('add_comment'),
+    jiraTool('edit_comment'),
+    jiraTool('add_watcher'),
+    jiraTool('remove_watcher'),
+    jiraTool('add_worklog'),
+    jiraTool('delete_issue'),
+  ],
+  'Jira issue link tools': [
+    jiraTool('get_link_types'),
+    jiraTool('create_issue_link'),
+    jiraTool('create_remote_issue_link'),
+    jiraTool('link_to_epic'),
+    jiraTool('remove_issue_link'),
+  ],
+  'Jira sprint and planning tools': [
+    jiraTool('get_agile_boards'),
+    jiraTool('get_board_issues'),
+    jiraTool('get_sprints_from_board'),
+    jiraTool('get_sprint_issues'),
+    jiraTool('add_issues_to_sprint'),
+    jiraTool('create_sprint'),
+    jiraTool('update_sprint'),
+  ],
+  'Jira project and version tools': [
+    jiraTool('get_all_projects'),
+    jiraTool('get_project_components'),
+    jiraTool('get_project_issues'),
+    jiraTool('get_project_versions'),
+    jiraTool('create_version'),
+    jiraTool('batch_create_versions'),
+  ],
+  'Jira service desk and form tools': [
+    jiraTool('get_service_desk_for_project'),
+    jiraTool('get_service_desk_queues'),
+    jiraTool('get_queue_issues'),
+    jiraTool('get_field_options'),
+    jiraTool('get_issue_sla'),
+    jiraTool('get_issue_images'),
+    jiraTool('download_attachments'),
+    jiraTool('get_issue_proforma_forms'),
+    jiraTool('get_proforma_form_details'),
+    jiraTool('update_proforma_form_answers'),
+  ],
 };
 
 const ALL_TOOLS = Array.from(new Set(Object.values(TOOL_GROUPS).flat()));
@@ -167,6 +285,7 @@ const DEVELOPER_DEFAULTS = new Set([
   'search_users',
   'list_tables',
   'list_schemas',
+  ...JIRA_READ_TOOLS,
 ]);
 
 const ADMIN_DEFAULTS = new Set([
@@ -187,6 +306,7 @@ const ADMIN_DEFAULTS = new Set([
   'set_agent_details',
   'run_secret_scanning',
   'workflow_dispatch',
+  ...JIRA_SAFE_WRITE_TOOLS,
 ]);
 
 const ROLE_LEVELS: Record<string, number> = {
@@ -207,7 +327,7 @@ const TEMPLATES: Record<
 > = {
   'read-only': {
     title: 'Read-only',
-    description: 'Agents can list, fetch, and search. No writes.',
+    description: 'Lower-risk baseline across GitHub, Jira, and Postgres.',
     tools: Object.fromEntries(
       ALL_TOOLS.map((t) => [
         t,
@@ -217,14 +337,14 @@ const TEMPLATES: Record<
   },
   'safe-write': {
     title: 'Safe write',
-    description: 'Adds branches, issues, and PRs. No direct pushes to main.',
+    description: 'Extends the baseline with PRs, issue edits, and common Jira workflow updates.',
     tools: Object.fromEntries(
       ALL_TOOLS.map((t) => [t, ADMIN_DEFAULTS.has(t)]),
     ),
   },
   full: {
     title: 'Full access',
-    description: 'Every tool enabled. Use for trusted internal agents.',
+    description: 'Every tool enabled, including destructive and bulk Jira actions.',
     tools: Object.fromEntries(ALL_TOOLS.map((t) => [t, true])),
   },
 };
