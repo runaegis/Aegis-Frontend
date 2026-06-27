@@ -44,7 +44,7 @@ import { useRoom } from '@/lib/roomContext';
 import { cn } from '@/lib/utils';
 import { fadeUp, staggerContainer } from '@/lib/motion';
 
-const jiraTool = (name: string) => `mcp_aegis-server2_jira_${name}`;
+const jiraTool = (name: string) => `jira_${name}`;
 
 // Jira reads are safe to include in the lower-risk baseline: search,
 // project/board discovery, issue inspection, service desk lookups, and
