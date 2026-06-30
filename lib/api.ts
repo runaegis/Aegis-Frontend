@@ -14,6 +14,7 @@ import {
   RoomInvite,
   RoomSessionAction,
   PaginatedResponse,
+  Memory,
 } from "./types";
 import { LogOut } from "lucide-react";
 import {
@@ -1530,5 +1531,48 @@ export const api = {
       );
     }
     return res.json();
+  },
+
+  getMemories: async (userId: string): Promise<Memory[]> => {
+    const res = await apiFetch(
+      `${API_BASE}/memory/user/${encodeURIComponent(userId)}`,
+    );
+    if (!res.ok) {
+      throw new Error(`Failed to load memories: ${await readErrorMessage(res)}`);
+    }
+    const data = await res.json();
+    // Response may be a wrapper { memories: [...] } or a plain array
+    if (Array.isArray(data)) return data;
+    if (data && Array.isArray(data.memories)) return data.memories;
+    return [];
+  },
+
+  updateMemory: async (
+    memoryId: string,
+    userId: string,
+    payload: Partial<Pick<Memory, 'title' | 'memory'>>,
+  ): Promise<Memory> => {
+    const res = await apiFetch(
+      `${API_BASE}/memory/${encodeURIComponent(memoryId)}`,
+      {
+        method: "PUT",
+        headers: getJsonHeaders(),
+        body: JSON.stringify({ user_id: userId, ...payload }),
+      },
+    );
+    if (!res.ok) {
+      throw new Error(`Failed to update memory: ${await readErrorMessage(res)}`);
+    }
+    return res.json();
+  },
+
+  deleteMemory: async (memoryId: string, userId: string): Promise<void> => {
+    const res = await apiFetch(
+      `${API_BASE}/memory/${encodeURIComponent(memoryId)}?user_id=${encodeURIComponent(userId)}`,
+      { method: "DELETE" },
+    );
+    if (!res.ok) {
+      throw new Error(`Failed to delete memory: ${await readErrorMessage(res)}`);
+    }
   },
 };

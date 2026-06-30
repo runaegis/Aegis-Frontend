@@ -1,3 +1,12 @@
+export interface Memory {
+  id: string;
+  user_id: string;
+  title: string;
+  memory: string;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
 export interface PaginatedResponse<T> {
   items: T[];
   total: number;

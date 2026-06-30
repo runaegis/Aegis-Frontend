@@ -22,9 +22,9 @@ export const STATUS_BY_ID: Record<ConnectorId, ConnectorStatus> = {
   github: 'live',
   'github-actions': 'live',
   slack: 'in-progress',
-  postgres: 'in-progress',
+  postgres: 'live',
   linear: 'coming-soon',
-  jira: 'coming-soon',
+  jira: 'live',
   terraform: 'coming-soon',
 };
 

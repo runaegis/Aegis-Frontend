@@ -35,10 +35,10 @@ import { STATUS_BY_ID, type ConnectorStatus } from '@/lib/connectorCatalog';
 const DISPLAY_ORDER: ConnectorId[] = [
   'github',
   'github-actions',
-  'slack',
   'postgres',
-  'linear',
   'jira',
+  'slack',
+  'linear',
   'terraform',
 ];
 
@@ -61,7 +61,7 @@ export default function ConnectorsPage() {
             variants={fadeUp}
             className="mb-3 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-[var(--primary-base)]"
           >
-            Connector catalog · 7 integrations
+            Connector catalog · 7 integrations · 4 live
           </motion.p>
           <motion.h1
             variants={fadeUp}
@@ -73,8 +73,9 @@ export default function ConnectorsPage() {
             variants={fadeUp}
             className="mt-4 max-w-[560px] text-[14.5px] leading-[1.6] text-[var(--neutral-sub-600)]"
           >
-            Aegis started with GitHub. Six more surfaces are shipping this
-            sprint, each governed by the same Allow, Approval, Deny model.
+            GitHub, GitHub Actions, PostgreSQL, and Jira are live today. Three
+            more surfaces are in progress, each governed by the same Allow,
+            Approval, Deny model.
           </motion.p>
         </motion.section>
 
