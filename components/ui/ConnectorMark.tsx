@@ -19,6 +19,12 @@
  * The single-source-of-truth `CONNECTORS` map here is also imported by
  * the Connectors page itself so we don't have two places to update when
  * a connector's brand color or copy changes.
+ *
+ * `memory` is the one entry here that isn't a third-party brand — it's
+ * Aegis's own set_memory/update_memory/list_memory/get_memory_from_name
+ * tool family. It gets a purpose-built generic glyph (not a vendor
+ * logo) so those runs stop rendering the GitHub mark just because the
+ * MCP session happened to be GitHub-authenticated.
  */
 
 import { cn } from '@/lib/utils';
@@ -30,7 +36,8 @@ export type ConnectorId =
   | 'jira'
   | 'github-actions'
   | 'terraform'
-  | 'postgres';
+  | 'postgres'
+  | 'memory';
 
 interface ConnectorDef {
   id: ConnectorId;
@@ -136,6 +143,16 @@ export const CONNECTORS: Record<ConnectorId, ConnectorDef> = {
     bg: '#336791',
     logoSlug: 'postgresql',
   },
+  memory: {
+    id: 'memory',
+    name: 'Agent Memory',
+    category: 'Memory',
+    description:
+      "Aegis's own cross-session memory store (set_memory, update_memory, list_memory, get_memory_from_name). Not a third-party connector — memory reads are open, writes are logged for audit.",
+    policy: { read: 'allow', write: 'allow', destructive: 'approval' },
+    bg: '#7C5CFF',
+    logoSlug: 'memory',
+  },
 };
 
 interface ConnectorMarkProps {
@@ -196,7 +213,8 @@ export function ConnectorMark({ id, size = 'md', className }: ConnectorMarkProps
           marks (Slack chambers, Jira diamond, Postgres elephant); Simple
           Icons CDN supplies brand-color monochrome marks for tools
           whose official logo is single-color (Linear, Terraform, GitHub
-          Actions). No filter — the logo renders in its native palette. */}
+          Actions). No filter — the logo renders in its native palette.
+          `memory` is a purpose-built glyph, not a vendor logo. */}
       <img
         src={`/integrations/${def.logoSlug}-color.svg`}
         alt=""
