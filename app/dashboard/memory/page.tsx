@@ -59,7 +59,13 @@ export default function MemoryPage() {
       return;
     }
     try {
-      const data = await api.getMemories(user.id);
+      const raw = await api.getMemories(user.id);
+      // Sort: most recently touched first (updated_at beats created_at)
+      const data = [...raw].sort((a, b) => {
+        const ta = new Date(a.updated_at ?? a.created_at ?? 0).getTime();
+        const tb = new Date(b.updated_at ?? b.created_at ?? 0).getTime();
+        return tb - ta;
+      });
       setMemories(data);
       setError(null);
       // Keep detail panel in sync if the open memory was updated
