@@ -51,6 +51,13 @@ const TOOL_CONNECTOR: Record<string, ConnectorId> = {
   linear_update_issue: 'linear',
   jira_create_issue: 'jira',
   jira_update_issue: 'jira',
+  // Aegis memory tools — must be explicit so they don't fall through to
+  // the 'github' default (these tools run inside a GitHub-authenticated
+  // MCP session but are not GitHub operations).
+  set_memory: 'memory',
+  update_memory: 'memory',
+  list_memory: 'memory',
+  get_memory_from_name: 'memory',
   // Everything else defaults to GitHub (the original connector).
 };
 
@@ -65,6 +72,7 @@ export function connectorForTool(toolName?: string | null): ConnectorId {
   if (/slack|message|channel|notify/.test(t)) return 'slack';
   if (/sql|query|migration|psql|postgres|truncate|(^|_)drop_|(^|_)table(_|$)|schema/.test(t)) return 'postgres';
   if (/workflow|secret|dispatch/.test(t)) return 'github-actions';
+  if (/memory/.test(t)) return 'memory';
   return 'github';
 }
 
@@ -149,6 +157,12 @@ export function deriveTarget(action: TargetSource): RunTarget {
         secondary:
           str(args.workflow) ?? str(args.workflow_id) ?? str(action.target_branch) ?? str(args.branch),
       };
+    case 'memory':
+      return {
+        kind: 'MEMORY',
+        primary: str(args.title) ?? str(args.id) ?? null,
+        secondary: null,
+      };
     case 'github':
     default:
       return {
@@ -169,4 +183,5 @@ export const RUN_CONNECTOR_FILTERS: ConnectorId[] = [
   'slack',
   'linear',
   'jira',
+  'memory',
 ];

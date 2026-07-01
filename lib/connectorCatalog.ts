@@ -26,6 +26,7 @@ export const STATUS_BY_ID: Record<ConnectorId, ConnectorStatus> = {
   linear: 'coming-soon',
   jira: 'live',
   terraform: 'coming-soon',
+  memory: 'live',
 };
 
 export interface Capability {
