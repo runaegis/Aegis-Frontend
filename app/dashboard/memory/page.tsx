@@ -1,7 +1,22 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+/**
+ * Memory — agent belief-state oversight.
+ *
+ * Reframed from a note-card grid into an oversight surface: a memory is a
+ * durable claim the agent will act on in every future session, so the page's
+ * job is trust and triage, not note-keeping. Default view is a dense,
+ * sortable table (matching Runs / Audit) with client-derived signals
+ * (possible secret / stale / duplicate) so risky context surfaces at a
+ * glance. Jenil's card grid is preserved as an optional Gallery view for
+ * reading. All signals are derived from the existing row — no fabricated
+ * provenance, no backend change. Provenance ("which agent wrote this") and a
+ * trust lifecycle are the v2 additions that need the audit-log join.
+ */
+
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
+import Link from 'next/link';
 import {
   BookMarked,
   Pencil,
@@ -11,14 +26,29 @@ import {
   Clock,
   Search,
   ArrowUpRight,
+  LayoutGrid,
+  Rows3,
+  KeyRound,
+  Hourglass,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { Memory } from '@/lib/types';
 import { useAutoRefresh, useUser } from '@/lib/hooks';
+import {
+  computeSignalMap,
+  computeRollups,
+  daysSince,
+  lastTouched,
+  type MemorySignal,
+  type MemorySignalKey,
+} from '@/lib/memorySignals';
 import Topbar from '@/components/layout/Topbar';
 import EmptyState from '@/components/ui/EmptyState';
 import ErrorBanner from '@/components/ui/ErrorBanner';
 import { Button } from '@/components/ui/Button';
+import { Badge } from '@/components/ui/Badge';
+import { FilterChip } from '@/components/ui/FilterChip';
+import { Table, THead, TH, TBody, TR, TD, type SortDirection } from '@/components/ui/Table';
 import { RelativeTime } from '@/components/ui/RelativeTime';
 import { useToast } from '@/components/ui/Toast';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
@@ -26,6 +56,15 @@ import { cn } from '@/lib/utils';
 import { DUR, EASE, fadeUp, staggerContainer } from '@/lib/motion';
 
 const EASE_EMPH: [number, number, number, number] = [0.2, 0.8, 0.2, 1];
+
+type ViewMode = 'table' | 'gallery';
+type SortKey = 'title' | 'updated' | 'created';
+
+const SIGNAL_FILTER_OPTIONS = [
+  { value: 'secret', label: 'Possible secret' },
+  { value: 'stale', label: 'Stale' },
+  { value: 'duplicate', label: 'Duplicate title' },
+];
 
 export default function MemoryPage() {
   const { user, isLoading: userLoading } = useUser();
@@ -35,7 +74,12 @@ export default function MemoryPage() {
   const [memories, setMemories] = useState<Memory[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
   const [search, setSearch] = useState('');
+  const [view, setView] = useState<ViewMode>('table');
+  const [signalFilter, setSignalFilter] = useState<string[]>([]);
+  const [sortKey, setSortKey] = useState<SortKey>('updated');
+  const [sortDir, setSortDir] = useState<Exclude<SortDirection, null>>('desc');
 
   // Detail slide-over
   const [detailMemory, setDetailMemory] = useState<Memory | null>(null);
@@ -60,18 +104,11 @@ export default function MemoryPage() {
     }
     try {
       const raw = await api.getMemories(user.id);
-      // Sort: most recently touched first (updated_at beats created_at)
-      const data = [...raw].sort((a, b) => {
-        const ta = new Date(a.updated_at ?? a.created_at ?? 0).getTime();
-        const tb = new Date(b.updated_at ?? b.created_at ?? 0).getTime();
-        return tb - ta;
-      });
-      setMemories(data);
+      setMemories(raw);
       setError(null);
-      // Keep detail panel in sync if the open memory was updated
       setDetailMemory((prev) => {
         if (!prev) return null;
-        return data.find((m) => m.id === prev.id) ?? null;
+        return raw.find((m) => m.id === prev.id) ?? null;
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load memories');
@@ -90,18 +127,56 @@ export default function MemoryPage() {
 
   const { lastUpdated } = useAutoRefresh(fetchData, 60000);
 
+  // ── Derived: signals + rollups ──────────────────────────────────────
+  const signalMap = useMemo(() => computeSignalMap(memories), [memories]);
+  const rollups = useMemo(() => computeRollups(memories, signalMap), [memories, signalMap]);
+
+  // ── Derived: filtered + sorted list ─────────────────────────────────
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const rows = memories.filter((m) => {
+      if (q && !(m.title.toLowerCase().includes(q) || m.memory.toLowerCase().includes(q))) {
+        return false;
+      }
+      if (signalFilter.length) {
+        const keys = new Set((signalMap[m.id] ?? []).map((s) => s.key));
+        if (!signalFilter.some((f) => keys.has(f as MemorySignalKey))) return false;
+      }
+      return true;
+    });
+
+    const dir = sortDir === 'asc' ? 1 : -1;
+    const ts = (m: Memory, which: 'updated' | 'created') =>
+      new Date((which === 'updated' ? lastTouched(m) : m.created_at) ?? 0).getTime();
+
+    return [...rows].sort((a, b) => {
+      if (sortKey === 'title') return dir * a.title.localeCompare(b.title);
+      if (sortKey === 'created') return dir * (ts(a, 'created') - ts(b, 'created'));
+      return dir * (ts(a, 'updated') - ts(b, 'updated'));
+    });
+  }, [memories, search, signalFilter, signalMap, sortKey, sortDir]);
+
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'));
+    } else {
+      setSortKey(key);
+      setSortDir(key === 'title' ? 'asc' : 'desc');
+    }
+  };
+  const dirFor = (key: SortKey): SortDirection => (sortKey === key ? sortDir : null);
+
+  // ── Edit / delete ───────────────────────────────────────────────────
   const startEdit = (memory: Memory) => {
     setEditingId(memory.id);
     setEditTitle(memory.title);
     setEditMemory(memory.memory);
   };
-
   const cancelEdit = () => {
     setEditingId(null);
     setEditTitle('');
     setEditMemory('');
   };
-
   const handleSave = async (memory: Memory) => {
     if (!editTitle.trim() && !editMemory.trim()) return;
     if (!user?.id) return;
@@ -123,7 +198,6 @@ export default function MemoryPage() {
       setSavingId(null);
     }
   };
-
   const handleDelete = async () => {
     if (!pendingDelete || !user?.id) return;
     const mem = pendingDelete;
@@ -143,11 +217,7 @@ export default function MemoryPage() {
     }
   };
 
-  const filtered = memories.filter((m) => {
-    if (!search.trim()) return true;
-    const q = search.toLowerCase();
-    return m.title.toLowerCase().includes(q) || m.memory.toLowerCase().includes(q);
-  });
+  const hasFilters = search.trim().length > 0 || signalFilter.length > 0;
 
   return (
     <>
@@ -161,11 +231,7 @@ export default function MemoryPage() {
       <div className="mx-auto max-w-[1320px] 2xl:max-w-[1480px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
         {error && (
           <div className="mb-6">
-            <ErrorBanner
-              message={error}
-              onDismiss={() => setError(null)}
-              onRetry={fetchData}
-            />
+            <ErrorBanner message={error} onDismiss={() => setError(null)} onRetry={fetchData} />
           </div>
         )}
 
@@ -185,28 +251,69 @@ export default function MemoryPage() {
           </motion.p>
           <motion.h1
             variants={fadeUp}
-            className="max-w-[620px] text-[28px] font-semibold leading-[1.1] tracking-[-0.03em] text-[var(--neutral-strong-950)] sm:text-[34px]"
+            className="max-w-[640px] text-[28px] font-semibold leading-[1.1] tracking-[-0.03em] text-[var(--neutral-strong-950)] sm:text-[34px]"
           >
-            Everything your agents know.
+            Everything your agents believe.
           </motion.h1>
           <motion.p
             variants={fadeUp}
-            className="mt-3 max-w-[500px] text-[14px] leading-[1.6] text-[var(--neutral-sub-600)]"
+            className="mt-3 max-w-[540px] text-[14px] leading-[1.6] text-[var(--neutral-sub-600)]"
           >
-            Persisted context that agents carry between sessions — edit or remove
-            entries to steer their behavior.
+            Durable context your agents carry between sessions and act on. Review
+            what they know, flag anything sensitive, and prune what is stale.
           </motion.p>
         </motion.header>
 
-        {/* ─── Search bar ─────────────────────────────────────────── */}
+        {/* ─── Oversight strip ────────────────────────────────────── */}
+        {memories.length > 0 && (
+          <motion.div
+            initial={reduce ? false : { opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: DUR.default, ease: EASE.out, delay: 0.12 }}
+            className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4"
+          >
+            <StatTile icon={<BookMarked className="h-4 w-4" strokeWidth={2} />} label="Total" value={rollups.total} />
+            <StatTile
+              icon={<Clock className="h-4 w-4" strokeWidth={2} />}
+              label="Updated this week"
+              value={rollups.updatedThisWeek}
+            />
+            <StatTile
+              icon={<KeyRound className="h-4 w-4" strokeWidth={2} />}
+              label="Possible secrets"
+              value={rollups.secrets}
+              tone={rollups.secrets > 0 ? 'error' : 'neutral'}
+              active={signalFilter.includes('secret')}
+              onClick={() =>
+                setSignalFilter((prev) =>
+                  prev.includes('secret') ? prev.filter((v) => v !== 'secret') : [...prev, 'secret'],
+                )
+              }
+            />
+            <StatTile
+              icon={<Hourglass className="h-4 w-4" strokeWidth={2} />}
+              label="Stale"
+              value={rollups.stale}
+              tone={rollups.stale > 0 ? 'warning' : 'neutral'}
+              active={signalFilter.includes('stale')}
+              onClick={() =>
+                setSignalFilter((prev) =>
+                  prev.includes('stale') ? prev.filter((v) => v !== 'stale') : [...prev, 'stale'],
+                )
+              }
+            />
+          </motion.div>
+        )}
+
+        {/* ─── Toolbar ────────────────────────────────────────────── */}
         {memories.length > 0 && (
           <motion.div
             initial={reduce ? false : { opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: DUR.default, ease: EASE.out, delay: 0.18 }}
-            className="mb-6"
+            className="mb-5 flex flex-wrap items-center gap-2.5"
           >
-            <div className="relative max-w-[400px]">
+            <div className="relative w-full max-w-[320px] sm:w-auto sm:flex-1">
               <Search
                 className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--neutral-soft-400)]"
                 strokeWidth={2}
@@ -217,42 +324,88 @@ export default function MemoryPage() {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className={cn(
-                  'h-8 w-full rounded-[8px] border border-[var(--stroke-soft-200)] bg-white pl-8 pr-3 text-[13px]',
+                  'h-7 w-full rounded-[8px] border border-[var(--stroke-sub-300)] bg-white pl-8 pr-3 text-[12px]',
                   'text-[var(--neutral-strong-950)] placeholder:text-[var(--neutral-soft-400)]',
-                  'shadow-[0_1px_2px_rgba(23,23,23,0.04)] outline-none',
+                  'shadow-[var(--shadow-regular-xs)] outline-none',
                   'transition-colors focus:border-[var(--primary-base)]/50 focus:ring-2 focus:ring-[var(--primary-alpha-10)]',
                 )}
               />
+            </div>
+
+            <FilterChip
+              label="Signal"
+              options={SIGNAL_FILTER_OPTIONS}
+              value={signalFilter}
+              onChange={setSignalFilter}
+            />
+
+            <div className="ml-auto">
+              <ViewToggle view={view} onChange={setView} />
             </div>
           </motion.div>
         )}
 
         {/* ─── Content ────────────────────────────────────────────── */}
         {loading ? (
-          <MemorySkeleton />
-        ) : filtered.length === 0 ? (
+          <MemorySkeleton view={view} />
+        ) : visible.length === 0 ? (
           <div className="overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
             <EmptyState
               icon={<BookMarked className="h-5 w-5" />}
-              title={search ? 'No matches' : 'No memories yet'}
+              title={hasFilters ? 'No matches' : 'No memories yet'}
               description={
-                search
-                  ? 'No memory entries match your search.'
+                hasFilters
+                  ? 'No memory entries match the current search or filters.'
                   : 'Agents will store context here as they work.'
               }
             />
           </div>
+        ) : view === 'table' ? (
+          <motion.div
+            initial={reduce ? false : { opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: DUR.default, ease: EASE.out }}
+          >
+            <Table>
+              <THead>
+                <tr>
+                  <TH sortable sortDirection={dirFor('title')} onSort={() => toggleSort('title')}>
+                    Memory
+                  </TH>
+                  <TH>Signals</TH>
+                  <TH sortable sortDirection={dirFor('updated')} onSort={() => toggleSort('updated')}>
+                    Updated
+                  </TH>
+                  <TH sortable sortDirection={dirFor('created')} onSort={() => toggleSort('created')}>
+                    Created
+                  </TH>
+                </tr>
+              </THead>
+              <TBody>
+                {visible.map((memory) => (
+                  <MemoryRow
+                    key={memory.id}
+                    memory={memory}
+                    signals={signalMap[memory.id] ?? []}
+                    isDeleting={deletingId === memory.id}
+                    onOpen={() => setDetailMemory(memory)}
+                  />
+                ))}
+              </TBody>
+            </Table>
+          </motion.div>
         ) : (
           <motion.div
-            variants={staggerContainer(0.04, 0.2)}
+            variants={staggerContainer(0.04, 0.15)}
             initial={reduce ? false : 'hidden'}
             animate="show"
             className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
           >
-            {filtered.map((memory) => (
+            {visible.map((memory) => (
               <MemoryCard
                 key={memory.id}
                 memory={memory}
+                signals={signalMap[memory.id] ?? []}
                 isEditing={editingId === memory.id}
                 isSaving={savingId === memory.id}
                 isDeleting={deletingId === memory.id}
@@ -278,7 +431,8 @@ export default function MemoryPage() {
             transition={{ duration: DUR.slow, ease: EASE.out, delay: 0.5 }}
             className="mt-10 text-center text-[12px] text-[var(--neutral-soft-400)]"
           >
-            Memory entries are agent-scoped and persisted across sessions.
+            Signals are derived from each entry. Which agent wrote a memory is on
+            the roadmap, tracked in the Audit trail today.
           </motion.p>
         )}
       </div>
@@ -286,6 +440,7 @@ export default function MemoryPage() {
       {/* ─── Detail slide-over ──────────────────────────────────── */}
       <MemorySlideOver
         memory={detailMemory}
+        signals={detailMemory ? signalMap[detailMemory.id] ?? [] : []}
         isEditing={editingId === detailMemory?.id}
         isSaving={savingId === detailMemory?.id}
         editTitle={editTitle}
@@ -319,8 +474,7 @@ export default function MemoryPage() {
               <span className="font-semibold text-[var(--neutral-strong-950)]">
                 &ldquo;{pendingDelete.title}&rdquo;
               </span>{' '}
-              will be permanently removed. Agents will no longer have access to
-              this context.
+              will be permanently removed. Agents will no longer have access to this context.
             </>
           ) : null
         }
@@ -332,9 +486,153 @@ export default function MemoryPage() {
   );
 }
 
-// ─── Memory card ──────────────────────────────────────────────────────
+// ─── Oversight stat tile ──────────────────────────────────────────────
+function StatTile({
+  icon,
+  label,
+  value,
+  tone = 'neutral',
+  active = false,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: number;
+  tone?: 'neutral' | 'error' | 'warning';
+  active?: boolean;
+  onClick?: () => void;
+}) {
+  const toneStyles =
+    tone === 'error'
+      ? { icon: 'bg-[var(--error-lighter)] text-[var(--error)]', value: 'text-[var(--error-dark)]' }
+      : tone === 'warning'
+        ? { icon: 'bg-[var(--warning-lighter)] text-[var(--warning-dark)]', value: 'text-[var(--warning-dark)]' }
+        : { icon: 'bg-[var(--primary-alpha-10)] text-[var(--primary-base)]', value: 'text-[var(--neutral-strong-950)]' };
+
+  const interactive = !!onClick;
+  const Comp: React.ElementType = interactive ? 'button' : 'div';
+
+  return (
+    <Comp
+      onClick={onClick}
+      className={cn(
+        'flex items-center gap-3 rounded-[12px] border bg-white px-4 py-3 text-left shadow-[0_1px_2px_rgba(23,23,23,0.04)]',
+        'transition-[border-color,box-shadow] duration-200 ease-[cubic-bezier(0.2,0.8,0.2,1)]',
+        active
+          ? 'border-[var(--primary-base)]/40 ring-1 ring-[var(--primary-alpha-10)]'
+          : 'border-[var(--stroke-soft-200)]',
+        interactive && !active && 'hover:border-[var(--stroke-sub-300)] hover:shadow-[0_4px_12px_rgba(23,23,23,0.06)]',
+      )}
+    >
+      <span className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px]', toneStyles.icon)}>
+        {icon}
+      </span>
+      <span className="min-w-0">
+        <span className={cn('block text-[20px] font-semibold leading-none tracking-[-0.02em] tabular-nums', toneStyles.value)}>
+          {value.toLocaleString()}
+        </span>
+        <span className="mt-1 block truncate text-[11.5px] font-medium text-[var(--neutral-sub-600)]">
+          {label}
+        </span>
+      </span>
+    </Comp>
+  );
+}
+
+// ─── View toggle (Table / Gallery) ────────────────────────────────────
+function ViewToggle({ view, onChange }: { view: ViewMode; onChange: (v: ViewMode) => void }) {
+  return (
+    <div className="inline-flex h-7 items-center gap-0.5 rounded-[8px] border border-[var(--stroke-sub-300)] bg-white p-0.5 shadow-[var(--shadow-regular-xs)]">
+      {([
+        { key: 'table', icon: <Rows3 className="h-3.5 w-3.5" strokeWidth={2} />, label: 'Table' },
+        { key: 'gallery', icon: <LayoutGrid className="h-3.5 w-3.5" strokeWidth={2} />, label: 'Gallery' },
+      ] as const).map((opt) => (
+        <button
+          key={opt.key}
+          type="button"
+          onClick={() => onChange(opt.key)}
+          aria-pressed={view === opt.key}
+          title={`${opt.label} view`}
+          className={cn(
+            'inline-flex h-6 items-center gap-1.5 rounded-[6px] px-2 text-[12px] font-medium transition-colors',
+            view === opt.key
+              ? 'bg-[var(--primary-alpha-10)] text-[var(--primary-base)]'
+              : 'text-[var(--neutral-sub-600)] hover:text-[var(--neutral-strong-950)]',
+          )}
+        >
+          {opt.icon}
+          <span className="hidden sm:inline">{opt.label}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ─── Signal chips ─────────────────────────────────────────────────────
+function SignalChips({ signals, className }: { signals: MemorySignal[]; className?: string }) {
+  if (!signals.length) return null;
+  return (
+    <span className={cn('inline-flex flex-wrap items-center gap-1.5', className)}>
+      {signals.map((s) => (
+        <Badge key={s.key} tone={s.tone} uppercase leadingDot title={s.hint}>
+          {s.label}
+        </Badge>
+      ))}
+    </span>
+  );
+}
+
+// ─── Table row ────────────────────────────────────────────────────────
+function MemoryRow({
+  memory,
+  signals,
+  isDeleting,
+  onOpen,
+}: {
+  memory: Memory;
+  signals: MemorySignal[];
+  isDeleting: boolean;
+  onOpen: () => void;
+}) {
+  const stamp = lastTouched(memory);
+  return (
+    <TR clickable onClick={onOpen} className={cn(isDeleting && 'pointer-events-none opacity-50')}>
+      <TD className="max-w-0">
+        <div className="flex items-center gap-3">
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[7px] bg-[var(--primary-alpha-10)]">
+            <BookMarked className="h-3.5 w-3.5 text-[var(--primary-base)]" strokeWidth={2} />
+          </span>
+          <span className="min-w-0">
+            <span className="block truncate text-[13px] font-semibold text-[var(--neutral-strong-950)]">
+              {memory.title}
+            </span>
+            <span className="mt-0.5 block truncate text-[12px] text-[var(--neutral-sub-600)]">
+              {memory.memory}
+            </span>
+          </span>
+        </div>
+      </TD>
+      <TD>
+        {signals.length ? (
+          <SignalChips signals={signals} />
+        ) : (
+          <span className="text-[12px] text-[var(--neutral-soft-400)]">Clean</span>
+        )}
+      </TD>
+      <TD className="whitespace-nowrap text-[12px] text-[var(--neutral-sub-600)]">
+        {stamp ? <RelativeTime timestamp={stamp} /> : null}
+      </TD>
+      <TD className="whitespace-nowrap text-[12px] text-[var(--neutral-sub-600)]">
+        {memory.created_at ? <RelativeTime timestamp={memory.created_at} /> : null}
+      </TD>
+    </TR>
+  );
+}
+
+// ─── Memory card (Gallery view) ───────────────────────────────────────
 function MemoryCard({
   memory,
+  signals,
   isEditing,
   isSaving,
   isDeleting,
@@ -349,6 +647,7 @@ function MemoryCard({
   onDelete,
 }: {
   memory: Memory;
+  signals: MemorySignal[];
   isEditing: boolean;
   isSaving: boolean;
   isDeleting: boolean;
@@ -382,7 +681,6 @@ function MemoryCard({
         isDeleting && 'pointer-events-none opacity-50',
       )}
     >
-      {/* Inset gradient signature */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-1 rounded-[10px]"
@@ -392,12 +690,10 @@ function MemoryCard({
         }}
       />
 
-      {/* Card body — clicking opens the slide-over (unless editing) */}
       <div
         className={cn('relative flex flex-1 flex-col p-4', !isEditing && 'cursor-pointer')}
         onClick={!isEditing ? onOpen : undefined}
       >
-        {/* Icon + action buttons row */}
         <div className="mb-3 flex items-start justify-between gap-2">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-[var(--primary-alpha-10)]">
             <BookMarked className="h-4 w-4 text-[var(--primary-base)]" strokeWidth={2} />
@@ -425,13 +721,12 @@ function MemoryCard({
           )}
         </div>
 
-        {/* Title */}
         {isEditing ? (
           <input
             autoFocus
             value={editTitle}
             onChange={(e) => onEditTitleChange(e.target.value)}
-            placeholder="Title (max 4 words)"
+            placeholder="Title"
             onClick={(e) => e.stopPropagation()}
             className={cn(
               'mb-2 w-full rounded-[6px] border border-[var(--stroke-soft-200)] bg-white px-2.5 py-1.5',
@@ -445,7 +740,6 @@ function MemoryCard({
           </h2>
         )}
 
-        {/* Memory text */}
         {isEditing ? (
           <textarea
             value={editMemory}
@@ -461,6 +755,7 @@ function MemoryCard({
           />
         ) : (
           <div>
+            {signals.length > 0 && <SignalChips signals={signals} className="mb-2" />}
             <p className="text-[12.5px] leading-[1.6] text-[var(--neutral-sub-600)] line-clamp-4">
               {memory.memory}
             </p>
@@ -473,39 +768,20 @@ function MemoryCard({
         )}
       </div>
 
-      {/* Card footer */}
       <div className="relative flex min-h-[42px] items-center justify-between gap-2 border-t border-[var(--stroke-soft-200)] bg-[var(--neutral-weak-50)]/70 px-4 py-2 backdrop-blur-[2px]">
         {isEditing ? (
           <div className="flex w-full items-center justify-end gap-2">
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={onCancel}
-              disabled={isSaving}
-              leadingIcon={<X className="h-3.5 w-3.5" strokeWidth={2} />}
-            >
+            <Button size="sm" variant="secondary" onClick={onCancel} disabled={isSaving} leadingIcon={<X className="h-3.5 w-3.5" strokeWidth={2} />}>
               Cancel
             </Button>
-            <Button
-              size="sm"
-              variant="primary"
-              onClick={onSave}
-              disabled={isSaving}
-              leadingIcon={<Check className="h-3.5 w-3.5" strokeWidth={2.25} />}
-            >
+            <Button size="sm" variant="primary" onClick={onSave} disabled={isSaving} leadingIcon={<Check className="h-3.5 w-3.5" strokeWidth={2.25} />}>
               {isSaving ? 'Saving…' : 'Save'}
             </Button>
           </div>
         ) : (
           <span className="inline-flex items-center gap-1.5 text-[11px] text-[var(--neutral-soft-400)]">
             <Clock className="h-3 w-3" strokeWidth={2} />
-            {memory.updated_at ?? memory.created_at ? (
-              <RelativeTime
-                timestamp={(memory.updated_at ?? memory.created_at) as string}
-              />
-            ) : (
-              <span>Memory</span>
-            )}
+            {lastTouched(memory) ? <RelativeTime timestamp={lastTouched(memory) as string} /> : <span>Memory</span>}
           </span>
         )}
       </div>
@@ -513,9 +789,10 @@ function MemoryCard({
   );
 }
 
-// ─── Detail slide-over panel ──────────────────────────────────────────
+// ─── Detail slide-over ────────────────────────────────────────────────
 function MemorySlideOver({
   memory,
+  signals,
   isEditing,
   isSaving,
   editTitle,
@@ -529,6 +806,7 @@ function MemorySlideOver({
   onDelete,
 }: {
   memory: Memory | null;
+  signals: MemorySignal[];
   isEditing: boolean;
   isSaving: boolean;
   editTitle: string;
@@ -545,7 +823,6 @@ function MemorySlideOver({
   const panelRef = useRef<HTMLDivElement>(null);
   const open = memory !== null;
 
-  // Escape to close
   useEffect(() => {
     if (!open) return;
     const handler = (e: KeyboardEvent) => {
@@ -555,7 +832,6 @@ function MemorySlideOver({
     return () => window.removeEventListener('keydown', handler);
   }, [open, onClose]);
 
-  // Focus panel on open
   useEffect(() => {
     if (open) {
       const id = window.setTimeout(() => panelRef.current?.focus(), 60);
@@ -563,11 +839,12 @@ function MemorySlideOver({
     }
   }, [open]);
 
+  const updatedDays = memory ? daysSince(lastTouched(memory)) : null;
+
   return (
     <AnimatePresence>
       {open && memory && (
         <>
-          {/* Backdrop */}
           <motion.div
             className="fixed inset-0 z-[60] bg-black/30 backdrop-blur-[2px]"
             initial={{ opacity: 0 }}
@@ -577,28 +854,24 @@ function MemorySlideOver({
             onClick={onClose}
           />
 
-          {/* Slide-over panel */}
           <motion.div
             ref={panelRef}
             tabIndex={-1}
             role="dialog"
             aria-modal="true"
             aria-label={memory.title}
-            className="fixed bottom-0 right-0 top-0 z-[61] flex w-full max-w-[480px] flex-col bg-white shadow-[−24px_0_64px_rgba(0,0,0,0.12)] outline-none"
+            className="fixed bottom-0 right-0 top-0 z-[61] flex w-full max-w-[480px] flex-col bg-white shadow-[-24px_0_64px_rgba(0,0,0,0.12)] outline-none"
             style={{ borderLeft: '1px solid var(--stroke-soft-200)' }}
             initial={reduce ? { opacity: 0 } : { x: '100%' }}
             animate={reduce ? { opacity: 1 } : { x: 0 }}
             exit={reduce ? { opacity: 0 } : { x: '100%' }}
             transition={{ duration: 0.28, ease: EASE_EMPH }}
           >
-            {/* ── Header ── */}
+            {/* Header */}
             <div className="flex items-center justify-between border-b border-[var(--stroke-soft-200)] px-5 py-4">
               <div className="flex items-center gap-2.5">
                 <div className="flex h-7 w-7 items-center justify-center rounded-[7px] bg-[var(--primary-alpha-10)]">
-                  <BookMarked
-                    className="h-3.5 w-3.5 text-[var(--primary-base)]"
-                    strokeWidth={2}
-                  />
+                  <BookMarked className="h-3.5 w-3.5 text-[var(--primary-base)]" strokeWidth={2} />
                 </div>
                 <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--neutral-soft-400)]">
                   Memory
@@ -607,12 +880,7 @@ function MemorySlideOver({
               <div className="flex items-center gap-1.5">
                 {!isEditing && (
                   <>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={onEdit}
-                      leadingIcon={<Pencil className="h-3.5 w-3.5" strokeWidth={2} />}
-                    >
+                    <Button size="sm" variant="ghost" onClick={onEdit} leadingIcon={<Pencil className="h-3.5 w-3.5" strokeWidth={2} />}>
                       Edit
                     </Button>
                     <Button
@@ -636,9 +904,8 @@ function MemorySlideOver({
               </div>
             </div>
 
-            {/* ── Body ── */}
-            <div className="flex flex-1 flex-col overflow-y-auto px-5 py-5">
-              {/* Inset gradient */}
+            {/* Body */}
+            <div className="relative flex flex-1 flex-col overflow-y-auto px-5 py-5">
               <div
                 aria-hidden
                 className="pointer-events-none absolute inset-x-0 top-0 h-40"
@@ -648,13 +915,12 @@ function MemorySlideOver({
                 }}
               />
 
-              {/* Title */}
               {isEditing ? (
                 <input
                   autoFocus
                   value={editTitle}
                   onChange={(e) => onEditTitleChange(e.target.value)}
-                  placeholder="Title (max 4 words)"
+                  placeholder="Title"
                   className={cn(
                     'mb-4 w-full rounded-[8px] border border-[var(--stroke-soft-200)] bg-white px-3 py-2',
                     'text-[17px] font-semibold text-[var(--neutral-strong-950)] outline-none',
@@ -662,63 +928,79 @@ function MemorySlideOver({
                   )}
                 />
               ) : (
-                <h2 className="mb-4 text-[19px] font-semibold leading-[1.2] tracking-[-0.02em] text-[var(--neutral-strong-950)]">
-                  {memory.title}
-                </h2>
+                <>
+                  <h2 className="text-[19px] font-semibold leading-[1.2] tracking-[-0.02em] text-[var(--neutral-strong-950)]">
+                    {memory.title}
+                  </h2>
+                  {signals.length > 0 && (
+                    <div className="mt-3 flex flex-col gap-2 rounded-[10px] border border-[var(--stroke-soft-200)] bg-[var(--neutral-weak-50)]/60 p-3">
+                      {signals.map((s) => (
+                        <div key={s.key} className="flex items-start gap-2.5">
+                          <Badge tone={s.tone} uppercase leadingDot className="mt-[1px] shrink-0">
+                            {s.label}
+                          </Badge>
+                          <span className="text-[12px] leading-[1.5] text-[var(--neutral-sub-600)]">{s.hint}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
               )}
 
-              {/* Memory text */}
               {isEditing ? (
                 <textarea
                   value={editMemory}
                   onChange={(e) => onEditMemoryChange(e.target.value)}
                   placeholder="Memory content…"
                   className={cn(
-                    'min-h-[260px] w-full flex-1 resize-none rounded-[8px] border border-[var(--stroke-soft-200)] bg-white px-3 py-2.5',
+                    'mt-4 min-h-[260px] w-full flex-1 resize-none rounded-[8px] border border-[var(--stroke-soft-200)] bg-white px-3 py-2.5',
                     'text-[13.5px] leading-[1.65] text-[var(--neutral-sub-600)] outline-none',
                     'focus:border-[var(--primary-base)]/50 focus:ring-2 focus:ring-[var(--primary-alpha-10)]',
                   )}
                 />
               ) : (
-                <p className="whitespace-pre-wrap text-[13.5px] leading-[1.7] text-[var(--neutral-sub-600)]">
+                <p className="mt-4 whitespace-pre-wrap text-[13.5px] leading-[1.7] text-[var(--neutral-sub-600)]">
                   {memory.memory}
                 </p>
               )}
+
+              {!isEditing && (
+                <div className="mt-6 border-t border-[var(--stroke-soft-200)] pt-4">
+                  <dl className="grid grid-cols-2 gap-x-4 gap-y-3">
+                    <MetaField label="Created" value={memory.created_at ? <RelativeTime timestamp={memory.created_at} /> : null} />
+                    <MetaField
+                      label="Last updated"
+                      value={lastTouched(memory) ? <RelativeTime timestamp={lastTouched(memory) as string} /> : null}
+                    />
+                    <MetaField label="Length" value={`${memory.memory.length.toLocaleString()} chars`} />
+                    <MetaField label="Age" value={updatedDays !== null ? `${updatedDays.toLocaleString()}d` : null} />
+                  </dl>
+                  <Link
+                    href="/dashboard/audit"
+                    className="mt-4 inline-flex items-center gap-1.5 text-[12px] font-medium text-[var(--neutral-sub-600)] transition-colors hover:text-[var(--primary-base)]"
+                  >
+                    Written by an agent and governed. See it in the Audit trail
+                    <ArrowUpRight className="h-3.5 w-3.5" strokeWidth={2} />
+                  </Link>
+                </div>
+              )}
             </div>
 
-            {/* ── Footer ── */}
+            {/* Footer */}
             <div className="border-t border-[var(--stroke-soft-200)] bg-[var(--neutral-weak-50)]/60 px-5 py-3">
               {isEditing ? (
                 <div className="flex items-center justify-end gap-2">
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={onCancel}
-                    disabled={isSaving}
-                    leadingIcon={<X className="h-3.5 w-3.5" strokeWidth={2} />}
-                  >
+                  <Button size="sm" variant="secondary" onClick={onCancel} disabled={isSaving} leadingIcon={<X className="h-3.5 w-3.5" strokeWidth={2} />}>
                     Cancel
                   </Button>
-                  <Button
-                    size="sm"
-                    variant="primary"
-                    onClick={onSave}
-                    disabled={isSaving}
-                    leadingIcon={<Check className="h-3.5 w-3.5" strokeWidth={2.25} />}
-                  >
+                  <Button size="sm" variant="primary" onClick={onSave} disabled={isSaving} leadingIcon={<Check className="h-3.5 w-3.5" strokeWidth={2.25} />}>
                     {isSaving ? 'Saving…' : 'Save changes'}
                   </Button>
                 </div>
               ) : (
                 <span className="inline-flex items-center gap-1.5 text-[11px] text-[var(--neutral-soft-400)]">
                   <Clock className="h-3 w-3" strokeWidth={2} />
-                  {memory.updated_at ?? memory.created_at ? (
-                    <RelativeTime
-                      timestamp={(memory.updated_at ?? memory.created_at) as string}
-                    />
-                  ) : (
-                    <span>Saved</span>
-                  )}
+                  {lastTouched(memory) ? <RelativeTime timestamp={lastTouched(memory) as string} /> : <span>Saved</span>}
                 </span>
               )}
             </div>
@@ -729,15 +1011,39 @@ function MemorySlideOver({
   );
 }
 
+function MetaField({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div>
+      <dt className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[var(--neutral-soft-400)]">
+        {label}
+      </dt>
+      <dd className="mt-1 text-[13px] font-medium text-[var(--neutral-strong-950)]">{value}</dd>
+    </div>
+  );
+}
+
 // ─── Loading skeleton ─────────────────────────────────────────────────
-function MemorySkeleton() {
+function MemorySkeleton({ view }: { view: ViewMode }) {
+  if (view === 'table') {
+    return (
+      <div className="overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
+        {Array.from({ length: 8 }).map((_, i) => (
+          <div key={i} className="flex items-center gap-3 border-b border-[var(--stroke-soft-200)] px-5 py-3.5 last:border-b-0">
+            <div className="h-7 w-7 shrink-0 animate-pulse rounded-[7px] bg-[var(--neutral-weak-50)]" />
+            <div className="flex-1 space-y-1.5">
+              <div className="h-3.5 w-1/3 animate-pulse rounded-[6px] bg-[var(--neutral-weak-50)]" />
+              <div className="h-3 w-2/3 animate-pulse rounded-[6px] bg-[var(--neutral-weak-50)]" />
+            </div>
+            <div className="h-4 w-20 animate-pulse rounded-[6px] bg-[var(--neutral-weak-50)]" />
+          </div>
+        ))}
+      </div>
+    );
+  }
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {Array.from({ length: 6 }).map((_, i) => (
-        <div
-          key={i}
-          className="flex flex-col overflow-hidden rounded-[14px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]"
-        >
+        <div key={i} className="flex flex-col overflow-hidden rounded-[14px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
           <div className="flex flex-1 flex-col gap-3 p-4">
             <div className="h-8 w-8 animate-pulse rounded-[8px] bg-[var(--neutral-weak-50)]" />
             <div className="h-4 w-2/3 animate-pulse rounded-[6px] bg-[var(--neutral-weak-50)]" />
