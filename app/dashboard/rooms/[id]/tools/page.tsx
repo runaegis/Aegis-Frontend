@@ -184,6 +184,15 @@ const TOOL_GROUPS: Record<string, string[]> = {
     'list_tables',
     'list_schemas',
   ],
+  'MongoDB tools': [
+    'mongo_find',
+    'mongo_aggregate',
+    'list_databases',
+    'list_collections',
+    'mongo_insert',
+    'mongo_update',
+    'mongo_delete',
+  ],
   'Jira read and search tools': [
     jiraTool('search'),
     jiraTool('search_fields'),
@@ -285,6 +294,10 @@ const DEVELOPER_DEFAULTS = new Set([
   'search_users',
   'list_tables',
   'list_schemas',
+  'mongo_find',
+  'mongo_aggregate',
+  'list_databases',
+  'list_collections',
   ...JIRA_READ_TOOLS,
 ]);
 

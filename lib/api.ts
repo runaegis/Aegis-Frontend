@@ -36,6 +36,7 @@ type UpdateUserDetailsPayload = {
   github_pat?: string;
   github_user_id?: number | string;
   postgres_connection_string?: string;
+  mongodb_connection_string?: string;
 };
 
 function getAPIBase(): string {
@@ -212,6 +213,10 @@ function normalizeUserPayload(
       typeof raw.postgres_connection_string === "string"
         ? raw.postgres_connection_string
         : fallback.postgres_connection_string,
+    mongodb_connection_string:
+      typeof raw.mongodb_connection_string === "string"
+        ? raw.mongodb_connection_string
+        : fallback.mongodb_connection_string,
   };
 }
 
@@ -225,6 +230,7 @@ function hasUserPayloadShape(raw: Record<string, unknown>): boolean {
     "github_pat",
     "created_at",
     "postgres_connection_string",
+    "mongodb_connection_string",
   ].some((key) => key in raw);
 }
 
@@ -1142,6 +1148,15 @@ export const api = {
       params.set(
         "postgres_connection_string",
         payload.postgres_connection_string.trim(),
+      );
+    }
+    if (
+      typeof payload.mongodb_connection_string === "string" &&
+      payload.mongodb_connection_string.trim()
+    ) {
+      params.set(
+        "mongodb_connection_string",
+        payload.mongodb_connection_string.trim(),
       );
     }
     if (
