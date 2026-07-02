@@ -23,7 +23,7 @@ export const STATUS_BY_ID: Record<ConnectorId, ConnectorStatus> = {
   'github-actions': 'live',
   slack: 'in-progress',
   postgres: 'live',
-  linear: 'coming-soon',
+  linear: 'live',
   jira: 'live',
   terraform: 'coming-soon',
   memory: 'live',
@@ -87,5 +87,20 @@ export const CONNECTOR_CAPABILITIES: Partial<Record<ConnectorId, ConnectorCapabi
       { label: 'Credentials never reach the agent', detail: 'The Atlas connection string is stored per-user server-side, masked in every log and error, and never exposed to the model.' },
     ],
     note: 'Per-user Atlas connection string, set in Settings. Same governance stance as the Postgres connector, for NoSQL.',
+  },
+  linear: {
+    governs: [
+      { label: 'Issue reads', detail: 'get_issue, search_issues, get_comments, get_labels.' },
+      { label: 'Workspace reads', detail: 'get_teams, get_projects, get_workflow_states.' },
+      { label: 'Issue writes', detail: 'Create and update issues, add comments.' },
+      { label: 'Archive', detail: 'Archive an issue (Linear has no hard delete).' },
+    ],
+    aegisAdds: [
+      { label: 'Approval-gated archive', detail: 'Archiving an issue pauses for a human reviewer before it runs, instead of executing and being caught after.' },
+      { label: 'Classification + audit trail', detail: 'Every call is classified by semantic_type (issue_read / issue_create / issue_update / issue_comment / issue_delete) and blast radius, and written to the immutable, exportable audit log.' },
+      { label: 'Per-role tool allowlist', detail: 'Each role only gets the Linear tools you allow; everything else is denied at the proxy.' },
+      { label: 'Credentials never reach the agent', detail: 'The Linear API key is stored per-user server-side and never exposed to the model.' },
+    ],
+    note: 'Per-user Linear API key, set in Settings. Shares the issue-tracking semantic types with Jira, and adds a self-gate on the one destructive action.',
   },
 };

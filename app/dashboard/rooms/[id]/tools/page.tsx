@@ -193,6 +193,21 @@ const TOOL_GROUPS: Record<string, string[]> = {
     'mongo_update',
     'mongo_delete',
   ],
+  'Linear read tools': [
+    'linear_get_issue',
+    'linear_search_issues',
+    'linear_get_teams',
+    'linear_get_projects',
+    'linear_get_workflow_states',
+    'linear_get_comments',
+    'linear_get_labels',
+  ],
+  'Linear write tools': [
+    'linear_create_issue',
+    'linear_update_issue',
+    'linear_add_comment',
+    'linear_archive_issue',
+  ],
   'Jira read and search tools': [
     jiraTool('search'),
     jiraTool('search_fields'),
@@ -298,6 +313,13 @@ const DEVELOPER_DEFAULTS = new Set([
   'mongo_aggregate',
   'list_databases',
   'list_collections',
+  'linear_get_issue',
+  'linear_search_issues',
+  'linear_get_teams',
+  'linear_get_projects',
+  'linear_get_workflow_states',
+  'linear_get_comments',
+  'linear_get_labels',
   ...JIRA_READ_TOOLS,
 ]);
 

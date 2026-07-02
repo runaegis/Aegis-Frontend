@@ -62,7 +62,7 @@ export default function ConnectorsPage() {
             variants={fadeUp}
             className="mb-3 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-[var(--primary-base)]"
           >
-            Connector catalog · 8 integrations · 5 live
+            Connector catalog · 8 integrations · 6 live
           </motion.p>
           <motion.h1
             variants={fadeUp}
@@ -74,8 +74,8 @@ export default function ConnectorsPage() {
             variants={fadeUp}
             className="mt-4 max-w-[560px] text-[14.5px] leading-[1.6] text-[var(--neutral-sub-600)]"
           >
-            GitHub, GitHub Actions, PostgreSQL, MongoDB, and Jira are live
-            today. Three more surfaces are in progress, each governed by the
+            GitHub, GitHub Actions, PostgreSQL, MongoDB, Jira, and Linear are
+            live today. Two more surfaces are on the way, each governed by the
             same Allow, Approval, Deny model.
           </motion.p>
         </motion.section>

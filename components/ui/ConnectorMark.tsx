@@ -97,8 +97,8 @@ export const CONNECTORS: Record<ConnectorId, ConnectorDef> = {
     name: 'Linear',
     category: 'Project tracking',
     description:
-      'Planning context for the agent. Read the ticket before writing code; status changes and reassignments route through human approval.',
-    policy: { read: 'allow', write: 'approval', destructive: 'deny' },
+      'Planning context for the agent: read tickets, create and update issues, and comment, all classified and logged. Archiving an issue routes through human approval.',
+    policy: { read: 'allow', write: 'allow', destructive: 'approval' },
     bg: '#5E6AD2',
     logoSlug: 'linear',
   },

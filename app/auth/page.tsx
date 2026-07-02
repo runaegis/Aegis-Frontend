@@ -362,6 +362,7 @@ export default function AuthPage() {
         github_pat: data.access_token || '',
         postgres_connection_string: null,
         mongodb_connection_string: null,
+        linear_api_key: null,
       };
 
       setUser(userData);

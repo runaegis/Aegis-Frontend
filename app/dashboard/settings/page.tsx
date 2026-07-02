@@ -422,6 +422,7 @@ function ProfileSection({
   const [mongodbConnectionString, setMongodbConnectionString] = useState(
     user?.mongodb_connection_string || '',
   );
+  const [linearApiKey, setLinearApiKey] = useState(user?.linear_api_key || '');
   const [saving, setSaving] = useState(false);
   // Avatar upload — useCustomAvatar() reads localStorage + listens
   // for changes, so the hero updates immediately after upload/remove
@@ -438,6 +439,7 @@ function ProfileSection({
       setToken(user.access_token || user.github_pat || '');
       setPostgresConnectionString(user.postgres_connection_string || '');
       setMongodbConnectionString(user.mongodb_connection_string || '');
+      setLinearApiKey(user.linear_api_key || '');
     }
   }, [user]);
 
@@ -481,6 +483,10 @@ function ProfileSection({
         updatedUser.mongodb_connection_string ??
         user?.mongodb_connection_string ??
         '',
+      linear_api_key:
+        updatedUser.linear_api_key ??
+        user?.linear_api_key ??
+        '',
     });
   };
 
@@ -523,6 +529,7 @@ function ProfileSection({
         github_pat: token,
         postgres_connection_string: postgresConnectionString,
         mongodb_connection_string: mongodbConnectionString,
+        linear_api_key: linearApiKey,
       });
       applyUpdatedUser(updated);
       onSuccess('Credentials updated');
@@ -626,7 +633,7 @@ function ProfileSection({
       <motion.div variants={fadeUp}>
         <SettingsCard
           title="Credentials"
-          description="Secrets Aegis uses to reach GitHub and your Postgres and MongoDB databases."
+          description="Secrets Aegis uses to reach GitHub, your Postgres and MongoDB databases, and Linear."
         >
           <Field label="GitHub PAT" hint="Treat this like a password. Rotate it if exposed.">
             <Input
@@ -653,6 +660,16 @@ function ProfileSection({
               type="password"
               value={mongodbConnectionString}
               onChange={(e) => setMongodbConnectionString(e.target.value)}
+            />
+          </Field>
+          <Field
+            label="Linear API key"
+            hint="Stored as a secret. A Linear personal API key from Settings → Security & access → Personal API keys."
+          >
+            <Input
+              type="password"
+              value={linearApiKey}
+              onChange={(e) => setLinearApiKey(e.target.value)}
             />
           </Field>
           <div className="flex items-center justify-between">

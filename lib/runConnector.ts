@@ -47,8 +47,17 @@ const TOOL_CONNECTOR: Record<string, ConnectorId> = {
   // Linear / Jira issue trackers. Namespaced so they don't collide with
   // GitHub's own `create_issue` (which stays GitHub) — the keyword fallback
   // below also catches any other linear_*/jira_* tool name.
+  linear_get_issue: 'linear',
+  linear_search_issues: 'linear',
+  linear_get_teams: 'linear',
+  linear_get_projects: 'linear',
+  linear_get_workflow_states: 'linear',
+  linear_get_comments: 'linear',
+  linear_get_labels: 'linear',
   linear_create_issue: 'linear',
   linear_update_issue: 'linear',
+  linear_add_comment: 'linear',
+  linear_archive_issue: 'linear',
   jira_create_issue: 'jira',
   jira_update_issue: 'jira',
   // Aegis memory tools — must be explicit so they don't fall through to
@@ -161,8 +170,8 @@ export function deriveTarget(action: TargetSource): RunTarget {
     case 'jira':
       return {
         kind: 'PROJECT',
-        primary: str(args.project) ?? str(args.team) ?? str(args.repo),
-        secondary: str(args.issue) ?? str(args.key) ?? str(args.id),
+        primary: str(args.project) ?? str(args.team) ?? str(args.team_id) ?? str(args.repo),
+        secondary: str(args.issue) ?? str(args.issue_id) ?? str(args.key) ?? str(args.id),
       };
     case 'github-actions':
       // Same repo-shaped target as GitHub, but the workflow file is the more
