@@ -26,8 +26,23 @@ export const MEMORY_TOOLS = new Set([
   'get_memory_from_name',
 ]);
 
+/** Mirrors backend MONGODB_TOOL_HANDLERS keys. */
+export const MONGODB_TOOLS = new Set([
+  'mongo_find',
+  'mongo_aggregate',
+  'list_databases',
+  'list_collections',
+  'mongo_insert',
+  'mongo_update',
+  'mongo_delete',
+]);
+
 export function isPostgresTool(toolName?: string | null): boolean {
   return POSTGRES_TOOLS.has((toolName ?? '').trim().toLowerCase());
+}
+
+export function isMongoTool(toolName?: string | null): boolean {
+  return MONGODB_TOOLS.has((toolName ?? '').trim().toLowerCase());
 }
 
 export function isMemoryTool(toolName?: string | null): boolean {
@@ -37,6 +52,7 @@ export function isMemoryTool(toolName?: string | null): boolean {
 export function connectorForTool(toolName?: string | null): ConnectorId {
   const t = (toolName ?? '').trim().toLowerCase();
   if (POSTGRES_TOOLS.has(t)) return 'postgres';
+  if (MONGODB_TOOLS.has(t)) return 'mongodb';
   if (GITHUB_ACTIONS_TOOLS.has(t)) return 'github-actions';
   if (MEMORY_TOOLS.has(t)) return 'memory';
   return 'github';

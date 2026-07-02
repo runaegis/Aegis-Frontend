@@ -58,6 +58,15 @@ const TOOL_CONNECTOR: Record<string, ConnectorId> = {
   update_memory: 'memory',
   list_memory: 'memory',
   get_memory_from_name: 'memory',
+  // MongoDB (Aegis-native db tools). Namespaced mongo_* plus list_databases /
+  // list_collections — distinct from Postgres's list_tables / list_schemas.
+  mongo_find: 'mongodb',
+  mongo_aggregate: 'mongodb',
+  list_databases: 'mongodb',
+  list_collections: 'mongodb',
+  mongo_insert: 'mongodb',
+  mongo_update: 'mongodb',
+  mongo_delete: 'mongodb',
   // Everything else defaults to GitHub (the original connector).
 };
 
@@ -70,6 +79,7 @@ export function connectorForTool(toolName?: string | null): ConnectorId {
   if (/jira/.test(t)) return 'jira';
   if (/linear/.test(t)) return 'linear';
   if (/slack|message|channel|notify/.test(t)) return 'slack';
+  if (/mongo|(^|_)collection(s)?(_|$)/.test(t)) return 'mongodb';
   if (/sql|query|migration|psql|postgres|truncate|(^|_)drop_|(^|_)table(_|$)|schema/.test(t)) return 'postgres';
   if (/workflow|secret|dispatch/.test(t)) return 'github-actions';
   if (/memory/.test(t)) return 'memory';
@@ -127,6 +137,12 @@ export function deriveTarget(action: TargetSource): RunTarget {
         secondary: str(args.table) ?? tableFromSql(sql),
       };
     }
+    case 'mongodb':
+      return {
+        kind: 'DATABASE',
+        primary: str(args.database) ?? str(args.db) ?? str(action.target_repo),
+        secondary: str(args.collection),
+      };
     case 'terraform':
       return {
         kind: 'WORKSPACE',
@@ -179,6 +195,7 @@ export const RUN_CONNECTOR_FILTERS: ConnectorId[] = [
   'github',
   'github-actions',
   'postgres',
+  'mongodb',
   'terraform',
   'slack',
   'linear',
