@@ -114,6 +114,8 @@ export interface User {
   github_pat?: string | null;
   access_token?: string | null;
   postgres_connection_string?: string | null;
+  mongodb_connection_string?: string | null;
+  linear_api_key?: string | null;
 }
 
 export interface RepoPermission {

@@ -36,6 +36,8 @@ type UpdateUserDetailsPayload = {
   github_pat?: string;
   github_user_id?: number | string;
   postgres_connection_string?: string;
+  mongodb_connection_string?: string;
+  linear_api_key?: string;
 };
 
 function getAPIBase(): string {
@@ -212,6 +214,14 @@ function normalizeUserPayload(
       typeof raw.postgres_connection_string === "string"
         ? raw.postgres_connection_string
         : fallback.postgres_connection_string,
+    mongodb_connection_string:
+      typeof raw.mongodb_connection_string === "string"
+        ? raw.mongodb_connection_string
+        : fallback.mongodb_connection_string,
+    linear_api_key:
+      typeof raw.linear_api_key === "string"
+        ? raw.linear_api_key
+        : fallback.linear_api_key,
   };
 }
 
@@ -225,6 +235,8 @@ function hasUserPayloadShape(raw: Record<string, unknown>): boolean {
     "github_pat",
     "created_at",
     "postgres_connection_string",
+    "mongodb_connection_string",
+    "linear_api_key",
   ].some((key) => key in raw);
 }
 
@@ -1143,6 +1155,21 @@ export const api = {
         "postgres_connection_string",
         payload.postgres_connection_string.trim(),
       );
+    }
+    if (
+      typeof payload.mongodb_connection_string === "string" &&
+      payload.mongodb_connection_string.trim()
+    ) {
+      params.set(
+        "mongodb_connection_string",
+        payload.mongodb_connection_string.trim(),
+      );
+    }
+    if (
+      typeof payload.linear_api_key === "string" &&
+      payload.linear_api_key.trim()
+    ) {
+      params.set("linear_api_key", payload.linear_api_key.trim());
     }
     if (
       payload.github_user_id !== undefined &&

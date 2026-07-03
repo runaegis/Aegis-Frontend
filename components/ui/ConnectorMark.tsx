@@ -37,7 +37,8 @@ export type ConnectorId =
   | 'github-actions'
   | 'terraform'
   | 'postgres'
-  | 'memory';
+  | 'memory'
+  | 'mongodb';
 
 interface ConnectorDef {
   id: ConnectorId;
@@ -96,8 +97,8 @@ export const CONNECTORS: Record<ConnectorId, ConnectorDef> = {
     name: 'Linear',
     category: 'Project tracking',
     description:
-      'Planning context for the agent. Read the ticket before writing code; status changes and reassignments route through human approval.',
-    policy: { read: 'allow', write: 'approval', destructive: 'deny' },
+      'Planning context for the agent: read tickets, create and update issues, and comment, all classified and logged. Archiving an issue routes through human approval.',
+    policy: { read: 'allow', write: 'allow', destructive: 'approval' },
     bg: '#5E6AD2',
     logoSlug: 'linear',
   },
@@ -152,6 +153,16 @@ export const CONNECTORS: Record<ConnectorId, ConnectorDef> = {
     policy: { read: 'allow', write: 'allow', destructive: 'approval' },
     bg: '#7C5CFF',
     logoSlug: 'memory',
+  },
+  mongodb: {
+    id: 'mongodb',
+    name: 'MongoDB',
+    category: 'Database',
+    description:
+      'Find and aggregate freely, writes route through owner approval, and destructive ops (drop, filterless deleteMany, $out/$merge) are hard-denied. The NoSQL sibling of the Postgres connector, same governance stance.',
+    policy: { read: 'allow', write: 'approval', destructive: 'deny' },
+    bg: '#47A248',
+    logoSlug: 'mongodb',
   },
 };
 

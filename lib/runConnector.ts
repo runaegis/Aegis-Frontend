@@ -47,8 +47,17 @@ const TOOL_CONNECTOR: Record<string, ConnectorId> = {
   // Linear / Jira issue trackers. Namespaced so they don't collide with
   // GitHub's own `create_issue` (which stays GitHub) — the keyword fallback
   // below also catches any other linear_*/jira_* tool name.
+  linear_get_issue: 'linear',
+  linear_search_issues: 'linear',
+  linear_get_teams: 'linear',
+  linear_get_projects: 'linear',
+  linear_get_workflow_states: 'linear',
+  linear_get_comments: 'linear',
+  linear_get_labels: 'linear',
   linear_create_issue: 'linear',
   linear_update_issue: 'linear',
+  linear_add_comment: 'linear',
+  linear_archive_issue: 'linear',
   jira_create_issue: 'jira',
   jira_update_issue: 'jira',
   // Aegis memory tools — must be explicit so they don't fall through to
@@ -58,6 +67,15 @@ const TOOL_CONNECTOR: Record<string, ConnectorId> = {
   update_memory: 'memory',
   list_memory: 'memory',
   get_memory_from_name: 'memory',
+  // MongoDB (Aegis-native db tools). Namespaced mongo_* plus list_databases /
+  // list_collections — distinct from Postgres's list_tables / list_schemas.
+  mongo_find: 'mongodb',
+  mongo_aggregate: 'mongodb',
+  list_databases: 'mongodb',
+  list_collections: 'mongodb',
+  mongo_insert: 'mongodb',
+  mongo_update: 'mongodb',
+  mongo_delete: 'mongodb',
   // Everything else defaults to GitHub (the original connector).
 };
 
@@ -70,6 +88,7 @@ export function connectorForTool(toolName?: string | null): ConnectorId {
   if (/jira/.test(t)) return 'jira';
   if (/linear/.test(t)) return 'linear';
   if (/slack|message|channel|notify/.test(t)) return 'slack';
+  if (/mongo|(^|_)collection(s)?(_|$)/.test(t)) return 'mongodb';
   if (/sql|query|migration|psql|postgres|truncate|(^|_)drop_|(^|_)table(_|$)|schema/.test(t)) return 'postgres';
   if (/workflow|secret|dispatch/.test(t)) return 'github-actions';
   if (/memory/.test(t)) return 'memory';
@@ -127,6 +146,12 @@ export function deriveTarget(action: TargetSource): RunTarget {
         secondary: str(args.table) ?? tableFromSql(sql),
       };
     }
+    case 'mongodb':
+      return {
+        kind: 'DATABASE',
+        primary: str(args.database) ?? str(args.db) ?? str(action.target_repo),
+        secondary: str(args.collection),
+      };
     case 'terraform':
       return {
         kind: 'WORKSPACE',
@@ -145,8 +170,8 @@ export function deriveTarget(action: TargetSource): RunTarget {
     case 'jira':
       return {
         kind: 'PROJECT',
-        primary: str(args.project) ?? str(args.team) ?? str(args.repo),
-        secondary: str(args.issue) ?? str(args.key) ?? str(args.id),
+        primary: str(args.project) ?? str(args.team) ?? str(args.team_id) ?? str(args.repo),
+        secondary: str(args.issue) ?? str(args.issue_id) ?? str(args.key) ?? str(args.id),
       };
     case 'github-actions':
       // Same repo-shaped target as GitHub, but the workflow file is the more
@@ -179,6 +204,7 @@ export const RUN_CONNECTOR_FILTERS: ConnectorId[] = [
   'github',
   'github-actions',
   'postgres',
+  'mongodb',
   'terraform',
   'slack',
   'linear',
