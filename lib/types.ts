@@ -114,6 +114,7 @@ export interface User {
   github_pat?: string | null;
   access_token?: string | null;
   postgres_connection_string?: string | null;
+  sentry_auth_token?: string | null;
 }
 
 export interface RepoPermission {

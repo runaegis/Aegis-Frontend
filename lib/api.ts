@@ -36,6 +36,7 @@ type UpdateUserDetailsPayload = {
   github_pat?: string;
   github_user_id?: number | string;
   postgres_connection_string?: string;
+  sentry_auth_token?: string;
 };
 
 function getAPIBase(): string {
@@ -212,6 +213,10 @@ function normalizeUserPayload(
       typeof raw.postgres_connection_string === "string"
         ? raw.postgres_connection_string
         : fallback.postgres_connection_string,
+    sentry_auth_token:
+      typeof raw.sentry_auth_token === "string"
+        ? raw.sentry_auth_token
+        : fallback.sentry_auth_token,
   };
 }
 
@@ -225,6 +230,7 @@ function hasUserPayloadShape(raw: Record<string, unknown>): boolean {
     "github_pat",
     "created_at",
     "postgres_connection_string",
+    "sentry_auth_token",
   ].some((key) => key in raw);
 }
 
@@ -1143,6 +1149,12 @@ export const api = {
         "postgres_connection_string",
         payload.postgres_connection_string.trim(),
       );
+    }
+    if (
+      typeof payload.sentry_auth_token === "string" &&
+      payload.sentry_auth_token.trim()
+    ) {
+      params.set("sentry_auth_token", payload.sentry_auth_token.trim());
     }
     if (
       payload.github_user_id !== undefined &&

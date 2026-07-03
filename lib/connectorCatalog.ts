@@ -27,6 +27,7 @@ export const STATUS_BY_ID: Record<ConnectorId, ConnectorStatus> = {
   jira: 'live',
   terraform: 'coming-soon',
   memory: 'live',
+  sentry: 'live',
 };
 
 export interface Capability {
@@ -73,5 +74,19 @@ export const CONNECTOR_CAPABILITIES: Partial<Record<ConnectorId, ConnectorCapabi
       { label: 'Production stays human-only', detail: 'Production deployment is never agent-initiated without explicit approval.' },
     ],
     note: 'Rides your existing GitHub connection — no separate setup or token. GitHub Actions governance is a capability layered on the GitHub connector.',
+  },
+  sentry: {
+    governs: [
+      { label: 'Issue + event reads', detail: 'list_projects, list_issues, get_issue, search_issues, list_issue_events, get_latest_event.' },
+      { label: 'Triage writes', detail: 'Resolve, ignore, reopen, or assign an issue (update_issue), and comment.' },
+      { label: 'Delete', detail: 'Permanently delete an issue and its events.' },
+    ],
+    aegisAdds: [
+      { label: 'Approval-gated delete', detail: 'Deleting an issue pauses for a human reviewer before it runs, instead of executing and being caught after.' },
+      { label: 'Classification + audit trail', detail: 'Every call is classified by semantic_type (issue_read / issue_update / issue_comment / issue_delete) and blast radius, and written to the immutable, exportable audit log.' },
+      { label: 'Per-role tool allowlist', detail: 'Each role only gets the Sentry tools you allow; everything else is denied at the proxy.' },
+      { label: 'Credentials never reach the agent', detail: 'The Sentry auth token is stored per-user server-side and never exposed to the model.' },
+    ],
+    note: 'Per-user Sentry auth token, set in Settings. Reads and triage writes run inline; the one destructive op is gated.',
   },
 };
