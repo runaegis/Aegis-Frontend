@@ -3,6 +3,7 @@ export interface Memory {
   user_id: string;
   title: string;
   memory: string;
+  is_pinned?: boolean;
   created_at?: string | null;
   updated_at?: string | null;
 }

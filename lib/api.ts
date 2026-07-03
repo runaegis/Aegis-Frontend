@@ -1623,7 +1623,7 @@ export const api = {
   updateMemory: async (
     memoryId: string,
     userId: string,
-    payload: Partial<Pick<Memory, 'title' | 'memory'>>,
+    payload: Partial<Pick<Memory, 'title' | 'memory' | 'is_pinned'>>,
   ): Promise<Memory> => {
     const res = await apiFetch(
       `${API_BASE}/memory/${encodeURIComponent(memoryId)}`,
