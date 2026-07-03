@@ -37,7 +37,8 @@ export type ConnectorId =
   | 'github-actions'
   | 'terraform'
   | 'postgres'
-  | 'memory';
+  | 'memory'
+  | 'sentry';
 
 interface ConnectorDef {
   id: ConnectorId;
@@ -110,6 +111,16 @@ export const CONNECTORS: Record<ConnectorId, ConnectorDef> = {
     policy: { read: 'allow', write: 'approval', destructive: 'deny' },
     bg: '#2684FF',
     logoSlug: 'jira',
+  },
+  sentry: {
+    id: 'sentry',
+    name: 'Sentry',
+    category: 'Observability',
+    description:
+      'Error triage for the agent: read issues and events, resolve, assign, and comment inline, all classified and logged. Permanently deleting an issue routes through human approval.',
+    policy: { read: 'allow', write: 'allow', destructive: 'approval' },
+    bg: '#362D59',
+    logoSlug: 'sentry',
   },
   'github-actions': {
     id: 'github-actions',

@@ -51,6 +51,13 @@ const TOOL_CONNECTOR: Record<string, ConnectorId> = {
   linear_update_issue: 'linear',
   jira_create_issue: 'jira',
   jira_update_issue: 'jira',
+  // Sentry error-tracking. All tools are `sentry_`-prefixed so the keyword
+  // fallback below catches the rest; the destructive + common ones are
+  // listed explicitly for clarity.
+  sentry_get_issue: 'sentry',
+  sentry_update_issue: 'sentry',
+  sentry_add_comment: 'sentry',
+  sentry_delete_issue: 'sentry',
   // Aegis memory tools — must be explicit so they don't fall through to
   // the 'github' default (these tools run inside a GitHub-authenticated
   // MCP session but are not GitHub operations).
@@ -67,6 +74,7 @@ export function connectorForTool(toolName?: string | null): ConnectorId {
   if (TOOL_CONNECTOR[t]) return TOOL_CONNECTOR[t];
   // Keyword fallback so unfamiliar tool names still classify sensibly.
   if (/terraform|(^|_)tf(_|$)/.test(t)) return 'terraform';
+  if (/sentry/.test(t)) return 'sentry';
   if (/jira/.test(t)) return 'jira';
   if (/linear/.test(t)) return 'linear';
   if (/slack|message|channel|notify/.test(t)) return 'slack';
@@ -148,6 +156,16 @@ export function deriveTarget(action: TargetSource): RunTarget {
         primary: str(args.project) ?? str(args.team) ?? str(args.repo),
         secondary: str(args.issue) ?? str(args.key) ?? str(args.id),
       };
+    case 'sentry':
+      // Sentry actions are scoped to a project + a specific issue. The
+      // backend reads project_slug / organization_slug and issue_id from
+      // the tool arguments, so surface those as project → issue.
+      return {
+        kind: 'PROJECT',
+        primary:
+          str(args.project_slug) ?? str(args.project) ?? str(args.organization_slug),
+        secondary: str(args.issue_id) ?? str(args.issue) ?? str(args.id),
+      };
     case 'github-actions':
       // Same repo-shaped target as GitHub, but the workflow file is the more
       // meaningful scope than a branch for a dispatch / secret operation.
@@ -183,5 +201,6 @@ export const RUN_CONNECTOR_FILTERS: ConnectorId[] = [
   'slack',
   'linear',
   'jira',
+  'sentry',
   'memory',
 ];

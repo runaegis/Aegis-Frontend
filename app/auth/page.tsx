@@ -361,6 +361,7 @@ export default function AuthPage() {
         access_token: data.access_token || '',
         github_pat: data.access_token || '',
         postgres_connection_string: null,
+        sentry_auth_token: null,
       };
 
       setUser(userData);

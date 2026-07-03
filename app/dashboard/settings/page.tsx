@@ -419,6 +419,9 @@ function ProfileSection({
   const [postgresConnectionString, setPostgresConnectionString] = useState(
     user?.postgres_connection_string || '',
   );
+  const [sentryAuthToken, setSentryAuthToken] = useState(
+    user?.sentry_auth_token || '',
+  );
   const [saving, setSaving] = useState(false);
   // Avatar upload — useCustomAvatar() reads localStorage + listens
   // for changes, so the hero updates immediately after upload/remove
@@ -434,6 +437,7 @@ function ProfileSection({
       setGithubUserId(String(user.github_user_id ?? ''));
       setToken(user.access_token || user.github_pat || '');
       setPostgresConnectionString(user.postgres_connection_string || '');
+      setSentryAuthToken(user.sentry_auth_token || '');
     }
   }, [user]);
 
@@ -473,6 +477,8 @@ function ProfileSection({
         updatedUser.postgres_connection_string ??
         user?.postgres_connection_string ??
         '',
+      sentry_auth_token:
+        updatedUser.sentry_auth_token ?? user?.sentry_auth_token ?? '',
     });
   };
 
@@ -514,6 +520,7 @@ function ProfileSection({
       const updated = await api.updateUserDetails({
         github_pat: token,
         postgres_connection_string: postgresConnectionString,
+        sentry_auth_token: sentryAuthToken,
       });
       applyUpdatedUser(updated);
       onSuccess('Credentials updated');
@@ -617,7 +624,7 @@ function ProfileSection({
       <motion.div variants={fadeUp}>
         <SettingsCard
           title="Credentials"
-          description="Secrets Aegis uses to reach GitHub and your Postgres database."
+          description="Secrets Aegis uses to reach your connected tools. Stored server-side and never exposed to the agent."
         >
           <Field label="GitHub PAT" hint="Treat this like a password. Rotate it if exposed.">
             <Input
@@ -634,6 +641,16 @@ function ProfileSection({
               type="password"
               value={postgresConnectionString}
               onChange={(e) => setPostgresConnectionString(e.target.value)}
+            />
+          </Field>
+          <Field
+            label="Sentry auth token"
+            hint="Internal integration token used to read and triage Sentry issues. Create one under Settings → Developer Settings in Sentry."
+          >
+            <Input
+              type="password"
+              value={sentryAuthToken}
+              onChange={(e) => setSentryAuthToken(e.target.value)}
             />
           </Field>
           <div className="flex items-center justify-between">
