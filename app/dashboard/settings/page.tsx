@@ -645,7 +645,7 @@ function ProfileSection({
           </Field>
           <Field
             label="Sentry auth token"
-            hint="Internal integration token used to read and triage Sentry issues. Create one under Settings → Developer Settings in Sentry."
+            hint="Organization or personal auth token for the Sentry API, sent as a Bearer token. Create one under Settings → Auth Tokens with read-only event and issue scopes."
           >
             <Input
               type="password"
