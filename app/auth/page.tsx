@@ -361,6 +361,10 @@ export default function AuthPage() {
         access_token: data.access_token || '',
         github_pat: data.access_token || '',
         postgres_connection_string: null,
+        jira_url: null,
+        jira_username: null,
+        jira_api_token: null,
+        mongodb_connection_string: null,
       };
 
       setUser(userData);

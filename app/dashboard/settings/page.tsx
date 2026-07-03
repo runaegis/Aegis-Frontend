@@ -419,6 +419,12 @@ function ProfileSection({
   const [postgresConnectionString, setPostgresConnectionString] = useState(
     user?.postgres_connection_string || '',
   );
+  const [jiraUrl, setJiraUrl] = useState(user?.jira_url || '');
+  const [jiraUsername, setJiraUsername] = useState(user?.jira_username || '');
+  const [jiraApiToken, setJiraApiToken] = useState(user?.jira_api_token || '');
+  const [mongodbConnectionString, setMongodbConnectionString] = useState(
+    user?.mongodb_connection_string || '',
+  );
   const [saving, setSaving] = useState(false);
   // Avatar upload — useCustomAvatar() reads localStorage + listens
   // for changes, so the hero updates immediately after upload/remove
@@ -434,6 +440,10 @@ function ProfileSection({
       setGithubUserId(String(user.github_user_id ?? ''));
       setToken(user.access_token || user.github_pat || '');
       setPostgresConnectionString(user.postgres_connection_string || '');
+      setJiraUrl(user.jira_url || '');
+      setJiraUsername(user.jira_username || '');
+      setJiraApiToken(user.jira_api_token || '');
+      setMongodbConnectionString(user.mongodb_connection_string || '');
     }
   }, [user]);
 
@@ -472,6 +482,14 @@ function ProfileSection({
       postgres_connection_string:
         updatedUser.postgres_connection_string ??
         user?.postgres_connection_string ??
+        '',
+      jira_url: updatedUser.jira_url ?? user?.jira_url ?? '',
+      jira_username: updatedUser.jira_username ?? user?.jira_username ?? '',
+      jira_api_token:
+        updatedUser.jira_api_token ?? user?.jira_api_token ?? '',
+      mongodb_connection_string:
+        updatedUser.mongodb_connection_string ??
+        user?.mongodb_connection_string ??
         '',
     });
   };
@@ -514,6 +532,10 @@ function ProfileSection({
       const updated = await api.updateUserDetails({
         github_pat: token,
         postgres_connection_string: postgresConnectionString,
+        jira_url: jiraUrl,
+        jira_username: jiraUsername,
+        jira_api_token: jiraApiToken,
+        mongodb_connection_string: mongodbConnectionString,
       });
       applyUpdatedUser(updated);
       onSuccess('Credentials updated');
@@ -617,7 +639,7 @@ function ProfileSection({
       <motion.div variants={fadeUp}>
         <SettingsCard
           title="Credentials"
-          description="Secrets Aegis uses to reach GitHub and your Postgres database."
+          description="Secrets Aegis uses to reach GitHub, Postgres, Jira, and MongoDB."
         >
           <Field label="GitHub PAT" hint="Treat this like a password. Rotate it if exposed.">
             <Input
@@ -634,6 +656,44 @@ function ProfileSection({
               type="password"
               value={postgresConnectionString}
               onChange={(e) => setPostgresConnectionString(e.target.value)}
+            />
+          </Field>
+          <Field
+            label="Jira URL"
+            hint="Your Jira base URL. Example: https://your-company.atlassian.net"
+          >
+            <Input
+              value={jiraUrl}
+              onChange={(e) => setJiraUrl(e.target.value)}
+            />
+          </Field>
+          <Field
+            label="Jira username"
+            hint="Usually the email address tied to your Jira account."
+          >
+            <Input
+              value={jiraUsername}
+              onChange={(e) => setJiraUsername(e.target.value)}
+            />
+          </Field>
+          <Field
+            label="Jira API token"
+            hint="Stored as a secret and used for Jira API access."
+          >
+            <Input
+              type="password"
+              value={jiraApiToken}
+              onChange={(e) => setJiraApiToken(e.target.value)}
+            />
+          </Field>
+          <Field
+            label="MongoDB connection string"
+            hint="Stored as a secret. Example: mongodb+srv://user:password@cluster/dbname"
+          >
+            <Input
+              type="password"
+              value={mongodbConnectionString}
+              onChange={(e) => setMongodbConnectionString(e.target.value)}
             />
           </Field>
           <div className="flex items-center justify-between">

@@ -114,6 +114,10 @@ export interface User {
   github_pat?: string | null;
   access_token?: string | null;
   postgres_connection_string?: string | null;
+  jira_url?: string | null;
+  jira_username?: string | null;
+  jira_api_token?: string | null;
+  mongodb_connection_string?: string | null;
 }
 
 export interface RepoPermission {
