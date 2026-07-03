@@ -11,6 +11,8 @@ import {
   Clock,
   Search,
   ArrowUpRight,
+  Pin,
+  PinOff,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { Memory } from '@/lib/types';
@@ -50,6 +52,9 @@ export default function MemoryPage() {
   const [pendingDelete, setPendingDelete] = useState<Memory | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
+  // Pin state
+  const [pinningId, setPinningId] = useState<string | null>(null);
+
   const fetchData = useCallback(async () => {
     if (!user?.id) {
       if (!userLoading) {
@@ -60,8 +65,10 @@ export default function MemoryPage() {
     }
     try {
       const raw = await api.getMemories(user.id);
-      // Sort: most recently touched first (updated_at beats created_at)
+      // Sort: pinned first, then most recently touched
       const data = [...raw].sort((a, b) => {
+        if (a.is_pinned && !b.is_pinned) return -1;
+        if (!a.is_pinned && b.is_pinned) return 1;
         const ta = new Date(a.updated_at ?? a.created_at ?? 0).getTime();
         const tb = new Date(b.updated_at ?? b.created_at ?? 0).getTime();
         return tb - ta;
@@ -140,6 +147,66 @@ export default function MemoryPage() {
       });
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const handlePin = async (memory: Memory) => {
+    if (!user?.id) return;
+    const newPinned = !memory.is_pinned;
+    setPinningId(memory.id);
+    // Optimistic update
+    const applyPin = (list: Memory[]) =>
+      list
+        .map((m) => (m.id === memory.id ? { ...m, is_pinned: newPinned } : m))
+        .sort((a, b) => {
+          if (a.is_pinned && !b.is_pinned) return -1;
+          if (!a.is_pinned && b.is_pinned) return 1;
+          const ta = new Date(a.updated_at ?? a.created_at ?? 0).getTime();
+          const tb = new Date(b.updated_at ?? b.created_at ?? 0).getTime();
+          return tb - ta;
+        });
+    setMemories((prev) => applyPin(prev));
+    setDetailMemory((prev) =>
+      prev?.id === memory.id ? { ...prev, is_pinned: newPinned } : prev,
+    );
+    try {
+      const updated = await api.updateMemory(memory.id, user.id, {
+        is_pinned: newPinned,
+      });
+      setMemories((prev) =>
+        prev
+          .map((m) => (m.id === updated.id ? updated : m))
+          .sort((a, b) => {
+            if (a.is_pinned && !b.is_pinned) return -1;
+            if (!a.is_pinned && b.is_pinned) return 1;
+            const ta = new Date(a.updated_at ?? a.created_at ?? 0).getTime();
+            const tb = new Date(b.updated_at ?? b.created_at ?? 0).getTime();
+            return tb - ta;
+          }),
+      );
+      setDetailMemory((prev) => (prev?.id === updated.id ? updated : prev));
+      toast.success(newPinned ? 'Memory pinned' : 'Memory unpinned');
+    } catch (err) {
+      // Revert optimistic update on failure
+      setMemories((prev) =>
+        prev
+          .map((m) => (m.id === memory.id ? { ...m, is_pinned: !newPinned } : m))
+          .sort((a, b) => {
+            if (a.is_pinned && !b.is_pinned) return -1;
+            if (!a.is_pinned && b.is_pinned) return 1;
+            const ta = new Date(a.updated_at ?? a.created_at ?? 0).getTime();
+            const tb = new Date(b.updated_at ?? b.created_at ?? 0).getTime();
+            return tb - ta;
+          }),
+      );
+      setDetailMemory((prev) =>
+        prev?.id === memory.id ? { ...prev, is_pinned: !newPinned } : prev,
+      );
+      toast.error('Failed to update pin', {
+        description: err instanceof Error ? err.message : undefined,
+      });
+    } finally {
+      setPinningId(null);
     }
   };
 
@@ -256,6 +323,7 @@ export default function MemoryPage() {
                 isEditing={editingId === memory.id}
                 isSaving={savingId === memory.id}
                 isDeleting={deletingId === memory.id}
+                isPinning={pinningId === memory.id}
                 editTitle={editTitle}
                 editMemory={editMemory}
                 onEditTitleChange={setEditTitle}
@@ -265,6 +333,7 @@ export default function MemoryPage() {
                 onCancel={cancelEdit}
                 onSave={() => handleSave(memory)}
                 onDelete={() => setPendingDelete(memory)}
+                onPin={() => handlePin(memory)}
               />
             ))}
           </motion.div>
@@ -288,6 +357,7 @@ export default function MemoryPage() {
         memory={detailMemory}
         isEditing={editingId === detailMemory?.id}
         isSaving={savingId === detailMemory?.id}
+        isPinning={pinningId === detailMemory?.id}
         editTitle={editTitle}
         editMemory={editMemory}
         onEditTitleChange={setEditTitle}
@@ -302,6 +372,7 @@ export default function MemoryPage() {
         onDelete={() => {
           if (detailMemory) setPendingDelete(detailMemory);
         }}
+        onPin={() => detailMemory && handlePin(detailMemory)}
       />
 
       {/* ─── Delete confirm ─────────────────────────────────────── */}
@@ -338,6 +409,7 @@ function MemoryCard({
   isEditing,
   isSaving,
   isDeleting,
+  isPinning,
   editTitle,
   editMemory,
   onEditTitleChange,
@@ -347,11 +419,13 @@ function MemoryCard({
   onCancel,
   onSave,
   onDelete,
+  onPin,
 }: {
   memory: Memory;
   isEditing: boolean;
   isSaving: boolean;
   isDeleting: boolean;
+  isPinning: boolean;
   editTitle: string;
   editMemory: string;
   onEditTitleChange: (v: string) => void;
@@ -361,6 +435,7 @@ function MemoryCard({
   onCancel: () => void;
   onSave: () => void;
   onDelete: () => void;
+  onPin: () => void;
 }) {
   const isTruncated = memory.memory.length > 220;
 
@@ -378,8 +453,10 @@ function MemoryCard({
         'transition-[box-shadow,border-color] duration-[220ms] ease-[cubic-bezier(0.2,0.8,0.2,1)]',
         isEditing
           ? 'border-[var(--primary-base)]/40 ring-1 ring-[var(--primary-alpha-10)]'
-          : 'border-[var(--stroke-soft-200)] hover:border-[var(--primary-base)]/30 hover:shadow-[0_10px_24px_rgba(23,23,23,0.07),0_2px_6px_rgba(250,115,25,0.05)]',
-        isDeleting && 'pointer-events-none opacity-50',
+          : memory.is_pinned
+            ? 'border-[var(--primary-base)]/30 shadow-[0_4px_12px_rgba(250,115,25,0.08)] hover:shadow-[0_10px_24px_rgba(23,23,23,0.07),0_2px_6px_rgba(250,115,25,0.08)]'
+            : 'border-[var(--stroke-soft-200)] hover:border-[var(--primary-base)]/30 hover:shadow-[0_10px_24px_rgba(23,23,23,0.07),0_2px_6px_rgba(250,115,25,0.05)]',
+        (isDeleting || isPinning) && 'pointer-events-none opacity-50',
       )}
     >
       {/* Inset gradient signature */}
@@ -399,14 +476,38 @@ function MemoryCard({
       >
         {/* Icon + action buttons row */}
         <div className="mb-3 flex items-start justify-between gap-2">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-[var(--primary-alpha-10)]">
-            <BookMarked className="h-4 w-4 text-[var(--primary-base)]" strokeWidth={2} />
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-[var(--primary-alpha-10)]">
+              <BookMarked className="h-4 w-4 text-[var(--primary-base)]" strokeWidth={2} />
+            </div>
+            {memory.is_pinned && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-[var(--primary-alpha-10)] px-2 py-0.5 text-[10px] font-semibold text-[var(--primary-base)]">
+                <Pin className="h-2.5 w-2.5" strokeWidth={2.5} />
+                Pinned
+              </span>
+            )}
           </div>
           {!isEditing && (
             <div
               className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100"
               onClick={(e) => e.stopPropagation()}
             >
+              <button
+                onClick={onPin}
+                aria-label={memory.is_pinned ? 'Unpin memory' : 'Pin memory'}
+                className={cn(
+                  'flex h-7 w-7 items-center justify-center rounded-[7px] transition-colors',
+                  memory.is_pinned
+                    ? 'text-[var(--primary-base)] hover:bg-[var(--primary-alpha-10)]'
+                    : 'text-[var(--neutral-soft-400)] hover:bg-[var(--neutral-weak-50)] hover:text-[var(--neutral-strong-950)]',
+                )}
+              >
+                {memory.is_pinned ? (
+                  <PinOff className="h-3.5 w-3.5" strokeWidth={2} />
+                ) : (
+                  <Pin className="h-3.5 w-3.5" strokeWidth={2} />
+                )}
+              </button>
               <button
                 onClick={onEdit}
                 aria-label="Edit memory"
@@ -518,6 +619,7 @@ function MemorySlideOver({
   memory,
   isEditing,
   isSaving,
+  isPinning,
   editTitle,
   editMemory,
   onEditTitleChange,
@@ -527,10 +629,12 @@ function MemorySlideOver({
   onCancel,
   onSave,
   onDelete,
+  onPin,
 }: {
   memory: Memory | null;
   isEditing: boolean;
   isSaving: boolean;
+  isPinning: boolean;
   editTitle: string;
   editMemory: string;
   onEditTitleChange: (v: string) => void;
@@ -540,6 +644,7 @@ function MemorySlideOver({
   onCancel: () => void;
   onSave: () => void;
   onDelete: () => void;
+  onPin: () => void;
 }) {
   const reduce = useReducedMotion();
   const panelRef = useRef<HTMLDivElement>(null);
@@ -607,6 +712,26 @@ function MemorySlideOver({
               <div className="flex items-center gap-1.5">
                 {!isEditing && (
                   <>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={onPin}
+                      disabled={isPinning}
+                      leadingIcon={
+                        memory.is_pinned ? (
+                          <PinOff className="h-3.5 w-3.5" strokeWidth={2} />
+                        ) : (
+                          <Pin className="h-3.5 w-3.5" strokeWidth={2} />
+                        )
+                      }
+                      className={
+                        memory.is_pinned
+                          ? 'text-[var(--primary-base)] hover:bg-[var(--primary-alpha-10)] hover:text-[var(--primary-base)]'
+                          : undefined
+                      }
+                    >
+                      {memory.is_pinned ? 'Unpin' : 'Pin'}
+                    </Button>
                     <Button
                       size="sm"
                       variant="ghost"

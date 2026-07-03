@@ -36,6 +36,10 @@ type UpdateUserDetailsPayload = {
   github_pat?: string;
   github_user_id?: number | string;
   postgres_connection_string?: string;
+  jira_url?: string;
+  jira_username?: string;
+  jira_api_token?: string;
+  mongodb_connection_string?: string;
 };
 
 function getAPIBase(): string {
@@ -50,6 +54,38 @@ const API_BASE = getAPIBase();
 
 if (typeof window !== "undefined") {
   console.log("[Aegis API] Using endpoint:", API_BASE);
+}
+
+let refreshSessionPromise: Promise<boolean> | null = null;
+
+function clearStoredAuthState(): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  localStorage.removeItem("aegis_user");
+  localStorage.removeItem("aegis_onboarding_step");
+}
+
+async function refreshSession(): Promise<boolean> {
+  if (!refreshSessionPromise) {
+    refreshSessionPromise = (async () => {
+      try {
+        const refreshResponse = await fetch(`${API_BASE}/auth/refresh`, {
+          method: "POST",
+          credentials: "include",
+        });
+
+        return refreshResponse.ok;
+      } catch {
+        return false;
+      } finally {
+        refreshSessionPromise = null;
+      }
+    })();
+  }
+
+  return refreshSessionPromise;
 }
 
 export class AuthError extends Error {
@@ -71,19 +107,13 @@ export async function apiFetch(
 
   // Access token expired
   if (response.status === 401 && retry) {
-    const refreshResponse = await fetch(`${API_BASE}/auth/refresh`, {
-      method: "POST",
-      credentials: "include",
-    });
+    const didRefresh = await refreshSession();
 
-    // Refresh succeeded
-    if (refreshResponse.ok) {
+    if (didRefresh) {
       return apiFetch(input, init, false);
     }
 
-    // Refresh failed
-    localStorage.removeItem("aegis_user");
-    localStorage.removeItem("aegis_onboarding_step");
+    clearStoredAuthState();
 
     if (typeof window !== "undefined") {
       window.location.href = "/auth";
@@ -212,6 +242,22 @@ function normalizeUserPayload(
       typeof raw.postgres_connection_string === "string"
         ? raw.postgres_connection_string
         : fallback.postgres_connection_string,
+    jira_url:
+      typeof raw.jira_url === "string"
+        ? raw.jira_url
+        : fallback.jira_url,
+    jira_username:
+      typeof raw.jira_username === "string"
+        ? raw.jira_username
+        : fallback.jira_username,
+    jira_api_token:
+      typeof raw.jira_api_token === "string"
+        ? raw.jira_api_token
+        : fallback.jira_api_token,
+    mongodb_connection_string:
+      typeof raw.mongodb_connection_string === "string"
+        ? raw.mongodb_connection_string
+        : fallback.mongodb_connection_string,
   };
 }
 
@@ -225,6 +271,10 @@ function hasUserPayloadShape(raw: Record<string, unknown>): boolean {
     "github_pat",
     "created_at",
     "postgres_connection_string",
+    "jira_url",
+    "jira_username",
+    "jira_api_token",
+    "mongodb_connection_string",
   ].some((key) => key in raw);
 }
 
@@ -641,8 +691,7 @@ export const api = {
     } catch {
       // ignore logout network failures
     } finally {
-      localStorage.removeItem("aegis_user");
-      localStorage.removeItem("aegis_onboarding_step");
+      clearStoredAuthState();
     }
   },
 
@@ -1144,6 +1193,30 @@ export const api = {
         payload.postgres_connection_string.trim(),
       );
     }
+    if (typeof payload.jira_url === "string" && payload.jira_url.trim()) {
+      params.set("jira_url", payload.jira_url.trim());
+    }
+    if (
+      typeof payload.jira_username === "string" &&
+      payload.jira_username.trim()
+    ) {
+      params.set("jira_username", payload.jira_username.trim());
+    }
+    if (
+      typeof payload.jira_api_token === "string" &&
+      payload.jira_api_token.trim()
+    ) {
+      params.set("jira_api_token", payload.jira_api_token.trim());
+    }
+    if (
+      typeof payload.mongodb_connection_string === "string" &&
+      payload.mongodb_connection_string.trim()
+    ) {
+      params.set(
+        "mongodb_connection_string",
+        payload.mongodb_connection_string.trim(),
+      );
+    }
     if (
       payload.github_user_id !== undefined &&
       payload.github_user_id !== null &&
@@ -1550,7 +1623,7 @@ export const api = {
   updateMemory: async (
     memoryId: string,
     userId: string,
-    payload: Partial<Pick<Memory, 'title' | 'memory'>>,
+    payload: Partial<Pick<Memory, 'title' | 'memory' | 'is_pinned'>>,
   ): Promise<Memory> => {
     const res = await apiFetch(
       `${API_BASE}/memory/${encodeURIComponent(memoryId)}`,

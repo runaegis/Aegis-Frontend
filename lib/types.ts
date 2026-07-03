@@ -3,6 +3,7 @@ export interface Memory {
   user_id: string;
   title: string;
   memory: string;
+  is_pinned?: boolean;
   created_at?: string | null;
   updated_at?: string | null;
 }
@@ -114,6 +115,10 @@ export interface User {
   github_pat?: string | null;
   access_token?: string | null;
   postgres_connection_string?: string | null;
+  jira_url?: string | null;
+  jira_username?: string | null;
+  jira_api_token?: string | null;
+  mongodb_connection_string?: string | null;
 }
 
 export interface RepoPermission {
