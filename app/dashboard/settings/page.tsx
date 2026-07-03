@@ -664,7 +664,7 @@ function ProfileSection({
           </Field>
           <Field
             label="Linear API key"
-            hint="Stored as a secret. A Linear personal API key from Settings → Security & access → Personal API keys."
+            hint="Personal API key for the Linear GraphQL API. Create one under Settings → Security & access → Personal API keys."
           >
             <Input
               type="password"
