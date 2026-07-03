@@ -1158,12 +1158,24 @@ export function installPreviewApi() {
     id: 'preview-user',
     email: 'preview@runaegis.co',
     created_at: new Date().toISOString(),
+    postgres_connection_string: null,
+    jira_url: null,
+    jira_username: null,
+    jira_api_token: null,
+    mongodb_connection_string: null,
   });
   api.getUserDetails = async () => ({
     id: 'preview-user',
     username: 'demo',
     email: 'preview@runaegis.co',
     github_user_id: 0,
+    access_token: null,
+    github_pat: null,
+    postgres_connection_string: null,
+    jira_url: null,
+    jira_username: null,
+    jira_api_token: null,
+    mongodb_connection_string: null,
   });
   // Preview onboarding when the user is actually ON /onboarding (so
   // designers can review the flow). Anywhere else, claim "complete" so
