@@ -629,9 +629,9 @@ const TOKEN_METER: TokenMeterResponse[] = RUNS.slice(0, 60).map((r, i) => ({
 
 // Rooms
 const PREVIEW_ROOMS: RoomSummary[] = [
-  { id: 'room_dash',  room_id: 'room_dash',  repo_name: 'aegis/dashboard',  owner_username: 'preview-user', created_at: new Date(NOW - 12 * ONE_DAY).toISOString() },
-  { id: 'room_mcp',   room_id: 'room_mcp',   repo_name: 'aegis/mcp-server', owner_username: 'preview-user', created_at: new Date(NOW - 30 * ONE_DAY).toISOString() },
-  { id: 'room_api',   room_id: 'room_api',   repo_name: 'runaegis/api',     owner_username: 'preview-user', created_at: new Date(NOW -  5 * ONE_DAY).toISOString() },
+  { id: 'room_dash',  room_id: 'room_dash',  repo_name: 'aegis/dashboard',  owner_username: 'preview-user', enforcement_mode: 'observe', created_at: new Date(NOW - 12 * ONE_DAY).toISOString() },
+  { id: 'room_mcp',   room_id: 'room_mcp',   repo_name: 'aegis/mcp-server', owner_username: 'preview-user', enforcement_mode: 'enforce', created_at: new Date(NOW - 30 * ONE_DAY).toISOString() },
+  { id: 'room_api',   room_id: 'room_api',   repo_name: 'runaegis/api',     owner_username: 'preview-user', enforcement_mode: 'observe', created_at: new Date(NOW -  5 * ONE_DAY).toISOString() },
 ];
 
 const PREVIEW_ROOM_DETAILS: Record<string, RoomDetails> = Object.fromEntries(
@@ -1047,6 +1047,14 @@ export function installPreviewApi() {
     PREVIEW_ROOM_DETAILS[roomId] ?? PREVIEW_ROOMS[0];
   api.getRoomMembers = async (roomId: string) => PREVIEW_MEMBERS[roomId] ?? [];
   api.getRoomInvites = async (roomId: string) => PREVIEW_INVITES[roomId] ?? [];
+  // Shadow Mode: persist the mode change in-memory so navigating away and
+  // back reflects it (the demo has no backend).
+  api.setRoomEnforcementMode = async (roomId: string, mode) => {
+    const detail = PREVIEW_ROOM_DETAILS[roomId];
+    if (detail) detail.enforcement_mode = mode;
+    const summary = PREVIEW_ROOMS.find((r) => r.room_id === roomId);
+    if (summary) summary.enforcement_mode = mode;
+  };
   // Activity tab inside a room. Returns paginated `RoomSessionAction[]`
   // pinned to that room — same shape as the real endpoint
   // `GET /sessions_by_room_id/{room_id}` Jenil shipped.
