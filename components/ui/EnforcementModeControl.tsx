@@ -90,20 +90,27 @@ export function EnforcementModeControl({
                 ? 'border-transparent shadow-[0_1px_2px_rgba(23,23,23,0.05)]'
                 : 'border-[var(--stroke-soft-200)] hover:border-[var(--stroke-sub-300,var(--stroke-soft-200))] hover:bg-[var(--neutral-weak-50)]',
             )}
-            style={active ? { boxShadow: 'inset 0 0 0 1.5px var(--neutral-strong-950)' } : undefined}
+            style={
+              active
+                ? {
+                    background: 'rgba(250, 115, 25, 0.06)',
+                    boxShadow: 'inset 0 0 0 1.5px var(--primary-base)',
+                  }
+                : undefined
+            }
           >
             <div className="flex w-full items-center justify-between">
               <span
                 className="inline-flex h-7 w-7 items-center justify-center rounded-[8px]"
                 style={{
-                  background: active ? 'var(--neutral-strong-950)' : 'var(--neutral-weak-50)',
+                  background: active ? 'var(--primary-base)' : 'var(--neutral-weak-50)',
                   color: active ? 'var(--white-0)' : 'var(--neutral-soft-400)',
                 }}
               >
                 <Icon className="h-4 w-4" strokeWidth={2} aria-hidden />
               </span>
               {active && (
-                <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.06em] text-[var(--neutral-strong-950)]">
+                <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.06em] text-[var(--primary-base)]">
                   <Check className="h-3 w-3" strokeWidth={2.5} aria-hidden />
                   Current
                 </span>

@@ -87,17 +87,17 @@ export function ShadowReport({
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <div className="inline-flex items-center rounded-[9px] bg-[var(--neutral-weak-50)] p-0.5">
+          <div className="inline-flex items-center rounded-[9px] border border-[var(--stroke-soft-200)] bg-[var(--white-0)] p-0.5">
             {SHADOW_WINDOWS.map((w) => (
               <button
                 key={w.key}
                 type="button"
                 onClick={() => onWindowChange(w.key)}
                 className={cn(
-                  'h-7 rounded-[7px] px-2.5 text-[12px] font-medium transition-colors',
+                  'h-7 rounded-[7px] px-2.5 text-[12px] transition-colors',
                   windowKey === w.key
-                    ? 'bg-[var(--white-0)] text-[var(--neutral-strong-950)] shadow-[0_1px_2px_rgba(23,23,23,0.06)]'
-                    : 'text-[var(--neutral-sub-600)] hover:text-[var(--neutral-strong-950)]',
+                    ? 'bg-[var(--neutral-weak-50)] font-semibold text-[var(--neutral-strong-950)]'
+                    : 'font-medium text-[var(--neutral-sub-600)] hover:text-[var(--neutral-strong-950)]',
                 )}
               >
                 {w.key === 'all' ? 'All' : w.key}
