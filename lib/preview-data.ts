@@ -901,6 +901,17 @@ function filterAuditRuns(
   });
 }
 
+// BYO-MCP demo: a plausible internal billing MCP, with risk inferred from
+// each tool's MCP annotations (readOnlyHint / destructiveHint).
+const PREVIEW_DISCOVERED_TOOLS: import('./types').DiscoveredMcpTool[] = [
+  { name: 'list_invoices', description: 'List invoices for a customer or date range.', risk: 'read', annotations: { readOnlyHint: true }, policy: 'allow' },
+  { name: 'get_customer', description: 'Fetch a customer record by id or email.', risk: 'read', annotations: { readOnlyHint: true }, policy: 'allow' },
+  { name: 'create_refund', description: 'Issue a refund against a charge.', risk: 'write', annotations: { readOnlyHint: false }, policy: 'approval' },
+  { name: 'update_subscription', description: 'Change a subscription plan or seats.', risk: 'write', annotations: { readOnlyHint: false }, policy: 'approval' },
+  { name: 'issue_account_credit', description: 'Add account credit to a customer balance.', risk: 'write', annotations: { readOnlyHint: false }, policy: 'approval' },
+  { name: 'delete_customer', description: 'Permanently delete a customer and their data.', risk: 'destructive', annotations: { destructiveHint: true }, policy: 'deny' },
+];
+
 // ── install ────────────────────────────────────────────────────────────────
 let installed = false;
 
@@ -1066,6 +1077,21 @@ export function installPreviewApi() {
   api.getRoomTools = async (_roomId: string, role: string) =>
     PREVIEW_ROOM_TOOLS[role] ?? PREVIEW_ROOM_TOOLS.DEVELOPER;
   api.updateRoomTools = async () => ({ success: true });
+  // BYO-MCP: pretend we connected to the endpoint and ran list_tools.
+  api.discoverMcpTools = async () => ({
+    tools: PREVIEW_DISCOVERED_TOOLS.map((t) => ({ ...t })),
+  });
+  api.saveCustomMcp = async (roomId: string, payload: Record<string, unknown>) => ({
+    id: 'mcp_custom_1',
+    room_id: roomId,
+    name: (payload.name as string) ?? 'Custom MCP',
+    url: (payload.url as string) ?? '',
+    auth_type: (payload.auth_type as 'none' | 'bearer') ?? 'none',
+    status: 'discovered' as const,
+    mode: 'observe' as const,
+    tools: (payload.tools as import('./types').DiscoveredMcpTool[]) ?? [],
+    created_at: new Date().toISOString(),
+  });
   // Room MCP integration URL — rendered into the copyable Integration
   // field on the rooms page. Without this mock the Promise.all on
   // /dashboard/rooms rejects and the whole detail panel goes empty.

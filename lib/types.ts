@@ -177,6 +177,46 @@ export interface RoomDetails extends RoomSummary {
   [key: string]: any;
 }
 
+// ─── BYO-MCP: govern any MCP server a customer brings ────────────────
+export type McpToolRisk = 'read' | 'write' | 'destructive';
+export type McpToolPolicy = 'allow' | 'approval' | 'deny';
+
+/**
+ * A tool discovered from a custom MCP endpoint via list_tools. When the CIL
+ * has no semantic_type for a tool, `risk` is inferred from the MCP protocol's
+ * own tool annotations (readOnlyHint / destructiveHint) so writes and
+ * destructive calls are flagged without any hand-built taxonomy.
+ */
+export interface DiscoveredMcpTool {
+  name: string;
+  description?: string;
+  risk: McpToolRisk;
+  annotations?: {
+    readOnlyHint?: boolean;
+    destructiveHint?: boolean;
+    idempotentHint?: boolean;
+  };
+  /** Governance stance. Defaults from risk (read→allow, write→approval,
+   *  destructive→deny); the room owner can override before enforcing. */
+  policy: McpToolPolicy;
+}
+
+export type McpServerStatus = 'discovering' | 'discovered' | 'error';
+
+export interface CustomMcpServer {
+  id: string;
+  room_id: string;
+  name: string;
+  url: string;
+  auth_type: 'none' | 'bearer';
+  status: McpServerStatus;
+  /** observe = record only, block nothing; enforce = apply per-tool policy. */
+  mode: 'observe' | 'enforce';
+  tools: DiscoveredMcpTool[];
+  error_message?: string;
+  created_at?: string;
+}
+
 export interface RoomMember {
   username: string;
   role?: string;

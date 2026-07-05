@@ -1648,4 +1648,34 @@ export const api = {
       throw new Error(`Failed to delete memory: ${await readErrorMessage(res)}`);
     }
   },
+
+  // ─── BYO-MCP ────────────────────────────────────────────────────────
+  // Connect Aegis to an arbitrary MCP endpoint and discover its tools.
+  // Backend not built yet; shimmed in preview mode (lib/preview-data.ts).
+  async discoverMcpTools(payload: {
+    url: string;
+    auth_type: 'none' | 'bearer';
+    token?: string;
+  }): Promise<{ tools: import('./types').DiscoveredMcpTool[] }> {
+    const res = await apiFetch(`${API_BASE}/mcp/discover`, {
+      method: 'POST',
+      headers: getJsonHeaders(),
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error(await readErrorMessage(res));
+    return res.json();
+  },
+
+  async saveCustomMcp(
+    roomId: string,
+    payload: Partial<import('./types').CustomMcpServer>,
+  ): Promise<import('./types').CustomMcpServer> {
+    const res = await apiFetch(`${API_BASE}/room/${encodeURIComponent(roomId)}/mcp-servers`, {
+      method: 'POST',
+      headers: getJsonHeaders(),
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error(await readErrorMessage(res));
+    return res.json();
+  },
 };
