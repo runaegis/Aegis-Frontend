@@ -15,6 +15,8 @@ import {
   RoomSessionAction,
   PaginatedResponse,
   Memory,
+  UserPrompt,
+  UserPromptListResponse,
 } from "./types";
 import { LogOut } from "lucide-react";
 import {
@@ -1647,5 +1649,47 @@ export const api = {
     if (!res.ok) {
       throw new Error(`Failed to delete memory: ${await readErrorMessage(res)}`);
     }
+  },
+
+  getUserPrompts: async (userId: string): Promise<UserPrompt[]> => {
+    const res = await apiFetch(
+      `${API_BASE}/user-prompts/${encodeURIComponent(userId)}`,
+    );
+    if (!res.ok) {
+      throw new Error(`Failed to load prompts: ${await readErrorMessage(res)}`);
+    }
+    const data = (await res.json()) as UserPromptListResponse;
+    return Array.isArray(data?.prompts) ? data.prompts : [];
+  },
+
+  createUserPrompt: async (userId: string, prompt: string): Promise<UserPrompt> => {
+    const res = await apiFetch(`${API_BASE}/user-prompts`, {
+      method: "POST",
+      headers: getJsonHeaders(),
+      body: JSON.stringify({ user_id: userId, prompt }),
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to create prompt: ${await readErrorMessage(res)}`);
+    }
+    return res.json();
+  },
+
+  updateUserPrompt: async (
+    promptId: string,
+    userId: string,
+    prompt: string,
+  ): Promise<UserPrompt> => {
+    const res = await apiFetch(
+      `${API_BASE}/user-prompts/${encodeURIComponent(promptId)}`,
+      {
+        method: "PUT",
+        headers: getJsonHeaders(),
+        body: JSON.stringify({ user_id: userId, prompt }),
+      },
+    );
+    if (!res.ok) {
+      throw new Error(`Failed to update prompt: ${await readErrorMessage(res)}`);
+    }
+    return res.json();
   },
 };
