@@ -21,7 +21,7 @@
  */
 
 import { motion, useReducedMotion } from 'motion/react';
-import { ArrowUpRight, Clock, Loader2, ShieldCheck } from 'lucide-react';
+import { ArrowUpRight, Clock, Loader2, Plus, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
 import Topbar from '@/components/layout/Topbar';
 import { ConnectorMark, CONNECTORS, type ConnectorId } from '@/components/ui/ConnectorMark';
@@ -75,7 +75,8 @@ export default function ConnectorsPage() {
           >
             GitHub, GitHub Actions, PostgreSQL, and Jira are live today. Three
             more surfaces are in progress, each governed by the same Allow,
-            Approval, Deny model.
+            Approval, Deny model. Or bring your own MCP server, and Aegis
+            governs that too.
           </motion.p>
         </motion.section>
 
@@ -89,6 +90,7 @@ export default function ConnectorsPage() {
           {DISPLAY_ORDER.map((id) => (
             <ConnectorCard key={id} id={id} status={STATUS_BY_ID[id]} />
           ))}
+          <ByoMcpCard />
         </motion.div>
 
         {/* ─── Footer hint ───────────────────────────────────────────── */}
@@ -232,6 +234,47 @@ function ConnectorCard({
         )}
       </div>
     </motion.article>
+  );
+}
+
+// ─── Bring-your-own-MCP card — the universal-chokepoint entry ─────────
+function ByoMcpCard() {
+  return (
+    <motion.div variants={fadeUp} className="h-full">
+      <Link href="/dashboard/connectors/custom" className="block h-full">
+        <motion.article
+          whileHover={{ y: -2, transition: { duration: 0.26, ease: [0.32, 0.72, 0.32, 1] } }}
+          className={cn(
+            'group relative flex h-full min-h-[210px] flex-col overflow-hidden rounded-[14px]',
+            'border border-dashed border-[var(--stroke-sub-300)] bg-[var(--neutral-weak-50)]/40',
+            'cursor-pointer transition-[border-color,box-shadow,background] duration-[220ms] ease-[cubic-bezier(0.2,0.8,0.2,1)]',
+            'hover:border-[var(--primary-base)]/50 hover:bg-[var(--primary-alpha-10)]',
+            'hover:shadow-[0_12px_28px_rgba(23,23,23,0.06)]',
+          )}
+        >
+          <div className="relative flex flex-1 flex-col items-start px-4 py-4">
+            <span className="inline-flex h-10 w-10 items-center justify-center rounded-[10px] border border-dashed border-[var(--stroke-sub-300)] bg-white text-[var(--primary-base)] transition-colors group-hover:border-[var(--primary-base)]/40">
+              <Plus className="h-5 w-5" strokeWidth={2.25} />
+            </span>
+            <h2 className="mt-3.5 text-[16px] font-semibold leading-[1.2] tracking-[-0.015em] text-[var(--neutral-strong-950)]">
+              Bring your own MCP server
+            </h2>
+            <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.09em] text-[var(--neutral-soft-400)]">
+              Custom · Universal
+            </p>
+            <p className="mt-2 text-[12px] leading-[1.55] text-[var(--neutral-sub-600)]">
+              Point Aegis at any MCP endpoint. It discovers the tools, reads their
+              risk from the server&rsquo;s own annotations, and governs them with the
+              same Allow, Approval, Deny model.
+            </p>
+            <span className="mt-auto inline-flex items-center gap-1.5 pt-3 text-[11.5px] font-semibold text-[var(--primary-base)]">
+              Connect a custom MCP
+              <ArrowUpRight className="h-3 w-3" strokeWidth={2.25} />
+            </span>
+          </div>
+        </motion.article>
+      </Link>
+    </motion.div>
   );
 }
 
