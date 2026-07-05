@@ -24,12 +24,17 @@
  */
 
 import Link from 'next/link';
-import { AlertTriangle, ArrowLeft, Copy } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { AlertTriangle, ArrowLeft, Copy, Hash, MessageSquare, Users } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
+import { Switch } from '@/components/ui/Switch';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
 import { useRoom } from '@/lib/roomContext';
+import { api } from '@/lib/api';
+import type { RoomSlackRouting } from '@/lib/types';
 import { motion, useReducedMotion } from 'motion/react';
 import { fadeUp, staggerContainer } from '@/lib/motion';
 import { parseApiUtcTimestamp } from '@/lib/utils';
@@ -136,6 +141,12 @@ export default function RoomSettingsPage() {
             )}
           </dl>
         </motion.section>
+
+        {/* Slack approval routing — per-room delivery of this room's
+            REQUIRE_APPROVAL decisions to a Slack channel, with approve
+            and deny in the channel. Consumed by the standalone Slack
+            worker (aegis-slack-approvals). */}
+        <SlackRoutingSection roomId={roomId} isOwner={isOwner} />
 
         {/* Danger zone — destructive ops the UI is ready for once
             the backend supports them. Each button is disabled with
@@ -261,6 +272,212 @@ function DangerRow({
       >
         {cta}
       </Button>
+    </div>
+  );
+}
+
+// ─── Slack approval routing ─────────────────────────────────────────
+// Per-room config for the standalone Slack worker. In preview mode the
+// api.* calls are shimmed (lib/preview-data.ts). Owners edit; everyone
+// else sees a read-only view.
+function SlackRoutingSection({
+  roomId,
+  isOwner,
+}: {
+  roomId: string;
+  isOwner: boolean;
+}) {
+  const toast = useToast();
+  const [config, setConfig] = useState<RoomSlackRouting | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  // Editable copy of the fields.
+  const [enabled, setEnabled] = useState(false);
+  const [channel, setChannel] = useState('');
+  const [approvers, setApprovers] = useState('');
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const c = await api.getRoomSlackRouting(roomId);
+        if (!alive) return;
+        setConfig(c);
+        setEnabled(Boolean(c?.enabled));
+        setChannel(c?.slack_channel ?? '');
+        setApprovers((c?.approver_ids ?? []).join(', '));
+      } catch {
+        if (alive) setConfig(null);
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [roomId]);
+
+  const connected = Boolean(config?.connected_workspace);
+  const approverList = approvers
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  const dirty =
+    !!config &&
+    (enabled !== Boolean(config.enabled) ||
+      channel.trim() !== (config.slack_channel ?? '') ||
+      approvers !== (config.approver_ids ?? []).join(', '));
+
+  const save = async () => {
+    if (!isOwner) return;
+    setSaving(true);
+    try {
+      const next = await api.updateRoomSlackRouting(roomId, {
+        enabled,
+        slack_channel: channel.trim(),
+        approver_ids: approverList,
+      });
+      setConfig(next);
+      toast.success('Slack routing saved');
+    } catch {
+      toast.error('Could not save Slack routing');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <motion.section
+      variants={fadeUp}
+      className="overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]"
+    >
+      <div className="border-b border-[var(--stroke-soft-200)] px-5 py-3.5">
+        <div className="flex items-center gap-2">
+          <MessageSquare
+            className="h-4 w-4 text-[var(--neutral-soft-400)]"
+            strokeWidth={2}
+            aria-hidden
+          />
+          <h2 className="text-[14px] font-semibold tracking-[-0.01em] text-[var(--neutral-strong-950)]">
+            Slack approval routing
+          </h2>
+        </div>
+        <p className="mt-0.5 text-[11.5px] text-[var(--neutral-soft-400)]">
+          Send this room&apos;s approval requests to Slack, with approve and deny in the channel.
+        </p>
+      </div>
+
+      <div className="p-5">
+        {loading ? (
+          <Skeleton className="h-[120px] w-full rounded-[10px]" />
+        ) : !connected ? (
+          <div className="flex flex-col items-start gap-3 rounded-[10px] border border-dashed border-[var(--stroke-soft-200)] bg-[var(--neutral-weak-50)] px-4 py-5">
+            <p className="text-[12.5px] text-[var(--neutral-sub-600)]">
+              Connect a Slack workspace to route this room&apos;s approvals there.
+            </p>
+            <Button size="sm" variant="secondary" disabled title="Coming soon">
+              Connect Slack
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[13px] font-semibold tracking-[-0.005em] text-[var(--neutral-strong-950)]">
+                  Route approvals to Slack
+                </p>
+                <p className="mt-0.5 text-[11.5px] text-[var(--neutral-sub-600)]">
+                  Connected to{' '}
+                  <span className="font-medium text-[var(--neutral-strong-950)]">
+                    {config?.connected_workspace}
+                  </span>
+                  .
+                </p>
+              </div>
+              <Switch
+                checked={enabled}
+                onChange={setEnabled}
+                disabled={!isOwner}
+                size="md"
+                ariaLabel="Enable Slack approval routing"
+              />
+            </div>
+
+            {enabled && (
+              <div className="space-y-4 border-t border-[var(--stroke-soft-200)] pt-4">
+                <Field label="Channel" hint="Where approval requests are posted.">
+                  <Input
+                    value={channel}
+                    onChange={(e) => setChannel(e.target.value)}
+                    placeholder="#aegis-approvals"
+                    disabled={!isOwner}
+                    leadingIcon={<Hash className="h-3.5 w-3.5" strokeWidth={2} />}
+                  />
+                </Field>
+                <Field
+                  label="Approvers"
+                  hint="Slack user IDs allowed to approve or deny. Only these people can act on a request, even if others can see the channel."
+                >
+                  <Input
+                    value={approvers}
+                    onChange={(e) => setApprovers(e.target.value)}
+                    placeholder="U08OWNER01, U08LEAD02"
+                    disabled={!isOwner}
+                    leadingIcon={<Users className="h-3.5 w-3.5" strokeWidth={2} />}
+                  />
+                </Field>
+              </div>
+            )}
+
+            {isOwner ? (
+              <div className="flex items-center justify-end gap-3 pt-1">
+                {dirty && (
+                  <span className="text-[11.5px] text-[var(--neutral-soft-400)]">
+                    Unsaved changes
+                  </span>
+                )}
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={save}
+                  disabled={!dirty || saving}
+                >
+                  {saving ? 'Saving…' : 'Save'}
+                </Button>
+              </div>
+            ) : (
+              <p className="text-[11.5px] italic text-[var(--neutral-soft-400)]">
+                Only the room owner can change approval routing.
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+    </motion.section>
+  );
+}
+
+// ─── Field — label + control + hint (local to this page) ────────────
+function Field({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <label className="block text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[var(--neutral-soft-400)]">
+        {label}
+      </label>
+      <div className="mt-1.5">{children}</div>
+      {hint && (
+        <p className="mt-1 text-[11px] leading-[1.4] text-[var(--neutral-sub-600)]">{hint}</p>
+      )}
     </div>
   );
 }
