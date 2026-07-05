@@ -20,6 +20,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   BrainCircuit,
+  ScrollText,
   type LucideIcon,
 } from 'lucide-react';
 import { useUser } from '@/lib/hooks';
@@ -112,6 +113,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { name: 'Token Spenditure', href: '/dashboard/token-spenditure', icon: Coins },
       { name: 'Memory', href: '/dashboard/memory', icon: BrainCircuit },
+      { name: 'Prompts', href: '/dashboard/prompts', icon: ScrollText },
     ],
   },
 ];

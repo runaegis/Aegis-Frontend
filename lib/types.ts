@@ -8,6 +8,20 @@ export interface Memory {
   updated_at?: string | null;
 }
 
+export interface UserPrompt {
+  id: string;
+  user_id: string;
+  prompt: string;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface UserPromptListResponse {
+  user_id: string;
+  count: number;
+  prompts: UserPrompt[];
+}
+
 export interface PaginatedResponse<T> {
   items: T[];
   total: number;
