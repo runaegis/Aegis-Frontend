@@ -45,6 +45,7 @@ import { cn } from '@/lib/utils';
 import { fadeUp, staggerContainer } from '@/lib/motion';
 
 const jiraTool = (name: string) => `jira_${name}`;
+const terraformTool = (name: string) => `terraform_${name}`;
 
 // Jira reads are safe to include in the lower-risk baseline: search,
 // project/board discovery, issue inspection, service desk lookups, and
@@ -99,6 +100,53 @@ const JIRA_SAFE_WRITE_TOOLS = [
   jiraTool('transition_issue'),
   jiraTool('update_issue'),
   jiraTool('update_proforma_form_answers'),
+];
+
+// Terraform reads cover org, workspace, run, plan/apply, registry, and
+// governance inspection without mutating infrastructure or workspace config.
+const TERRAFORM_READ_TOOLS = [
+  terraformTool('get_apply_details'),
+  terraformTool('get_apply_logs'),
+  terraformTool('get_latest_module_version'),
+  terraformTool('get_latest_provider_version'),
+  terraformTool('get_module_details'),
+  terraformTool('get_plan_details'),
+  terraformTool('get_plan_json_output'),
+  terraformTool('get_plan_logs'),
+  terraformTool('get_policy_details'),
+  terraformTool('get_private_module_details'),
+  terraformTool('get_private_provider_details'),
+  terraformTool('get_provider_capabilities'),
+  terraformTool('get_provider_details'),
+  terraformTool('get_run_details'),
+  terraformTool('get_sentinel_mock'),
+  terraformTool('get_stack_details'),
+  terraformTool('get_token_permissions'),
+  terraformTool('get_workspace_details'),
+  terraformTool('list_runs'),
+  terraformTool('list_stacks'),
+  terraformTool('list_terraform_orgs'),
+  terraformTool('list_terraform_projects'),
+  terraformTool('list_variable_sets'),
+  terraformTool('list_workspace_policy_sets'),
+  terraformTool('list_workspace_variables'),
+  terraformTool('list_workspaces'),
+  terraformTool('read_workspace_tags'),
+  terraformTool('search_modules'),
+  terraformTool('search_policies'),
+  terraformTool('search_private_modules'),
+  terraformTool('search_private_providers'),
+  terraformTool('search_providers'),
+];
+
+// Safe-write Terraform actions stay narrowly scoped to an existing
+// workspace's metadata and variables. We leave out run creation, workspace
+// creation, deletes, multi-workspace attachments, and workspace config
+// mutations because those have much larger blast radius.
+const TERRAFORM_SAFE_WRITE_TOOLS = [
+  terraformTool('create_workspace_tags'),
+  terraformTool('create_workspace_variable'),
+  terraformTool('update_workspace_variable'),
 ];
 
 // Tool registry — same shape as the old page; lifted into a const
@@ -183,6 +231,63 @@ const TOOL_GROUPS: Record<string, string[]> = {
     'execute_sql',
     'list_tables',
     'list_schemas',
+  ],
+  'Terraform org, workspace, and stack reads': [
+    terraformTool('list_terraform_orgs'),
+    terraformTool('list_terraform_projects'),
+    terraformTool('list_workspaces'),
+    terraformTool('get_workspace_details'),
+    terraformTool('read_workspace_tags'),
+    terraformTool('list_stacks'),
+    terraformTool('get_stack_details'),
+    terraformTool('get_token_permissions'),
+  ],
+  'Terraform run, plan, and apply tools': [
+    terraformTool('list_runs'),
+    terraformTool('get_run_details'),
+    terraformTool('create_run'),
+    terraformTool('get_plan_details'),
+    terraformTool('get_plan_json_output'),
+    terraformTool('get_plan_logs'),
+    terraformTool('get_apply_details'),
+    terraformTool('get_apply_logs'),
+    terraformTool('get_sentinel_mock'),
+  ],
+  'Terraform workspace configuration tools': [
+    terraformTool('create_workspace'),
+    terraformTool('create_no_code_workspace'),
+    terraformTool('update_workspace'),
+    terraformTool('create_workspace_tags'),
+    terraformTool('list_workspace_variables'),
+    terraformTool('create_workspace_variable'),
+    terraformTool('update_workspace_variable'),
+  ],
+  'Terraform variable set tools': [
+    terraformTool('list_variable_sets'),
+    terraformTool('create_variable_set'),
+    terraformTool('create_variable_in_variable_set'),
+    terraformTool('delete_variable_in_variable_set'),
+    terraformTool('attach_variable_set_to_workspaces'),
+    terraformTool('detach_variable_set_from_workspaces'),
+  ],
+  'Terraform policy and governance tools': [
+    terraformTool('list_workspace_policy_sets'),
+    terraformTool('attach_policy_set_to_workspaces'),
+    terraformTool('search_policies'),
+    terraformTool('get_policy_details'),
+  ],
+  'Terraform registry, module, and provider tools': [
+    terraformTool('search_modules'),
+    terraformTool('get_latest_module_version'),
+    terraformTool('get_module_details'),
+    terraformTool('search_private_modules'),
+    terraformTool('get_private_module_details'),
+    terraformTool('search_providers'),
+    terraformTool('get_latest_provider_version'),
+    terraformTool('get_provider_details'),
+    terraformTool('get_provider_capabilities'),
+    terraformTool('search_private_providers'),
+    terraformTool('get_private_provider_details'),
   ],
   'Jira read and search tools': [
     jiraTool('search'),
@@ -285,6 +390,7 @@ const DEVELOPER_DEFAULTS = new Set([
   'search_users',
   'list_tables',
   'list_schemas',
+  ...TERRAFORM_READ_TOOLS,
   ...JIRA_READ_TOOLS,
 ]);
 
@@ -306,6 +412,7 @@ const ADMIN_DEFAULTS = new Set([
   'set_agent_details',
   'run_secret_scanning',
   'workflow_dispatch',
+  ...TERRAFORM_SAFE_WRITE_TOOLS,
   ...JIRA_SAFE_WRITE_TOOLS,
 ]);
 
@@ -327,7 +434,7 @@ const TEMPLATES: Record<
 > = {
   'read-only': {
     title: 'Read-only',
-    description: 'Lower-risk baseline across GitHub, Jira, and Postgres.',
+    description: 'Lower-risk baseline across GitHub, Jira, Terraform, and Postgres.',
     tools: Object.fromEntries(
       ALL_TOOLS.map((t) => [
         t,
@@ -337,7 +444,7 @@ const TEMPLATES: Record<
   },
   'safe-write': {
     title: 'Safe write',
-    description: 'Extends the baseline with PRs, issue edits, and common Jira workflow updates.',
+    description: 'Extends the baseline with PRs, Jira workflow updates, and scoped Terraform metadata edits.',
     tools: Object.fromEntries(
       ALL_TOOLS.map((t) => [t, ADMIN_DEFAULTS.has(t)]),
     ),
