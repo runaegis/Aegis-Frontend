@@ -365,6 +365,9 @@ export default function AuthPage() {
         jira_username: null,
         jira_api_token: null,
         mongodb_connection_string: null,
+        linear_api_key: null,
+        terraform_api_token: null,
+        terraform_url: null,
       };
 
       setUser(userData);

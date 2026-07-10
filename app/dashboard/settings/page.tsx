@@ -425,6 +425,11 @@ function ProfileSection({
   const [mongodbConnectionString, setMongodbConnectionString] = useState(
     user?.mongodb_connection_string || '',
   );
+  const [linearApiKey, setLinearApiKey] = useState(user?.linear_api_key || '');
+  const [terraformApiToken, setTerraformApiToken] = useState(
+    user?.terraform_api_token || '',
+  );
+  const [terraformUrl, setTerraformUrl] = useState(user?.terraform_url || '');
   const [saving, setSaving] = useState(false);
   // Avatar upload — useCustomAvatar() reads localStorage + listens
   // for changes, so the hero updates immediately after upload/remove
@@ -444,6 +449,9 @@ function ProfileSection({
       setJiraUsername(user.jira_username || '');
       setJiraApiToken(user.jira_api_token || '');
       setMongodbConnectionString(user.mongodb_connection_string || '');
+      setLinearApiKey(user.linear_api_key || '');
+      setTerraformApiToken(user.terraform_api_token || '');
+      setTerraformUrl(user.terraform_url || '');
     }
   }, [user]);
 
@@ -491,6 +499,10 @@ function ProfileSection({
         updatedUser.mongodb_connection_string ??
         user?.mongodb_connection_string ??
         '',
+      linear_api_key: updatedUser.linear_api_key ?? user?.linear_api_key ?? '',
+      terraform_api_token:
+        updatedUser.terraform_api_token ?? user?.terraform_api_token ?? '',
+      terraform_url: updatedUser.terraform_url ?? user?.terraform_url ?? '',
     });
   };
 
@@ -536,6 +548,9 @@ function ProfileSection({
         jira_username: jiraUsername,
         jira_api_token: jiraApiToken,
         mongodb_connection_string: mongodbConnectionString,
+        linear_api_key: linearApiKey,
+        terraform_api_token: terraformApiToken,
+        terraform_url: terraformUrl,
       });
       applyUpdatedUser(updated);
       onSuccess('Credentials updated');
@@ -639,7 +654,7 @@ function ProfileSection({
       <motion.div variants={fadeUp}>
         <SettingsCard
           title="Credentials"
-          description="Secrets Aegis uses to reach GitHub, Postgres, Jira, and MongoDB."
+          description="Secrets Aegis uses to reach GitHub, Postgres, Jira, MongoDB, Linear, and Terraform."
         >
           <Field label="GitHub PAT" hint="Treat this like a password. Rotate it if exposed.">
             <Input
@@ -694,6 +709,35 @@ function ProfileSection({
               type="password"
               value={mongodbConnectionString}
               onChange={(e) => setMongodbConnectionString(e.target.value)}
+            />
+          </Field>
+          <Field
+            label="Linear API key"
+            hint="Stored as a secret and used for Linear API access."
+          >
+            <Input
+              type="password"
+              value={linearApiKey}
+              onChange={(e) => setLinearApiKey(e.target.value)}
+            />
+          </Field>
+          <Field
+            label="Terraform URL"
+            hint="Your Terraform base URL. Example: https://app.terraform.io"
+          >
+            <Input
+              value={terraformUrl}
+              onChange={(e) => setTerraformUrl(e.target.value)}
+            />
+          </Field>
+          <Field
+            label="Terraform API token"
+            hint="Stored as a secret and used for Terraform API access."
+          >
+            <Input
+              type="password"
+              value={terraformApiToken}
+              onChange={(e) => setTerraformApiToken(e.target.value)}
             />
           </Field>
           <div className="flex items-center justify-between">
