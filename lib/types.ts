@@ -133,6 +133,9 @@ export interface User {
   jira_username?: string | null;
   jira_api_token?: string | null;
   mongodb_connection_string?: string | null;
+  linear_api_key?: string | null;
+  terraform_api_token?: string | null;
+  terraform_url?: string | null;
 }
 
 export interface RepoPermission {

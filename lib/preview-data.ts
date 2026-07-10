@@ -1163,6 +1163,9 @@ export function installPreviewApi() {
     jira_username: null,
     jira_api_token: null,
     mongodb_connection_string: null,
+    linear_api_key: null,
+    terraform_api_token: null,
+    terraform_url: null,
   });
   api.getUserDetails = async () => ({
     id: 'preview-user',
@@ -1176,6 +1179,9 @@ export function installPreviewApi() {
     jira_username: null,
     jira_api_token: null,
     mongodb_connection_string: null,
+    linear_api_key: null,
+    terraform_api_token: null,
+    terraform_url: null,
   });
   // Preview onboarding when the user is actually ON /onboarding (so
   // designers can review the flow). Anywhere else, claim "complete" so
