@@ -42,6 +42,9 @@ type UpdateUserDetailsPayload = {
   jira_username?: string;
   jira_api_token?: string;
   mongodb_connection_string?: string;
+  linear_api_key?: string;
+  terraform_api_token?: string;
+  terraform_url?: string;
 };
 
 function getAPIBase(): string {
@@ -260,6 +263,18 @@ function normalizeUserPayload(
       typeof raw.mongodb_connection_string === "string"
         ? raw.mongodb_connection_string
         : fallback.mongodb_connection_string,
+    linear_api_key:
+      typeof raw.linear_api_key === "string"
+        ? raw.linear_api_key
+        : fallback.linear_api_key,
+    terraform_api_token:
+      typeof raw.terraform_api_token === "string"
+        ? raw.terraform_api_token
+        : fallback.terraform_api_token,
+    terraform_url:
+      typeof raw.terraform_url === "string"
+        ? raw.terraform_url
+        : fallback.terraform_url,
   };
 }
 
@@ -277,6 +292,9 @@ function hasUserPayloadShape(raw: Record<string, unknown>): boolean {
     "jira_username",
     "jira_api_token",
     "mongodb_connection_string",
+    "linear_api_key",
+    "terraform_api_token",
+    "terraform_url",
   ].some((key) => key in raw);
 }
 
@@ -1175,64 +1193,80 @@ export const api = {
   updateUserDetails: async (
     payload: UpdateUserDetailsPayload,
   ): Promise<User> => {
-    const params = new URLSearchParams();
+    const body: Record<string, string | number> = {};
 
     if (typeof payload.username === "string" && payload.username.trim()) {
-      params.set("username", payload.username.trim());
+      body.username = payload.username.trim();
     }
     if (typeof payload.email === "string" && payload.email.trim()) {
-      params.set("email", payload.email.trim());
+      body.email = payload.email.trim();
     }
     if (typeof payload.github_pat === "string" && payload.github_pat.trim()) {
-      params.set("github_pat", payload.github_pat.trim());
+      body.github_pat = payload.github_pat.trim();
     }
     if (
       typeof payload.postgres_connection_string === "string" &&
       payload.postgres_connection_string.trim()
     ) {
-      params.set(
-        "postgres_connection_string",
-        payload.postgres_connection_string.trim(),
-      );
+      body.postgres_connection_string =
+        payload.postgres_connection_string.trim();
     }
     if (typeof payload.jira_url === "string" && payload.jira_url.trim()) {
-      params.set("jira_url", payload.jira_url.trim());
+      body.jira_url = payload.jira_url.trim();
     }
     if (
       typeof payload.jira_username === "string" &&
       payload.jira_username.trim()
     ) {
-      params.set("jira_username", payload.jira_username.trim());
+      body.jira_username = payload.jira_username.trim();
     }
     if (
       typeof payload.jira_api_token === "string" &&
       payload.jira_api_token.trim()
     ) {
-      params.set("jira_api_token", payload.jira_api_token.trim());
+      body.jira_api_token = payload.jira_api_token.trim();
     }
     if (
       typeof payload.mongodb_connection_string === "string" &&
       payload.mongodb_connection_string.trim()
     ) {
-      params.set(
-        "mongodb_connection_string",
-        payload.mongodb_connection_string.trim(),
-      );
+      body.mongodb_connection_string =
+        payload.mongodb_connection_string.trim();
+    }
+    if (
+      typeof payload.linear_api_key === "string" &&
+      payload.linear_api_key.trim()
+    ) {
+      body.linear_api_key = payload.linear_api_key.trim();
+    }
+    if (
+      typeof payload.terraform_api_token === "string" &&
+      payload.terraform_api_token.trim()
+    ) {
+      body.terraform_api_token = payload.terraform_api_token.trim();
+    }
+    if (
+      typeof payload.terraform_url === "string" &&
+      payload.terraform_url.trim()
+    ) {
+      body.terraform_url = payload.terraform_url.trim();
     }
     if (
       payload.github_user_id !== undefined &&
       payload.github_user_id !== null &&
       String(payload.github_user_id).trim()
     ) {
-      params.set("github_user_id", String(payload.github_user_id).trim());
+      body.github_user_id = String(payload.github_user_id).trim();
     }
 
-    if (!params.toString()) {
+    if (!Object.keys(body).length) {
       throw new Error("Nothing to update.");
     }
 
-    const res = await apiFetch(`${API_BASE}/auth/user/update?${params.toString()}`, {
+    const res = await apiFetch(`${API_BASE}/auth/user/update`, {
       method: "POST",
+      headers: getJsonHeaders(),
+      body: JSON.stringify(body),
     });
 
     if (!res.ok) {
