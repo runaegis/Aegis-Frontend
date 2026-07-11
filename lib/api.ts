@@ -15,6 +15,7 @@ import {
   RoomSessionAction,
   PaginatedResponse,
   Memory,
+  SlackIntegrationStatus,
   UserPrompt,
   UserPromptListResponse,
   UserPromptPayload,
@@ -1283,6 +1284,46 @@ export const api = {
     }).then((r) => r.json()),
 
   getRepos: () => apiFetch(`${API_BASE}/repos`).then((r) => r.json()),
+
+  getSlackBotConnectUrl: () => `${API_BASE}/slack/bot/connect`,
+
+  getSlackBotStatus: async (): Promise<SlackIntegrationStatus> => {
+    const res = await apiFetch(`${API_BASE}/slack/bot/status`, {
+      cache: "no-store",
+    });
+
+    if (!res.ok) {
+      throw new Error(
+        `Failed to load Slack status: ${await readErrorMessage(res)}`,
+      );
+    }
+
+    const data = await res.json();
+    if (!data || typeof data !== "object") {
+      throw new Error("Server returned an invalid Slack status payload.");
+    }
+
+    return data as SlackIntegrationStatus;
+  },
+
+  disconnectSlackBot: async (): Promise<{ success: boolean; message?: string }> => {
+    const res = await apiFetch(`${API_BASE}/slack/bot/disconnect`, {
+      method: "DELETE",
+    });
+
+    if (!res.ok) {
+      throw new Error(
+        `Failed to disconnect Slack: ${await readErrorMessage(res)}`,
+      );
+    }
+
+    const data = await res.json();
+    if (!data || typeof data !== "object") {
+      throw new Error("Server returned an invalid Slack disconnect payload.");
+    }
+
+    return data as { success: boolean; message?: string };
+  },
 
   setPermission: (
     github_repo_id: number,
