@@ -24,6 +24,7 @@ import { Button } from '@/components/ui/Button';
 import { RelativeTime } from '@/components/ui/RelativeTime';
 import { useToast } from '@/components/ui/Toast';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { MarkdownContent } from '@/components/ui/MarkdownContent';
 import { cn } from '@/lib/utils';
 import { DUR, EASE, fadeUp, staggerContainer } from '@/lib/motion';
 
@@ -562,9 +563,11 @@ function MemoryCard({
           />
         ) : (
           <div>
-            <p className="text-[12.5px] leading-[1.6] text-[var(--neutral-sub-600)] line-clamp-4">
-              {memory.memory}
-            </p>
+            <MarkdownContent
+              content={memory.memory}
+              compact
+              className="text-[12.5px] [&_p]:text-[12.5px] [&_p]:leading-[1.6] [&_p]:mb-2"
+            />
             {isTruncated && (
               <span className="mt-1 inline-flex items-center gap-1 text-[11.5px] font-medium text-[var(--primary-base)]">
                 Read more <ArrowUpRight className="h-3 w-3" strokeWidth={2.25} />
@@ -805,9 +808,7 @@ function MemorySlideOver({
                   )}
                 />
               ) : (
-                <p className="whitespace-pre-wrap text-[13.5px] leading-[1.7] text-[var(--neutral-sub-600)]">
-                  {memory.memory}
-                </p>
+                <MarkdownContent content={memory.memory} className="text-[13.5px]" />
               )}
             </div>
 
