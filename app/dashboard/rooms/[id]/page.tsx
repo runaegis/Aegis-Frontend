@@ -57,7 +57,7 @@ export default function RoomOverviewPage() {
     try {
       const [runs, approvals] = await Promise.all([
         api.getRuns(user.id),
-        api.getMcpApprovals(user.id),
+        api.getMcpApprovals(),
       ]);
       setRecentRuns(
         runs.filter((r) => r.target_repo === repoName).slice(0, 5),

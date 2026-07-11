@@ -1156,7 +1156,9 @@ export function installPreviewApi() {
   api.saveUser = async (u) => ({
     ...u,
     id: 'preview-user',
+    username: 'demo',
     email: 'preview@runaegis.co',
+    github_user_id: 0,
     created_at: new Date().toISOString(),
     postgres_connection_string: null,
     jira_url: null,

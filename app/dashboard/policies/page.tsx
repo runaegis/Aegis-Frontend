@@ -101,13 +101,12 @@ export default function PoliciesPage() {
   const activeCount = Object.values(activeStates).filter(Boolean).length;
 
   useEffect(() => {
-    const userId = user?.id;
-    if (!userId || userLoading) return;
+    if (!user || userLoading) return;
     let isMounted = true;
 
     const loadPolicies = async () => {
       try {
-        const stored = await api.getUserPolicy(userId);
+        const stored = await api.getUserPolicy();
         if (!isMounted) return;
         setActiveStates({
           ...defaultPolicyState,
@@ -130,13 +129,13 @@ export default function PoliciesPage() {
     return () => {
       isMounted = false;
     };
-  }, [user?.id, userLoading, defaultPolicyState]);
+  }, [user, userLoading, defaultPolicyState]);
 
   const handleSave = async () => {
-    if (!user?.id) return;
+    if (!user) return;
     try {
       setLoading(true);
-      await api.upsertUserPolicy(user.id, encodePolicyString(activeStates));
+      await api.upsertUserPolicy(encodePolicyString(activeStates));
       setSaveSuccess(true);
       toast.success('Policies updated', {
         description: 'Your changes apply to every new agent action.',
