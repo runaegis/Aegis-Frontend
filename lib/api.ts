@@ -17,6 +17,7 @@ import {
   Memory,
   UserPrompt,
   UserPromptListResponse,
+  UserPromptPayload,
 } from "./types";
 import { LogOut } from "lucide-react";
 import {
@@ -1696,11 +1697,14 @@ export const api = {
     return Array.isArray(data?.prompts) ? data.prompts : [];
   },
 
-  createUserPrompt: async (userId: string, prompt: string): Promise<UserPrompt> => {
+  createUserPrompt: async (
+    userId: string,
+    payload: UserPromptPayload,
+  ): Promise<UserPrompt> => {
     const res = await apiFetch(`${API_BASE}/user-prompts`, {
       method: "POST",
       headers: getJsonHeaders(),
-      body: JSON.stringify({ user_id: userId, prompt }),
+      body: JSON.stringify({ user_id: userId, ...payload }),
     });
     if (!res.ok) {
       throw new Error(`Failed to create prompt: ${await readErrorMessage(res)}`);
@@ -1711,14 +1715,14 @@ export const api = {
   updateUserPrompt: async (
     promptId: string,
     userId: string,
-    prompt: string,
+    payload: UserPromptPayload,
   ): Promise<UserPrompt> => {
     const res = await apiFetch(
       `${API_BASE}/user-prompts/${encodeURIComponent(promptId)}`,
       {
         method: "PUT",
         headers: getJsonHeaders(),
-        body: JSON.stringify({ user_id: userId, prompt }),
+        body: JSON.stringify({ user_id: userId, ...payload }),
       },
     );
     if (!res.ok) {
