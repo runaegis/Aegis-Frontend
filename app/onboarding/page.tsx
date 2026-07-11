@@ -54,7 +54,7 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { api } from '@/lib/api';
-import { useUser, useOnboardingStep, useEmail } from '@/lib/hooks';
+import { useUser, useOnboardingStep } from '@/lib/hooks';
 import { Repo } from '@/lib/types';
 import { AegisLogo } from '@/components/ui/AegisLogo';
 import { Button } from '@/components/ui/Button';
@@ -86,7 +86,6 @@ export default function OnboardingPage() {
   const reduce = useReducedMotion();
   const { user, setUser } = useUser();
   const { step, setStep } = useOnboardingStep();
-  const { email } = useEmail();
 
   // ── Step 1 state ──
   // PAT is the only thing we ask for now. Username + numeric GitHub ID
@@ -172,8 +171,8 @@ export default function OnboardingPage() {
 
         if (currentStep >= 1 && currentStep <= 4) {
           setStep(currentStep);
-          if (currentStep >= 3 && userDetails?.id) {
-            const reposResponse = await api.getRepos(userDetails.id);
+          if (currentStep >= 3) {
+            const reposResponse = await api.getRepos();
             if (reposResponse?.repos) {
               setRepos(reposResponse.repos);
               setSynced(true);
@@ -208,13 +207,7 @@ export default function OnboardingPage() {
         typeof document !== 'undefined' &&
         document.documentElement.dataset.demo === 'true';
 
-      let ghLogin: string;
-      let ghId: number;
-
-      if (isDemo) {
-        ghLogin = 'demo-user';
-        ghId = 0;
-      } else {
+      if (!isDemo) {
         // Resolve the user's GitHub identity (login + numeric id) from
         // the PAT itself instead of asking the user to dig through
         // GitHub's public user API for their numeric ID. The `/user`
@@ -240,16 +233,9 @@ export default function OnboardingPage() {
           setStep1Error('GitHub did not return a username or ID. Try a different token.');
           return;
         }
-        ghLogin = ghUser.login;
-        ghId = ghUser.id;
       }
 
-      const response = await api.saveUser({
-        github_user_id: ghId,
-        username: ghLogin,
-        github_pat: trimmed,
-        email,
-      });
+      const response = await api.saveUser({ github_pat: trimmed });
       setUser(response);
       await moveToStep(2);
     } catch {
@@ -262,25 +248,14 @@ export default function OnboardingPage() {
   const handleSync = async () => {
     setSyncing(true);
     try {
-      // PAT lives in either local state (just-typed) or on the hydrated
-      // user object (recovered after refresh). github_user_id comes off
-      // user — we stamped it there at the end of step 1.
-      //
-      // Use a typeof check rather than `!githubUserId` because the demo
-      // mock returns `0` as the canned ID — a valid number but falsy,
-      // which would incorrectly trigger the "User not initialized" guard.
-      const pat = token || user?.access_token || '';
-      const githubUserId = user?.github_user_id;
-      if (typeof githubUserId !== 'number' || !pat) {
+      if (!user) {
         throw new Error('User not initialized');
       }
-      const syncResponse = await api.syncRepos(githubUserId, pat);
+      const syncResponse = await api.syncRepos();
       if (!syncResponse.success) {
         throw new Error(syncResponse.message || 'Sync failed');
       }
-      const userId = user?.id;
-      if (!userId) throw new Error('Missing user id');
-      const reposResponse = await api.getRepos(userId);
+      const reposResponse = await api.getRepos();
       if (reposResponse?.repos && Array.isArray(reposResponse.repos)) {
         setRepos(reposResponse.repos);
       }
@@ -329,14 +304,14 @@ export default function OnboardingPage() {
   };
 
   const handleSavePermissions = async () => {
-    if (!user?.id) return;
+    if (!user) return;
     try {
       const permissions = repos.map(({ github_repo_id, can_read, can_write }) => ({
         github_repo_id,
         can_read: can_read || false,
         can_write: can_write || false,
       }));
-      await api.setPermissions(user.id, permissions);
+      await api.setPermissions(permissions);
       await moveToStep(4);
     } catch {
       setPageError('Failed to save repository permissions.');

@@ -123,18 +123,18 @@ export default function RoomsIndexPage() {
   // Create form. Avoids a needless GitHub API hit for every Rooms
   // page visit.
   const fetchRepos = useCallback(async () => {
-    if (!user?.id) return;
+    if (!user) return;
     setReposLoading(true);
     setReposError(null);
     try {
-      const response = await api.getRepos(user.id);
+      const response = await api.getRepos();
       setRepos(response?.repos || []);
     } catch (err) {
       setReposError(err instanceof Error ? err.message : 'Could not load repos.');
     } finally {
       setReposLoading(false);
     }
-  }, [user?.id]);
+  }, [user]);
 
   useEffect(() => {
     if (showCreate && repos.length === 0 && !reposLoading && !reposError) {

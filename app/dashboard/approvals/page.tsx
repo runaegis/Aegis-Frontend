@@ -107,7 +107,7 @@ export default function ApprovalsPage() {
   const [newCount, setNewCount] = useState(0);
 
   const fetchData = useCallback(async () => {
-    if (!user?.id) {
+    if (!user) {
       if (!userLoading) {
         setApprovals([]);
         setLoading(false);
@@ -116,7 +116,7 @@ export default function ApprovalsPage() {
     }
     setLoading(true);
     try {
-      const data = await api.getMcpApprovals(user.id);
+      const data = await api.getMcpApprovals();
       setApprovals(data);
       setError(null);
 

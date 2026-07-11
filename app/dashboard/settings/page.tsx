@@ -1006,9 +1006,9 @@ function RepositoriesSection({
   const [query, setQuery] = useState('');
 
   const fetchRepos = useCallback(async () => {
-    if (!user?.id) return;
+    if (!user) return;
     try {
-      const response = await api.getRepos(user.id);
+      const response = await api.getRepos();
       const list = response?.repos || [];
       setRepos(list);
       setOriginalRepos(JSON.parse(JSON.stringify(list)));
@@ -1016,17 +1016,17 @@ function RepositoriesSection({
       /* ignore */
     }
     setLoading(false);
-  }, [user?.id]);
+  }, [user]);
 
   useEffect(() => {
     if (user) fetchRepos();
   }, [user, fetchRepos]);
 
   const handleSync = async () => {
-    if (!user?.github_user_id || !user?.access_token) return;
+    if (!user) return;
     setSyncing(true);
     try {
-      await api.syncRepos(user.github_user_id, user.access_token);
+      await api.syncRepos();
       await fetchRepos();
       onSuccess('Repositories synced');
     } catch {
@@ -1049,7 +1049,7 @@ function RepositoriesSection({
   };
 
   const handleSave = async () => {
-    if (!user?.id) return;
+    if (!user) return;
     setSaving(true);
     try {
       const changed = repos.filter((repo, i) => {
@@ -1062,7 +1062,6 @@ function RepositoriesSection({
       const results = await Promise.all(
         changed.map((repo) =>
           api.setPermission(
-            user.id!,
             repo.github_repo_id,
             repo.can_read || false,
             repo.can_write || false,
