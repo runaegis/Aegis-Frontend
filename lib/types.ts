@@ -12,8 +12,16 @@ export interface UserPrompt {
   id: string;
   user_id: string;
   prompt: string;
+  name: string;
+  description?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
+}
+
+export interface UserPromptPayload {
+  prompt: string;
+  name?: string;
+  description?: string;
 }
 
 export interface UserPromptListResponse {

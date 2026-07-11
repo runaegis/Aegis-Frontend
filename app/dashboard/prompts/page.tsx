@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
-import { Check, Clock, Pencil, Plus, ScrollText, X } from 'lucide-react';
+import { Braces, Check, Clock, Pencil, Plus, ScrollText, X } from 'lucide-react';
 import { api } from '@/lib/api';
 import { UserPrompt } from '@/lib/types';
 import { useAutoRefresh, useUser } from '@/lib/hooks';
@@ -15,6 +15,128 @@ import { useToast } from '@/components/ui/Toast';
 import { cn } from '@/lib/utils';
 import { DUR, EASE, fadeUp, staggerContainer } from '@/lib/motion';
 
+const inputClass = cn(
+  'w-full rounded-[8px] border border-[var(--stroke-soft-200)] bg-white outline-none',
+  'text-[13px] text-[var(--neutral-strong-950)] placeholder:text-[var(--neutral-soft-400)]',
+  'focus:border-[var(--primary-base)]/50 focus:ring-2 focus:ring-[var(--primary-alpha-10)]',
+);
+
+const textareaClass = cn(
+  inputClass,
+  'resize-y px-3 py-2.5 leading-[1.6]',
+);
+
+type PromptFormState = {
+  name: string;
+  description: string;
+  prompt: string;
+};
+
+const emptyForm = (): PromptFormState => ({
+  name: '',
+  description: '',
+  prompt: '',
+});
+
+function PromptVariableHint() {
+  return (
+    <div className="flex gap-2.5 rounded-[8px] border border-[var(--primary-base)]/20 bg-[var(--primary-alpha-10)] px-3 py-2.5">
+      <Braces
+        className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--primary-base)]"
+        strokeWidth={2.25}
+      />
+      <p className="text-[12px] leading-[1.55] text-[var(--neutral-sub-600)]">
+        Use curly braces for values you want filled in at invocation time — e.g.{' '}
+        <code className="rounded-[4px] bg-white/70 px-1 py-0.5 font-medium text-[var(--primary-base)]">
+          {'{repo}'}
+        </code>
+        ,{' '}
+        <code className="rounded-[4px] bg-white/70 px-1 py-0.5 font-medium text-[var(--primary-base)]">
+          {'{ticket_id}'}
+        </code>
+        . When this prompt is used, you&apos;ll be asked to provide each variable.
+      </p>
+    </div>
+  );
+}
+
+function PromptBody({ text }: { text: string }) {
+  const parts = text.split(/(\{[^{}]+\})/g);
+
+  return (
+    <p className="whitespace-pre-wrap text-[13px] leading-[1.65] text-[var(--neutral-sub-600)]">
+      {parts.map((part, i) =>
+        /^\{[^{}]+\}$/.test(part) ? (
+          <span
+            key={i}
+            className="rounded-[4px] bg-[var(--primary-alpha-10)] px-1 py-0.5 font-medium text-[var(--primary-base)]"
+          >
+            {part}
+          </span>
+        ) : (
+          <span key={i}>{part}</span>
+        ),
+      )}
+    </p>
+  );
+}
+
+function PromptFormFields({
+  values,
+  onChange,
+  promptRows = 4,
+}: {
+  values: PromptFormState;
+  onChange: (patch: Partial<PromptFormState>) => void;
+  promptRows?: number;
+}) {
+  return (
+    <div className="space-y-3">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <label className="mb-1.5 block text-[11.5px] font-medium text-[var(--neutral-sub-600)]">
+            Name
+          </label>
+          <input
+            type="text"
+            value={values.name}
+            onChange={(e) => onChange({ name: e.target.value })}
+            placeholder="e.g. PR review checklist"
+            className={cn(inputClass, 'h-9 px-3')}
+          />
+        </div>
+        <div>
+          <label className="mb-1.5 block text-[11.5px] font-medium text-[var(--neutral-sub-600)]">
+            Description <span className="text-[var(--neutral-soft-400)]">(optional)</span>
+          </label>
+          <input
+            type="text"
+            value={values.description}
+            onChange={(e) => onChange({ description: e.target.value })}
+            placeholder="Short note on when to use this prompt"
+            className={cn(inputClass, 'h-9 px-3')}
+          />
+        </div>
+      </div>
+
+      <div>
+        <label className="mb-1.5 block text-[11.5px] font-medium text-[var(--neutral-sub-600)]">
+          Prompt body
+        </label>
+        <textarea
+          value={values.prompt}
+          onChange={(e) => onChange({ prompt: e.target.value })}
+          placeholder="e.g. Review the PR for {repo} and summarize risks before merge…"
+          rows={promptRows}
+          className={textareaClass}
+        />
+      </div>
+
+      <PromptVariableHint />
+    </div>
+  );
+}
+
 export default function PromptsPage() {
   const { user, isLoading: userLoading } = useUser();
   const reduce = useReducedMotion();
@@ -24,11 +146,11 @@ export default function PromptsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [newPrompt, setNewPrompt] = useState('');
+  const [newForm, setNewForm] = useState<PromptFormState>(emptyForm);
   const [creating, setCreating] = useState(false);
 
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editText, setEditText] = useState('');
+  const [editForm, setEditForm] = useState<PromptFormState>(emptyForm);
   const [savingId, setSavingId] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
@@ -62,22 +184,32 @@ export default function PromptsPage() {
 
   const startEdit = (prompt: UserPrompt) => {
     setEditingId(prompt.id);
-    setEditText(prompt.prompt);
+    setEditForm({
+      name: prompt.name,
+      description: prompt.description ?? '',
+      prompt: prompt.prompt,
+    });
   };
 
   const cancelEdit = () => {
     setEditingId(null);
-    setEditText('');
+    setEditForm(emptyForm());
   };
 
+  const buildPayload = (form: PromptFormState) => ({
+    prompt: form.prompt.trim(),
+    ...(form.name.trim() ? { name: form.name.trim() } : {}),
+    ...(form.description.trim() ? { description: form.description.trim() } : {}),
+  });
+
   const handleCreate = async () => {
-    const text = newPrompt.trim();
-    if (!text || !user?.id) return;
+    const payload = buildPayload(newForm);
+    if (!payload.prompt || !user?.id) return;
     setCreating(true);
     try {
-      const created = await api.createUserPrompt(user.id, text);
+      const created = await api.createUserPrompt(user.id, payload);
       setPrompts((prev) => [created, ...prev]);
-      setNewPrompt('');
+      setNewForm(emptyForm());
       toast.success('Prompt added');
     } catch (err) {
       toast.error('Failed to add prompt', {
@@ -89,14 +221,13 @@ export default function PromptsPage() {
   };
 
   const handleSave = async (prompt: UserPrompt) => {
-    const text = editText.trim();
-    if (!text || !user?.id) return;
+    const payload = buildPayload(editForm);
+    if (!payload.prompt || !user?.id) return;
     setSavingId(prompt.id);
     try {
-      const updated = await api.updateUserPrompt(prompt.id, user.id, text);
+      const updated = await api.updateUserPrompt(prompt.id, user.id, payload);
       setPrompts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
-      setEditingId(null);
-      setEditText('');
+      cancelEdit();
       toast.success('Prompt updated');
     } catch (err) {
       toast.error('Failed to update prompt', {
@@ -171,24 +302,17 @@ export default function PromptsPage() {
               </h2>
             </div>
           </div>
-          <div className="space-y-3 p-4 sm:p-5">
-            <textarea
-              value={newPrompt}
-              onChange={(e) => setNewPrompt(e.target.value)}
-              placeholder="e.g. Before opening a PR, run tests and summarize what changed in plain language…"
-              rows={4}
-              className={cn(
-                'w-full resize-y rounded-[8px] border border-[var(--stroke-soft-200)] bg-white px-3 py-2.5',
-                'text-[13px] leading-[1.6] text-[var(--neutral-strong-950)] placeholder:text-[var(--neutral-soft-400)]',
-                'outline-none focus:border-[var(--primary-base)]/50 focus:ring-2 focus:ring-[var(--primary-alpha-10)]',
-              )}
+          <div className="space-y-4 p-4 sm:p-5">
+            <PromptFormFields
+              values={newForm}
+              onChange={(patch) => setNewForm((prev) => ({ ...prev, ...patch }))}
             />
             <div className="flex justify-end">
               <Button
                 variant="primary"
                 size="sm"
                 onClick={handleCreate}
-                disabled={creating || !newPrompt.trim()}
+                disabled={creating || !newForm.prompt.trim()}
                 leadingIcon={<Plus className="h-3.5 w-3.5" strokeWidth={2.25} />}
               >
                 {creating ? 'Adding…' : 'Add prompt'}
@@ -231,23 +355,38 @@ export default function PromptsPage() {
                   )}
                 >
                   <div className="flex items-start justify-between gap-3 border-b border-[var(--stroke-soft-200)] px-4 py-3 sm:px-5">
-                    <div className="flex items-center gap-2">
-                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[7px] bg-[var(--primary-alpha-10)]">
-                        <ScrollText
-                          className="h-3.5 w-3.5 text-[var(--primary-base)]"
-                          strokeWidth={2}
-                        />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[7px] bg-[var(--primary-alpha-10)]">
+                          <ScrollText
+                            className="h-3.5 w-3.5 text-[var(--primary-base)]"
+                            strokeWidth={2}
+                          />
+                        </div>
+                        {isEditing ? (
+                          <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--neutral-soft-400)]">
+                            Editing prompt
+                          </span>
+                        ) : (
+                          <div className="min-w-0">
+                            <h3 className="truncate text-[14px] font-semibold leading-[1.25] tracking-[-0.015em] text-[var(--neutral-strong-950)]">
+                              {prompt.name}
+                            </h3>
+                            {prompt.description && (
+                              <p className="mt-0.5 truncate text-[12px] text-[var(--neutral-soft-400)]">
+                                {prompt.description}
+                              </p>
+                            )}
+                          </div>
+                        )}
                       </div>
-                      <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--neutral-soft-400)]">
-                        Prompt
-                      </span>
                     </div>
                     {!isEditing && (
                       <button
                         type="button"
                         onClick={() => startEdit(prompt)}
                         aria-label="Edit prompt"
-                        className="flex h-7 w-7 items-center justify-center rounded-[7px] text-[var(--neutral-soft-400)] transition-colors hover:bg-[var(--neutral-weak-50)] hover:text-[var(--neutral-strong-950)]"
+                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[7px] text-[var(--neutral-soft-400)] transition-colors hover:bg-[var(--neutral-weak-50)] hover:text-[var(--neutral-strong-950)]"
                       >
                         <Pencil className="h-3.5 w-3.5" strokeWidth={2} />
                       </button>
@@ -256,21 +395,13 @@ export default function PromptsPage() {
 
                   <div className="px-4 py-4 sm:px-5">
                     {isEditing ? (
-                      <textarea
-                        autoFocus
-                        value={editText}
-                        onChange={(e) => setEditText(e.target.value)}
-                        rows={5}
-                        className={cn(
-                          'w-full resize-y rounded-[8px] border border-[var(--stroke-soft-200)] bg-white px-3 py-2.5',
-                          'text-[13px] leading-[1.65] text-[var(--neutral-sub-600)] outline-none',
-                          'focus:border-[var(--primary-base)]/50 focus:ring-2 focus:ring-[var(--primary-alpha-10)]',
-                        )}
+                      <PromptFormFields
+                        values={editForm}
+                        onChange={(patch) => setEditForm((prev) => ({ ...prev, ...patch }))}
+                        promptRows={5}
                       />
                     ) : (
-                      <p className="whitespace-pre-wrap text-[13px] leading-[1.65] text-[var(--neutral-sub-600)]">
-                        {prompt.prompt}
-                      </p>
+                      <PromptBody text={prompt.prompt} />
                     )}
                   </div>
 
@@ -290,7 +421,7 @@ export default function PromptsPage() {
                           size="sm"
                           variant="primary"
                           onClick={() => handleSave(prompt)}
-                          disabled={isSaving || !editText.trim()}
+                          disabled={isSaving || !editForm.prompt.trim()}
                           leadingIcon={<Check className="h-3.5 w-3.5" strokeWidth={2.25} />}
                         >
                           {isSaving ? 'Saving…' : 'Save'}
@@ -339,7 +470,13 @@ function PromptsSkeleton() {
           className="overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]"
         >
           <div className="border-b border-[var(--stroke-soft-200)] px-5 py-3">
-            <div className="h-7 w-7 animate-pulse rounded-[7px] bg-[var(--neutral-weak-50)]" />
+            <div className="flex items-center gap-2">
+              <div className="h-7 w-7 animate-pulse rounded-[7px] bg-[var(--neutral-weak-50)]" />
+              <div className="space-y-1.5">
+                <div className="h-4 w-40 animate-pulse rounded-[6px] bg-[var(--neutral-weak-50)]" />
+                <div className="h-3 w-56 animate-pulse rounded-[6px] bg-[var(--neutral-weak-50)]" />
+              </div>
+            </div>
           </div>
           <div className="space-y-2 p-5">
             <div className="h-3 w-full animate-pulse rounded-[6px] bg-[var(--neutral-weak-50)]" />
