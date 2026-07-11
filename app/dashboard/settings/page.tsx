@@ -33,12 +33,13 @@ import {
 import Topbar from '@/components/layout/Topbar';
 import { api } from '@/lib/api';
 import { useOnboardingStep, useUser } from '@/lib/hooks';
-import { Repo } from '@/lib/types';
+import { Repo, SlackIntegrationStatus } from '@/lib/types';
 import { getInitials } from '@/lib/utils';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import ErrorBanner from '@/components/ui/ErrorBanner';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { ConnectorMark } from '@/components/ui/ConnectorMark';
 import { Input } from '@/components/ui/Input';
 import { Switch } from '@/components/ui/Switch';
 import { useToast } from '@/components/ui/Toast';
@@ -374,6 +375,23 @@ function Row({
       </div>
       {action && <div className="shrink-0">{action}</div>}
     </div>
+  );
+}
+
+function SlackConnectButton({ href }: { href: string }) {
+  return (
+    <a
+      href={href}
+      className="group inline-flex h-9 items-center gap-2 rounded-[10px] border border-[var(--stroke-sub-300)] bg-white px-2 pr-3 text-[13px] font-medium tracking-[-0.01em] text-[var(--neutral-strong-950)] shadow-[0_1px_2px_rgba(23,23,23,0.04)] transition-all duration-150 hover:border-[var(--primary-alpha-24)] hover:bg-[var(--neutral-weak-50)] hover:shadow-[0_4px_12px_rgba(23,23,23,0.08)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary-alpha-24)]"
+      aria-label="Connect Slack"
+    >
+      <ConnectorMark id="slack" size="xs" className="cursor-default" />
+      <span className="whitespace-nowrap">Connect Slack</span>
+      <ExternalLink
+        className="h-3.5 w-3.5 shrink-0 text-[var(--neutral-soft-400)] transition-all group-hover:-translate-y-px group-hover:translate-x-px group-hover:text-[var(--primary-base)]"
+        strokeWidth={2}
+      />
+    </a>
   );
 }
 
@@ -775,9 +793,13 @@ function NotificationsSection({
   reduce: boolean;
   onSuccess: (s: string) => void;
 }) {
+  const toast = useToast();
   const [emailEnabled, setEmailEnabled] = useState(true);
-  const [slackEnabled, setSlackEnabled] = useState(false);
   const [webhookEnabled, setWebhookEnabled] = useState(false);
+  const [slackStatus, setSlackStatus] = useState<SlackIntegrationStatus | null>(null);
+  const [slackLoading, setSlackLoading] = useState(true);
+  const [slackError, setSlackError] = useState<string | null>(null);
+  const [slackDisconnecting, setSlackDisconnecting] = useState(false);
 
   const EVENTS: { id: string; label: string; description: string; tone: 'error' | 'warning' | 'feature' | 'info' }[] = [
     { id: 'approval',  label: 'Approval requested',  description: 'A pending action needs review.',           tone: 'warning' },
@@ -790,6 +812,92 @@ function NotificationsSection({
   const [events, setEvents] = useState<Record<string, boolean>>(
     Object.fromEntries(EVENTS.map((e) => [e.id, true])),
   );
+
+  const loadSlackStatus = useCallback(async () => {
+    setSlackLoading(true);
+    try {
+      const status = await api.getSlackBotStatus();
+      setSlackStatus(status);
+      setSlackError(null);
+    } catch (err) {
+      setSlackStatus(null);
+      setSlackError(
+        err instanceof Error
+          ? err.message
+          : 'Could not load Slack workspace status.',
+      );
+    } finally {
+      setSlackLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadSlackStatus();
+  }, [loadSlackStatus]);
+
+  const slackConnectUrl = api.getSlackBotConnectUrl();
+  const slackWorkspaceName = slackStatus?.team_name?.trim() || 'Slack workspace';
+  const slackConnected = slackStatus?.connected ?? false;
+  const slackConnectorOnline = slackStatus
+    ? (slackStatus.connector ?? slackConnected)
+    : false;
+  const hasSlackWorkspace = Boolean(slackStatus?.team_name);
+  const canDisconnectSlack = hasSlackWorkspace || slackConnected;
+  const showConnectSlackButton =
+    !slackLoading && !slackError && !hasSlackWorkspace && !slackConnected;
+
+  const handleSlackDisconnect = useCallback(async () => {
+    setSlackDisconnecting(true);
+    try {
+      await api.disconnectSlackBot();
+      setSlackStatus({ connected: false });
+      setSlackError(null);
+      onSuccess('Slack disconnected successfully');
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Failed to disconnect Slack.';
+      setSlackError(message);
+      toast.error(message);
+    } finally {
+      setSlackDisconnecting(false);
+    }
+  }, [onSuccess, toast]);
+
+  const slackDescription = slackLoading
+    ? 'Checking whether Aegis is installed in Slack for your account.'
+    : slackError
+      ? 'We could not load your Slack installation status just now.'
+      : hasSlackWorkspace
+        ? slackConnectorOnline
+          ? 'Approval notifications are routed to the Slack workspace below.'
+          : 'This Slack workspace is installed, but the connector is not active yet.'
+        : 'Install the Aegis Slack app to send approvals into a Slack channel.';
+
+  const slackMeta = slackError ? (
+    <p className="text-[11.5px] text-[var(--error)]">{slackError}</p>
+  ) : hasSlackWorkspace ? (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <Badge
+        tone={slackConnectorOnline ? 'success' : 'error'}
+        uppercase
+        leadingDot
+      >
+        {slackConnectorOnline ? 'Connected' : 'Not connected'}
+      </Badge>
+      {slackStatus?.approval_channel_name && (
+        <CodeChip>#{slackStatus.approval_channel_name}</CodeChip>
+      )}
+      {slackStatus?.is_private_channel !== undefined &&
+        slackStatus?.is_private_channel !== null && (
+          <Badge
+            tone={slackStatus.is_private_channel ? 'warning' : 'neutral'}
+            uppercase
+          >
+            {slackStatus.is_private_channel ? 'Private channel' : 'Public channel'}
+          </Badge>
+        )}
+    </div>
+  ) : undefined;
 
   return (
     <motion.div
@@ -816,14 +924,60 @@ function NotificationsSection({
             />
             <Row
               title="Slack"
-              description="Coming soon. Connect a workspace to forward alerts to a channel."
+              description={slackDescription}
+              meta={slackMeta}
               action={
-                <Switch
-                  checked={slackEnabled}
-                  onChange={setSlackEnabled}
-                  disabled
-                  ariaLabel="Toggle Slack notifications"
-                />
+                slackLoading ? (
+                  <Button
+                    variant="secondary"
+                    disabled
+                    leadingIcon={<LoadingSpinner size="sm" muted />}
+                  >
+                    Checking Slack
+                  </Button>
+                ) : showConnectSlackButton ? (
+                  <SlackConnectButton href={slackConnectUrl} />
+                ) : slackError ? (
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      void loadSlackStatus();
+                    }}
+                    leadingIcon={<RefreshCw className="h-3.5 w-3.5" strokeWidth={2} />}
+                  >
+                    Retry
+                  </Button>
+                ) : hasSlackWorkspace ? (
+                  <div className="flex items-center gap-2">
+                    <div className="text-right">
+                      <p className="text-[12.5px] font-medium text-[var(--neutral-strong-950)]">
+                        {slackWorkspaceName}
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-[var(--neutral-soft-400)]">
+                        {slackStatus?.team_id ?? 'Installed'}
+                      </p>
+                    </div>
+                    {canDisconnectSlack && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        disabled={slackDisconnecting}
+                        onClick={() => {
+                          void handleSlackDisconnect();
+                        }}
+                        leadingIcon={
+                          slackDisconnecting ? (
+                            <LoadingSpinner size="sm" muted />
+                          ) : (
+                            <LogOut className="h-3.5 w-3.5" strokeWidth={2} />
+                          )
+                        }
+                      >
+                        Disconnect
+                      </Button>
+                    )}
+                  </div>
+                ) : null
               }
             />
             <Row

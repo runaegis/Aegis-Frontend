@@ -1035,6 +1035,11 @@ export function installPreviewApi() {
   api.getUserTokenUsageAll = async () => [...TOKEN_METER];
 
   api.getRepos = async () => ({ repos: PREVIEW_REPOS });
+  api.getSlackBotStatus = async () => ({ connected: false });
+  api.disconnectSlackBot = async () => ({
+    success: true,
+    message: "Slack disconnected successfully",
+  });
   api.syncRepos = async () => ({ success: true, synced: PREVIEW_REPOS.length });
   api.setPermission = async () => ({ success: true });
   api.setPermissions = async () => ({ success: true });

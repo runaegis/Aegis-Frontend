@@ -146,6 +146,22 @@ export interface User {
   terraform_url?: string | null;
 }
 
+export interface SlackIntegrationStatus {
+  connected: boolean;
+  /**
+   * Optional backend field for whether the live connector path is healthy.
+   * When absent, the UI falls back to `connected`.
+   */
+  connector?: boolean | null;
+  team_id?: string | null;
+  team_name?: string | null;
+  approval_channel_id?: string | null;
+  approval_channel_name?: string | null;
+  is_private_channel?: boolean | null;
+  bot_user_id?: string | null;
+  installed_for_slack_user_id?: string | null;
+}
+
 export interface RepoPermission {
   github_repo_id: number;
   can_read?: boolean;
