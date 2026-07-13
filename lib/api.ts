@@ -15,6 +15,7 @@ import {
   RoomSessionAction,
   PaginatedResponse,
   Memory,
+  SlackIntegrationStatus,
   UserPrompt,
   UserPromptListResponse,
   UserPromptPayload,
@@ -26,12 +27,7 @@ import {
 } from "./dashboardDateRange";
 import { normalizeApiTimestamp, normalizeDecision } from "./utils";
 
-type SaveUserPayload = Pick<
-  User,
-  "github_user_id" | "username" | "github_pat"
-> & {
-  email?: string;
-};
+type SaveUserPayload = Pick<User, "github_pat">;
 
 type UpdateUserDetailsPayload = {
   username?: string;
@@ -205,6 +201,40 @@ async function readErrorMessage(res: Response): Promise<string> {
   } catch {
     return 'Network error';
   }
+}
+
+async function fetchAuthenticatedUserDetails(
+  fallback: UpdateUserDetailsPayload = {},
+): Promise<User> {
+  const endpoints = [`${API_BASE}/user`, `${API_BASE}/auth/user`];
+  let lastError: string | null = null;
+
+  for (const endpoint of endpoints) {
+    const res = await apiFetch(endpoint);
+
+    if (!res.ok) {
+      lastError = await readErrorMessage(res);
+      continue;
+    }
+
+    let data: unknown;
+    try {
+      data = await res.json();
+    } catch {
+      lastError = "Server returned an invalid user payload.";
+      continue;
+    }
+
+    const raw = extractUserPayload(data);
+    if (!raw) {
+      lastError = "Server returned an incomplete user payload.";
+      continue;
+    }
+
+    return normalizeUserPayload(raw, fallback);
+  }
+
+  throw new Error(lastError || "Failed to load user details.");
 }
 
 function normalizeUserPayload(
@@ -474,12 +504,12 @@ async function getUserActions(
   const cached = _cache.get(cacheKey);
   if (cached && now - cached.time < CACHE_TTL) return cached.data;
 
-  const url = new URL(`${API_BASE}/sessions/${encodeURIComponent(userId)}`);
+  const url = new URL(`${API_BASE}/sessions`);
   url.searchParams.set("page", String(page));
   url.searchParams.set("page_size", String(page_size));
   appendActionDateFilters(url, filters);
 
-  const res = await fetch(url.toString());
+  const res = await apiFetch(url.toString());
   if (!res.ok) throw new Error(`Failed to fetch sessions: ${res.statusText}`);
 
   const payload = await res.json();
@@ -510,14 +540,12 @@ async function getAggregatedUserActions(
     filters?: ActionDateFilters;
   } = {},
 ): Promise<PaginatedResponse<AggregatedSessionAction>> {
-  const url = new URL(
-    `${API_BASE}/sessions/${encodeURIComponent(userId)}/aggregate`,
-  );
+  const url = new URL(`${API_BASE}/sessions/aggregate`);
   url.searchParams.set("page", String(page));
   url.searchParams.set("page_size", String(page_size));
   appendActionDateFilters(url, filters);
 
-  const res = await fetch(url.toString());
+  const res = await apiFetch(url.toString());
   if (!res.ok)
     throw new Error(`Failed to fetch aggregated sessions: ${res.statusText}`);
 
@@ -685,7 +713,7 @@ async function fetchUserTokenMeterPage(
   );
   url.searchParams.set("page", String(page));
   url.searchParams.set("page_size", String(page_size));
-  const res = await fetch(url.toString());
+  const res = await apiFetch(url.toString());
   if (!res.ok)
     throw new Error(`Failed to fetch token usage: ${res.statusText}`);
   const payload = await res.json();
@@ -701,7 +729,7 @@ async function fetchUserTokenMeterPage(
 }
 
 export const api = {
-  healthCheck: () => fetch(`${API_BASE}/health`).then((r) => r.json()),
+  healthCheck: () => apiFetch(`${API_BASE}/health`).then((r) => r.json()),
 
   logOut: async () => {
     try {
@@ -846,39 +874,7 @@ export const api = {
       // credentials: 'include',
     }).then((res) => res.json()),
 
-  getUserDetails: async (): Promise<User> => {
-    const endpoints = [`${API_BASE}/user`, `${API_BASE}/auth/user`];
-    let lastError: string | null = null;
-
-    for (const endpoint of endpoints) {
-      const res = await apiFetch(endpoint, {
-        // credentials: 'include',
-      });
-
-      if (!res.ok) {
-        lastError = await readErrorMessage(res);
-        continue;
-      }
-
-      let data: unknown;
-      try {
-        data = await res.json();
-      } catch {
-        lastError = "Server returned an invalid user payload.";
-        continue;
-      }
-
-      const raw = extractUserPayload(data);
-      if (!raw) {
-        lastError = "Server returned an incomplete user payload.";
-        continue;
-      }
-
-      return normalizeUserPayload(raw);
-    }
-
-    throw new Error(lastError || "Failed to load user details.");
-  },
+  getUserDetails: async (): Promise<User> => fetchAuthenticatedUserDetails(),
 
   getSessionActions: async (
     sessionId: string,
@@ -892,7 +888,7 @@ export const api = {
         .sort((a, b) => (a.sequence_order ?? 0) - (b.sequence_order ?? 0));
     }
     // Fallback: fetch all and filter (no userId known)
-    const res = await fetch(`${API_BASE}/query`, {
+    const res = await apiFetch(`${API_BASE}/query`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -931,14 +927,10 @@ export const api = {
     return rows.filter((r) => normalizeDecision(r.decision) === "REQUIRE_APPROVAL");
   },
 
-  getMcpApprovals: async (userId?: string): Promise<MCPApproval[]> => {
-    if (!userId) return [];
-
-    const params = new URLSearchParams({ user_id: userId });
-    const res = await apiFetch(
-      `${API_BASE}/get_mcp_approvals?${params.toString()}`,
-      { cache: "no-store" },
-    );
+  getMcpApprovals: async (): Promise<MCPApproval[]> => {
+    const res = await apiFetch(`${API_BASE}/get_mcp_approvals`, {
+      cache: "no-store",
+    });
     if (!res.ok)
       throw new Error(`Failed to fetch MCP approvals: ${res.statusText}`);
 
@@ -1143,52 +1135,46 @@ export const api = {
   saveUser: async (user: SaveUserPayload) => {
     const createResponse = await apiFetch(`${API_BASE}/user`, {
       method: "POST",
-      // credentials: 'include',
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: getJsonHeaders(),
       body: JSON.stringify({
-        github_user_id: user.github_user_id,
-        username: user.username,
         github_pat: user.github_pat,
       }),
-    }).then((r) => r.json());
+    });
 
-    console.log("[API] POST /user response:", createResponse);
-    if (!createResponse.success) {
-      throw new Error(createResponse.message || "Failed to create user");
+    if (!createResponse.ok) {
+      throw new Error(await readErrorMessage(createResponse));
     }
 
-    if (createResponse.id) {
-      return createResponse;
+    let data: unknown = null;
+    try {
+      data = await createResponse.json();
+    } catch {
+      data = null;
     }
 
-    const lookupCandidates: string[] = [
-      `${API_BASE}/user?github_user_id=${encodeURIComponent(String(user.github_user_id))}`,
-      `${API_BASE}/user?username=${encodeURIComponent(user.username)}`,
-    ];
-
-    if (user.email) {
-      lookupCandidates.push(
-        `${API_BASE}/user?email=${encodeURIComponent(user.email)}`,
-      );
+    const raw = extractUserPayload(data);
+    if (raw) {
+      return normalizeUserPayload(raw, {
+        github_pat: user.github_pat ?? undefined,
+      });
     }
 
-    for (const lookupUrl of lookupCandidates) {
-      try {
-        const userFetch = await fetch(lookupUrl);
-        if (!userFetch.ok) continue;
-
-        const userResponse = await userFetch.json();
-        if (userResponse.detail || userResponse.error) continue;
-
-        return userResponse;
-      } catch {
-        // Try next lookup strategy
-      }
+    if (
+      data &&
+      typeof data === "object" &&
+      "success" in data &&
+      data.success === false
+    ) {
+      const message =
+        "message" in data && typeof data.message === "string"
+          ? data.message
+          : "Failed to create user";
+      throw new Error(message);
     }
 
-    throw new Error("Failed to retrieve user after save");
+    return fetchAuthenticatedUserDetails({
+      github_pat: user.github_pat ?? undefined,
+    });
   },
 
   updateUserDetails: async (
@@ -1292,40 +1278,70 @@ export const api = {
     );
   },
 
-  syncRepos: (github_user_id: number, github_pat: string) =>
-    // github_user_id = sync_req.github_user_id
-    // github_pat
-    fetch(`${API_BASE}/sync`, {
+  syncRepos: () =>
+    apiFetch(`${API_BASE}/sync`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        github_user_id: github_user_id,
-        github_pat: github_pat,
-      }),
     }).then((r) => r.json()),
 
-  getRepos: (user_id: string) =>
-    fetch(`${API_BASE}/repos/${user_id}`).then((r) => r.json()),
+  getRepos: () => apiFetch(`${API_BASE}/repos`).then((r) => r.json()),
+
+  getSlackBotConnectUrl: () => `${API_BASE}/slack/bot/connect`,
+
+  getSlackBotStatus: async (): Promise<SlackIntegrationStatus> => {
+    const res = await apiFetch(`${API_BASE}/slack/bot/status`, {
+      cache: "no-store",
+    });
+
+    if (!res.ok) {
+      throw new Error(
+        `Failed to load Slack status: ${await readErrorMessage(res)}`,
+      );
+    }
+
+    const data = await res.json();
+    if (!data || typeof data !== "object") {
+      throw new Error("Server returned an invalid Slack status payload.");
+    }
+
+    return data as SlackIntegrationStatus;
+  },
+
+  disconnectSlackBot: async (): Promise<{ success: boolean; message?: string }> => {
+    const res = await apiFetch(`${API_BASE}/slack/bot/disconnect`, {
+      method: "DELETE",
+    });
+
+    if (!res.ok) {
+      throw new Error(
+        `Failed to disconnect Slack: ${await readErrorMessage(res)}`,
+      );
+    }
+
+    const data = await res.json();
+    if (!data || typeof data !== "object") {
+      throw new Error("Server returned an invalid Slack disconnect payload.");
+    }
+
+    return data as { success: boolean; message?: string };
+  },
 
   setPermission: (
-    user_id: string,
     github_repo_id: number,
     can_read: boolean,
     can_write: boolean,
   ) =>
-    fetch(`${API_BASE}/permissions`, {
+    apiFetch(`${API_BASE}/permissions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user_id, github_repo_id, can_read, can_write }),
+      body: JSON.stringify({ github_repo_id, can_read, can_write }),
     }).then((r) => r.json()),
 
-  setPermissions: (user_id: string, permissions: RepoPermission[]) =>
-    fetch(`${API_BASE}/permissions/bulk`, {
+  setPermissions: (permissions: RepoPermission[]) =>
+    apiFetch(`${API_BASE}/permissions/bulk`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         permissions: permissions.map((p) => ({
-          user_id,
           github_repo_id: p.github_repo_id,
           can_read: p.can_read || false,
           can_write: p.can_write || false,
@@ -1333,11 +1349,9 @@ export const api = {
       }),
     }).then((r) => r.json()),
   // POST /policy -> returns existing row or creates a new one with defaults
-  getUserPolicy: async (userId: string): Promise<string | null> => {
-    const res = await fetch(`${API_BASE}/policy`, {
+  getUserPolicy: async (): Promise<string | null> => {
+    const res = await apiFetch(`${API_BASE}/policy`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user_id: userId }),
     });
 
     if (!res.ok) throw new Error(`Failed to fetch policy: ${res.statusText}`);
@@ -1355,17 +1369,11 @@ export const api = {
       : null;
   },
 
-  upsertUserPolicy: async (
-    userId: string,
-    policyString: string,
-  ): Promise<void> => {
+  upsertUserPolicy: async (policyString: string): Promise<void> => {
     const params = new URLSearchParams({ policy_string: policyString });
-    const res = await fetch(
-      `${API_BASE}/policy/${encodeURIComponent(userId)}?${params.toString()}`,
-      {
-        method: "PUT",
-      },
-    );
+    const res = await apiFetch(`${API_BASE}/policy?${params.toString()}`, {
+      method: "PUT",
+    });
 
     if (!res.ok) {
       const text = await res.text();
@@ -1391,12 +1399,7 @@ export const api = {
   },
 
   async getRoomIntegrationConfig(roomId: string) {
-    const res = await fetch(
-      `${API_BASE}/room/${roomId}/integration-url`,
-      {
-        credentials: 'include',
-      }
-    );
+    const res = await apiFetch(`${API_BASE}/room/${roomId}/integration-url`);
 
     if (!res.ok) {
       throw new Error(await readErrorMessage(res));
@@ -1686,10 +1689,8 @@ export const api = {
     }
   },
 
-  getUserPrompts: async (userId: string): Promise<UserPrompt[]> => {
-    const res = await apiFetch(
-      `${API_BASE}/user-prompts/${encodeURIComponent(userId)}`,
-    );
+  getUserPrompts: async (): Promise<UserPrompt[]> => {
+    const res = await apiFetch(`${API_BASE}/user-prompts`);
     if (!res.ok) {
       throw new Error(`Failed to load prompts: ${await readErrorMessage(res)}`);
     }
@@ -1697,14 +1698,11 @@ export const api = {
     return Array.isArray(data?.prompts) ? data.prompts : [];
   },
 
-  createUserPrompt: async (
-    userId: string,
-    payload: UserPromptPayload,
-  ): Promise<UserPrompt> => {
+  createUserPrompt: async (payload: UserPromptPayload): Promise<UserPrompt> => {
     const res = await apiFetch(`${API_BASE}/user-prompts`, {
       method: "POST",
       headers: getJsonHeaders(),
-      body: JSON.stringify({ user_id: userId, ...payload }),
+      body: JSON.stringify(payload),
     });
     if (!res.ok) {
       throw new Error(`Failed to create prompt: ${await readErrorMessage(res)}`);
@@ -1714,7 +1712,6 @@ export const api = {
 
   updateUserPrompt: async (
     promptId: string,
-    userId: string,
     payload: UserPromptPayload,
   ): Promise<UserPrompt> => {
     const res = await apiFetch(
@@ -1722,7 +1719,7 @@ export const api = {
       {
         method: "PUT",
         headers: getJsonHeaders(),
-        body: JSON.stringify({ user_id: userId, ...payload }),
+        body: JSON.stringify(payload),
       },
     );
     if (!res.ok) {

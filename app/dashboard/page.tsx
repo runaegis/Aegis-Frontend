@@ -96,12 +96,12 @@ export default function DashboardHomePage() {
   const [pendingDeny, setPendingDeny] = useState<MCPApproval | null>(null);
 
   const fetchAuxiliaryData = useCallback(async (options?: { soft?: boolean }) => {
-    if (!user?.id) return;
+    if (!user) return;
     if (!options?.soft) setAuxLoading(true);
     try {
       const [approvalsData, policyData] = await Promise.all([
-        api.getMcpApprovals(user.id).catch(() => []),
-        api.getUserPolicy(user.id).catch(() => null),
+        api.getMcpApprovals().catch(() => []),
+        api.getUserPolicy().catch(() => null),
       ]);
       setApprovals(
         approvalsData.filter((approval) =>
@@ -115,7 +115,7 @@ export default function DashboardHomePage() {
     } finally {
       if (!options?.soft) setAuxLoading(false);
     }
-  }, [user?.id, dateFilters]);
+  }, [user, dateFilters]);
 
   useEffect(() => {
     if (user?.id) {

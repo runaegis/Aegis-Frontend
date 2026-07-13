@@ -154,7 +154,7 @@ export default function PromptsPage() {
   const [savingId, setSavingId] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
-    if (!user?.id) {
+    if (!user) {
       if (!userLoading) {
         setPrompts([]);
         setLoading(false);
@@ -162,7 +162,7 @@ export default function PromptsPage() {
       return;
     }
     try {
-      const data = await api.getUserPrompts(user.id);
+      const data = await api.getUserPrompts();
       setPrompts(data);
       setError(null);
     } catch (err) {
@@ -170,15 +170,15 @@ export default function PromptsPage() {
     } finally {
       setLoading(false);
     }
-  }, [user?.id, userLoading]);
+  }, [user, userLoading]);
 
   useEffect(() => {
-    if (user?.id) fetchData();
+    if (user) fetchData();
     else if (!userLoading) {
       setPrompts([]);
       setLoading(false);
     }
-  }, [user?.id, userLoading, fetchData]);
+  }, [user, userLoading, fetchData]);
 
   const { lastUpdated } = useAutoRefresh(fetchData, 60000);
 
@@ -204,10 +204,10 @@ export default function PromptsPage() {
 
   const handleCreate = async () => {
     const payload = buildPayload(newForm);
-    if (!payload.prompt || !user?.id) return;
+    if (!payload.prompt || !user) return;
     setCreating(true);
     try {
-      const created = await api.createUserPrompt(user.id, payload);
+      const created = await api.createUserPrompt(payload);
       setPrompts((prev) => [created, ...prev]);
       setNewForm(emptyForm());
       toast.success('Prompt added');
@@ -222,10 +222,10 @@ export default function PromptsPage() {
 
   const handleSave = async (prompt: UserPrompt) => {
     const payload = buildPayload(editForm);
-    if (!payload.prompt || !user?.id) return;
+    if (!payload.prompt || !user) return;
     setSavingId(prompt.id);
     try {
-      const updated = await api.updateUserPrompt(prompt.id, user.id, payload);
+      const updated = await api.updateUserPrompt(prompt.id, payload);
       setPrompts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
       cancelEdit();
       toast.success('Prompt updated');
