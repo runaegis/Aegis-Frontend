@@ -194,8 +194,55 @@ export interface TokenMeterResponse {
   input_token: number;
   output_token: number;
   session_id: string;
+  tool_name?: string | null;
   timestamp?: string;
   created_at?: string;
+}
+
+export type TokenAnalyticsDateRange =
+  | 'today'
+  | '7d'
+  | '30d'
+  | '90d'
+  | 'all'
+  | 'custom';
+
+export type TokenAnalyticsAllocation = 'category' | 'tool' | 'both';
+
+export interface TokenUsageSummary {
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  tool_call_count: number;
+}
+
+export interface TokenUsageChartItem {
+  name: string;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  tool_call_count: number;
+}
+
+export interface TokenAnalyticsResponse {
+  user_id: string;
+  date_range: TokenAnalyticsDateRange;
+  start_date: string | null;
+  end_date: string | null;
+  allocation: TokenAnalyticsAllocation;
+  summary: TokenUsageSummary;
+  category_chart: TokenUsageChartItem[];
+  tool_chart: TokenUsageChartItem[];
+}
+
+export interface TokenUsageSessionItem {
+  session_id: string;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  tool_call_count: number;
+  first_seen_at: string | null;
+  last_seen_at: string | null;
 }
 
 export interface RoomSummary {

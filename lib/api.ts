@@ -19,6 +19,10 @@ import {
   UserPrompt,
   UserPromptListResponse,
   UserPromptPayload,
+  TokenAnalyticsAllocation,
+  TokenAnalyticsDateRange,
+  TokenAnalyticsResponse,
+  TokenUsageSessionItem,
 } from "./types";
 import { LogOut } from "lucide-react";
 import {
@@ -42,6 +46,22 @@ type UpdateUserDetailsPayload = {
   linear_api_key?: string;
   terraform_api_token?: string;
   terraform_url?: string;
+};
+
+type TokenAnalyticsFilters = {
+  date_range?: TokenAnalyticsDateRange;
+  start_date?: string;
+  end_date?: string;
+  allocation?: TokenAnalyticsAllocation;
+  categories?: string | string[];
+  tool_names?: string | string[];
+};
+
+type TokenUsageSessionFilters = {
+  date_range?: TokenAnalyticsDateRange;
+  start_date?: string;
+  end_date?: string;
+  limit?: number;
 };
 
 function getAPIBase(): string {
@@ -166,6 +186,8 @@ function parseRow(row: unknown, columns?: string[]): unknown {
     "joined_at",
     "approved_at",
     "expires_at",
+    "first_seen_at",
+    "last_seen_at",
   ];
   for (const field of datetimeFields) {
     if (obj[field]) obj[field] = parseDatetime(String(obj[field]));
@@ -728,6 +750,76 @@ async function fetchUserTokenMeterPage(
   };
 }
 
+function appendTokenAnalyticsFilters(
+  url: URL,
+  filters: TokenAnalyticsFilters = {},
+): void {
+  url.searchParams.set("date_range", filters.date_range ?? "30d");
+  url.searchParams.set("allocation", filters.allocation ?? "both");
+
+  if (filters.start_date) url.searchParams.set("start_date", filters.start_date);
+  if (filters.end_date) url.searchParams.set("end_date", filters.end_date);
+
+  const appendMany = (key: "categories" | "tool_names", value?: string | string[]) => {
+    if (!value) return;
+    const items = Array.isArray(value) ? value : value.split(",");
+    for (const item of items) {
+      const trimmed = item.trim();
+      if (trimmed) url.searchParams.append(key, trimmed);
+    }
+  };
+
+  appendMany("categories", filters.categories);
+  appendMany("tool_names", filters.tool_names);
+}
+
+function emptyTokenAnalyticsResponse(
+  userId = "",
+  filters: TokenAnalyticsFilters = {},
+): TokenAnalyticsResponse {
+  return {
+    user_id: userId,
+    date_range: filters.date_range ?? "30d",
+    start_date: filters.start_date ?? null,
+    end_date: filters.end_date ?? null,
+    allocation: filters.allocation ?? "both",
+    summary: {
+      input_tokens: 0,
+      output_tokens: 0,
+      total_tokens: 0,
+      tool_call_count: 0,
+    },
+    category_chart: [],
+    tool_chart: [],
+  };
+}
+
+function appendTokenUsageSessionFilters(
+  url: URL,
+  filters: TokenUsageSessionFilters = {},
+): void {
+  url.searchParams.set("date_range", filters.date_range ?? "30d");
+  if (filters.start_date) url.searchParams.set("start_date", filters.start_date);
+  if (filters.end_date) url.searchParams.set("end_date", filters.end_date);
+  if (typeof filters.limit === "number") {
+    const limit = Math.min(Math.max(Math.trunc(filters.limit), 1), 500);
+    url.searchParams.set("limit", String(limit));
+  }
+}
+
+function normalizeTokenUsageSessionItem(row: unknown): TokenUsageSessionItem {
+  const item = parseRow(row) as Partial<TokenUsageSessionItem>;
+  return {
+    session_id: String(item.session_id ?? "unknown"),
+    input_tokens: Number(item.input_tokens ?? 0),
+    output_tokens: Number(item.output_tokens ?? 0),
+    total_tokens: Number(item.total_tokens ?? 0),
+    tool_call_count: Number(item.tool_call_count ?? 0),
+    first_seen_at: item.first_seen_at ?? null,
+    last_seen_at: item.last_seen_at ?? null,
+  };
+}
+
 export const api = {
   healthCheck: () => apiFetch(`${API_BASE}/health`).then((r) => r.json()),
 
@@ -1130,6 +1222,65 @@ export const api = {
       if (page > 5000) break;
     }
     return out;
+  },
+
+  getTokenUsageAnalytics: async (
+    userId?: string,
+    filters: TokenAnalyticsFilters = {},
+  ): Promise<TokenAnalyticsResponse> => {
+    if (!userId) return emptyTokenAnalyticsResponse("", filters);
+
+    const url = new URL(
+      `${API_BASE}/analytics/token-usage/${encodeURIComponent(userId)}`,
+    );
+    appendTokenAnalyticsFilters(url, filters);
+
+    const res = await apiFetch(url.toString());
+    if (!res.ok) {
+      throw new Error(`Failed to fetch token analytics: ${await readErrorMessage(res)}`);
+    }
+
+    const payload = await res.json();
+    return {
+      ...emptyTokenAnalyticsResponse(userId, filters),
+      ...payload,
+      summary: {
+        ...emptyTokenAnalyticsResponse(userId, filters).summary,
+        ...(payload?.summary ?? {}),
+      },
+      category_chart: Array.isArray(payload?.category_chart)
+        ? payload.category_chart
+        : [],
+      tool_chart: Array.isArray(payload?.tool_chart) ? payload.tool_chart : [],
+    };
+  },
+
+  getTokenUsageSessions: async (
+    userId?: string,
+    filters: TokenUsageSessionFilters = {},
+  ): Promise<TokenUsageSessionItem[]> => {
+    if (!userId) return [];
+
+    const url = new URL(
+      `${API_BASE}/analytics/token-usage/${encodeURIComponent(userId)}/sessions`,
+    );
+    appendTokenUsageSessionFilters(url, filters);
+
+    const res = await apiFetch(url.toString());
+    if (!res.ok) {
+      throw new Error(`Failed to fetch token usage sessions: ${await readErrorMessage(res)}`);
+    }
+
+    const payload = await res.json();
+    const rows = Array.isArray(payload)
+      ? payload
+      : Array.isArray(payload?.sessions)
+        ? payload.sessions
+        : Array.isArray(payload?.items)
+          ? payload.items
+          : [];
+
+    return rows.map(normalizeTokenUsageSessionItem);
   },
 
   saveUser: async (user: SaveUserPayload) => {
