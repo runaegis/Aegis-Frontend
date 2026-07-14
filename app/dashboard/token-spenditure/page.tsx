@@ -26,9 +26,14 @@ import {
 } from '@/components/ui/chart';
 import { useAutoRefresh, useUser } from '@/lib/hooks';
 import { api } from '@/lib/api';
-import { TokenMeterResponse } from '@/lib/types';
+import {
+  TokenAnalyticsResponse,
+  TokenMeterResponse,
+  TokenUsageChartItem,
+  TokenUsageSessionItem,
+} from '@/lib/types';
 import { DUR, EASE, fadeUp, staggerContainer } from '@/lib/motion';
-import { parseApiUtcTimestamp } from '@/lib/utils';
+import { formatMcpAegisToolDisplayName, parseApiUtcTimestamp } from '@/lib/utils';
 
 type SessionBucket = {
   label: string;
@@ -45,6 +50,14 @@ type SessionAegisBucket = {
   without_aegis: number;
   /** Recorded input + output with Aegis (meter). Shown shorter + orange. */
   with_aegis: number;
+};
+
+type AnalyticsPieSlice = {
+  name: string;
+  value: number;
+  input: number;
+  output: number;
+  calls: number;
 };
 
 /** Session-scaled multiplier in [2.6, 3.4] for the modeled "without
@@ -106,6 +119,35 @@ const chartConfig = {
 
 const TZ_IST = 'Asia/Kolkata';
 
+const ANALYTICS_PIE_COLORS = [
+  '#4338CA',
+  '#F8A748',
+  '#14B8A6',
+  '#A855F7',
+  '#EF4444',
+  '#22C55E',
+  '#0EA5E9',
+  '#F97316',
+  '#64748B',
+  '#84CC16',
+];
+
+const emptyAnalytics: TokenAnalyticsResponse = {
+  user_id: '',
+  date_range: 'today',
+  start_date: null,
+  end_date: null,
+  allocation: 'both',
+  summary: {
+    input_tokens: 0,
+    output_tokens: 0,
+    total_tokens: 0,
+    tool_call_count: 0,
+  },
+  category_chart: [],
+  tool_chart: [],
+};
+
 
 function toNumber(v: unknown): number {
   const parsed = Number(v);
@@ -134,12 +176,13 @@ function formatTimeIST(value?: string): string {
   }).format(d);
 }
 
-type UsageRange = 'today' | '7d' | '30d' | 'all';
+type UsageRange = 'today' | '7d' | '30d' | '90d' | 'all';
 
 const USAGE_RANGE_OPTIONS: { value: UsageRange; label: string }[] = [
-  { value: 'today', label: 'Today' },
-  { value: '7d', label: '7 days' },
+  { value: 'today', label: 'Daily' },
+  { value: '7d', label: 'Weekly' },
   { value: '30d', label: '30 days' },
+  { value: '90d', label: '90 days' },
   { value: 'all', label: 'All time' },
 ];
 
@@ -162,7 +205,7 @@ function rowMatchesUsageRange(row: TokenMeterResponse, range: UsageRange, todayK
   if (Number.isNaN(d.getTime())) return false;
   const rowKey = formatDateKeyIST(d);
   if (range === 'today') return rowKey === todayKey;
-  const span = range === '7d' ? 7 : 30;
+  const span = range === '7d' ? 7 : range === '90d' ? 90 : 30;
   const minKey = minDateKeyInclusiveRangeIST(todayKey, span);
   return rowKey >= minKey && rowKey <= todayKey;
 }
@@ -172,6 +215,7 @@ function rangeSubtitle(range: UsageRange): string {
     case 'today': return 'Daily token usage (IST)';
     case '7d':    return 'Token usage in the last 7 days (IST)';
     case '30d':   return 'Token usage in the last 30 days (IST)';
+    case '90d':   return 'Token usage in the last 90 days (IST)';
     case 'all':   return 'All token usage on record (IST)';
   }
 }
@@ -181,6 +225,7 @@ function rangeEmpty(range: UsageRange): string {
     case 'today': return 'Token records for today will appear here as actions execute.';
     case '7d':    return 'No token usage in the last 7 days for this account.';
     case '30d':   return 'No token usage in the last 30 days for this account.';
+    case '90d':   return 'No token usage in the last 90 days for this account.';
     case 'all':   return 'No token usage records on file for this account.';
   }
 }
@@ -190,15 +235,48 @@ function rangeTableCaption(range: UsageRange): string {
     case 'today': return 'today';
     case '7d':    return 'last 7 days';
     case '30d':   return 'last 30 days';
+    case '90d':   return 'last 90 days';
     case 'all':   return 'all records';
   }
+}
+
+function displayCategoryName(name: string): string {
+  return name
+    .split(/[_\s-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function displayToolName(name: string): string {
+  return formatMcpAegisToolDisplayName(name) || name || 'unknown';
+}
+
+function toAnalyticsPieData(
+  items: TokenUsageChartItem[],
+  labelForName: (name: string) => string,
+  limit = 8,
+): AnalyticsPieSlice[] {
+  return [...items]
+    .filter((item) => item.total_tokens > 0)
+    .sort((a, b) => b.total_tokens - a.total_tokens)
+    .slice(0, limit)
+    .map((item) => ({
+      name: labelForName(item.name),
+      value: item.total_tokens,
+      input: item.input_tokens,
+      output: item.output_tokens,
+      calls: item.tool_call_count,
+    }));
 }
 
 export default function TokenSpenditurePage() {
   const { user, isLoading: userLoading } = useUser();
   const reduce = useReducedMotion();
   const [rows, setRows] = useState<TokenMeterResponse[]>([]);
-  const [usageRange, setUsageRange] = useState<UsageRange>('all');
+  const [analytics, setAnalytics] = useState<TokenAnalyticsResponse>(emptyAnalytics);
+  const [tokenSessions, setTokenSessions] = useState<TokenUsageSessionItem[]>([]);
+  const [usageRange, setUsageRange] = useState<UsageRange>('today');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -206,26 +284,42 @@ export default function TokenSpenditurePage() {
     if (!user?.id) {
       if (!userLoading) {
         setRows([]);
+        setAnalytics(emptyAnalytics);
+        setTokenSessions([]);
         setLoading(false);
       }
       return;
     }
     setLoading(true);
     try {
-      const items = await api.getUserTokenUsageAll(user.id);
+      const [items, tokenAnalytics, sessions] = await Promise.all([
+        api.getUserTokenUsageAll(user.id),
+        api.getTokenUsageAnalytics(user.id, {
+          date_range: usageRange,
+          allocation: 'both',
+        }),
+        api.getTokenUsageSessions(user.id, {
+          date_range: usageRange,
+          limit: 500,
+        }),
+      ]);
       setRows(Array.isArray(items) ? items : []);
+      setAnalytics(tokenAnalytics);
+      setTokenSessions(Array.isArray(sessions) ? sessions : []);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load token usage');
     } finally {
       setLoading(false);
     }
-  }, [user?.id, userLoading]);
+  }, [user?.id, userLoading, usageRange]);
 
   useEffect(() => {
     if (user?.id) fetchData();
     else if (!userLoading) {
       setRows([]);
+      setAnalytics(emptyAnalytics);
+      setTokenSessions([]);
       setLoading(false);
     }
   }, [user?.id, userLoading, fetchData]);
@@ -242,11 +336,27 @@ export default function TokenSpenditurePage() {
     const input = displayRows.reduce((acc, row) => acc + toNumber(row.input_token), 0);
     const output = displayRows.reduce((acc, row) => acc + toNumber(row.output_token), 0);
     const total = input + output;
-    const sessions = new Set(displayRows.map((row) => row.session_id)).size;
+    const sessions = tokenSessions.length || new Set(displayRows.map((row) => row.session_id)).size;
     return { input, output, total, sessions, count: displayRows.length };
-  }, [displayRows]);
+  }, [displayRows, tokenSessions.length]);
 
   const sessionData = useMemo<SessionBucket[]>(() => {
+    if (tokenSessions.length > 0) {
+      return [...tokenSessions]
+        .sort((a, b) => {
+          const aTs = a.first_seen_at ? parseApiUtcTimestamp(a.first_seen_at).getTime() : Number.MAX_SAFE_INTEGER;
+          const bTs = b.first_seen_at ? parseApiUtcTimestamp(b.first_seen_at).getTime() : Number.MAX_SAFE_INTEGER;
+          return aTs - bTs;
+        })
+        .map((session, i) => ({
+          label: session.session_id === 'unknown' ? 'unknown' : `S${i + 1}`,
+          session: session.session_id || 'unknown',
+          input: toNumber(session.input_tokens),
+          output: toNumber(session.output_tokens),
+          total: toNumber(session.total_tokens),
+        }));
+    }
+
     type WithTs = SessionBucket & { firstTs: number };
     const map = new Map<string, WithTs>();
     for (const row of displayRows) {
@@ -282,7 +392,7 @@ export default function TokenSpenditurePage() {
         // Chronological ordinal: oldest session is S1.
         label: rest.session === 'unknown' ? 'unknown' : `S${i + 1}`,
       }));
-  }, [displayRows]);
+  }, [displayRows, tokenSessions]);
 
   const pieData = useMemo(
     () => [
@@ -290,6 +400,16 @@ export default function TokenSpenditurePage() {
       { name: 'Output', value: summary.output },
     ],
     [summary.input, summary.output],
+  );
+
+  const connectorPieData = useMemo(
+    () => toAnalyticsPieData(analytics.category_chart, displayCategoryName),
+    [analytics.category_chart],
+  );
+
+  const toolPieData = useMemo(
+    () => toAnalyticsPieData(analytics.tool_chart, displayToolName),
+    [analytics.tool_chart],
   );
 
   // session_id → friendly ordinal label ("S1", "S2", …). Same labels
@@ -319,7 +439,7 @@ export default function TokenSpenditurePage() {
   if (userLoading || loading) {
     return (
       <>
-        <Topbar title="Token Spenditure" subtitle={rangeSubtitle(usageRange)} showDateRange />
+        <Topbar title="Analytics" subtitle={rangeSubtitle(usageRange)} showDateRange />
         <div className="mx-auto max-w-[1320px] 2xl:max-w-[1480px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
           <TokenSpendSkeleton />
         </div>
@@ -330,7 +450,7 @@ export default function TokenSpenditurePage() {
   return (
     <>
       <Topbar
-        title="Token Spenditure"
+        title="Analytics"
         subtitle={rangeSubtitle(usageRange)}
         lastUpdated={lastUpdated}
         onRefresh={fetchData}
@@ -432,6 +552,26 @@ export default function TokenSpenditurePage() {
           buckets={sessionAegisComparison}
           reduce={!!reduce}
         />
+
+        <motion.div
+          className="mb-6 grid gap-6 xl:grid-cols-2"
+          initial={reduce ? false : { opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: DUR.slow, ease: EASE.out, delay: 0.24 }}
+        >
+          <AnalyticsPieCard
+            title="Connector usage"
+            subtitle="Token share by analytics category"
+            data={connectorPieData}
+            empty="No connector-specific token usage in this range."
+          />
+          <AnalyticsPieCard
+            title="Tool usage"
+            subtitle="Top tools by total tokens"
+            data={toolPieData}
+            empty="No tool-specific token usage in this range."
+          />
+        </motion.div>
 
         {displayRows.length === 0 ? (
           <div className="overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
@@ -946,6 +1086,131 @@ function Legend({ label, color }: { label: string; color: string }) {
       />
       <span className="text-[var(--neutral-sub-600)]">{label}</span>
     </span>
+  );
+}
+
+function AnalyticsPieCard({
+  title,
+  subtitle,
+  data,
+  empty,
+}: {
+  title: string;
+  subtitle: string;
+  data: AnalyticsPieSlice[];
+  empty: string;
+}) {
+  const total = data.reduce((sum, item) => sum + item.value, 0);
+
+  return (
+    <div className="overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
+      <div className="flex items-center justify-between gap-3 border-b border-[var(--stroke-soft-200)] px-4 py-3.5">
+        <div>
+          <h2 className="truncate text-[13.5px] font-semibold tracking-[-0.01em] text-[var(--neutral-strong-950)]">
+            {title}
+          </h2>
+          <p className="mt-0.5 text-[11.5px] text-[var(--neutral-soft-400)]">
+            {subtitle}
+          </p>
+        </div>
+        <span className="inline-flex h-[18px] items-center justify-center rounded-[5px] bg-[var(--neutral-weak-50)] px-[6px] text-[10.5px] font-bold tabular-nums text-[var(--neutral-sub-600)]">
+          {data.length}
+        </span>
+      </div>
+
+      {data.length === 0 ? (
+        <div className="flex h-[320px] items-center justify-center px-6 text-center text-[13px] text-[var(--neutral-sub-600)]">
+          {empty}
+        </div>
+      ) : (
+        <div className="grid gap-4 p-4 lg:grid-cols-[minmax(220px,280px)_1fr] lg:items-center">
+          <div className="relative flex h-[280px] items-center justify-center">
+            <ChartContainer
+              config={chartConfig}
+              className="relative aspect-square h-full w-full max-w-[260px]"
+            >
+              <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
+                <ChartTooltip
+                  cursor={false}
+                  content={<ChartTooltipContent hideLabel indicator="dot" />}
+                />
+                <Pie
+                  data={data}
+                  dataKey="value"
+                  nameKey="name"
+                  cx="50%"
+                  cy="50%"
+                  outerRadius="92%"
+                  innerRadius="64%"
+                  paddingAngle={2}
+                  strokeWidth={2}
+                  stroke="var(--white-0)"
+                  animationDuration={900}
+                  animationEasing="ease-out"
+                >
+                  {data.map((entry, idx) => (
+                    <Cell
+                      key={entry.name}
+                      fill={ANALYTICS_PIE_COLORS[idx % ANALYTICS_PIE_COLORS.length]}
+                    />
+                  ))}
+                </Pie>
+              </PieChart>
+              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                <p className="text-[9.5px] font-semibold uppercase tracking-[0.1em] text-[var(--neutral-soft-400)]">
+                  Total
+                </p>
+                <p className="mt-1 text-[22px] font-semibold leading-none tracking-[-0.03em] tabular-nums text-[var(--neutral-strong-950)]">
+                  {total.toLocaleString()}
+                </p>
+                <p className="mt-1 text-[11px] text-[var(--neutral-soft-400)]">
+                  tokens
+                </p>
+              </div>
+            </ChartContainer>
+          </div>
+
+          <div className="space-y-2">
+            {data.map((item, idx) => {
+              const pct = total > 0 ? Math.round((item.value / total) * 100) : 0;
+              return (
+                <div
+                  key={item.name}
+                  className="flex items-center justify-between gap-3 rounded-[9px] border border-[var(--stroke-soft-200)] px-3 py-2"
+                >
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="h-2 w-2 shrink-0 rounded-full"
+                        style={{
+                          backgroundColor:
+                            ANALYTICS_PIE_COLORS[idx % ANALYTICS_PIE_COLORS.length],
+                        }}
+                        aria-hidden
+                      />
+                      <p className="truncate text-[12.5px] font-semibold text-[var(--neutral-strong-950)]">
+                        {item.name}
+                      </p>
+                    </div>
+                    <p className="mt-0.5 text-[11px] text-[var(--neutral-soft-400)]">
+                      {item.calls.toLocaleString()} calls · {pct}% of tokens
+                    </p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="text-[12.5px] font-semibold tabular-nums text-[var(--neutral-strong-950)]">
+                      {item.value.toLocaleString()}
+                    </p>
+                    <p className="text-[10.5px] tabular-nums text-[var(--neutral-soft-400)]">
+                      {item.input.toLocaleString()} in / {item.output.toLocaleString()} out
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -154,7 +154,7 @@ export function CommandPalette() {
       { label: 'Audit Trail', href: '/dashboard/audit', icon: FileText, keywords: ['events', 'log', 'history'] },
       { label: 'Freeze Windows', href: '/dashboard/freeze-window', icon: Clock, keywords: ['schedule', 'pause'] },
       { label: 'Connectors', href: '/dashboard/connectors', icon: Boxes, keywords: ['integrations', 'catalog', 'slack', 'linear', 'jira', 'terraform', 'postgres', 'roadmap'] },
-      { label: 'Token Spenditure', href: '/dashboard/token-spenditure', icon: Coins, keywords: ['usage', 'cost', 'billing'] },
+      { label: 'Analytics', href: '/dashboard/token-spenditure', icon: Coins, keywords: ['usage', 'cost', 'billing', 'token spenditure', 'token spend'] },
       { label: 'Memory', href: '/dashboard/memory', icon: BrainCircuit, keywords: ['context', 'remember', 'agent'] },
       { label: 'Prompts', href: '/dashboard/prompts', icon: ScrollText, keywords: ['instructions', 'daily', 'reusable', 'agent'] },
       { label: 'Connect agent', href: '/dashboard/rooms', icon: Plug, keywords: ['cursor', 'vscode', 'claude code', 'mcp', 'connect', 'integration', 'integrations'] },

@@ -23,7 +23,10 @@ import type {
   RoomSummary,
   Session,
   SessionAction,
+  TokenAnalyticsDateRange,
+  TokenAnalyticsResponse,
   TokenMeterResponse,
+  TokenUsageSessionItem,
 } from './types';
 
 // ── deterministic PRNG so render is stable across re-mounts ────────────────
@@ -623,9 +626,210 @@ const TOKEN_METER: TokenMeterResponse[] = RUNS.slice(0, 60).map((r, i) => ({
   input_token: Math.floor(200 + rand() * 4500),
   output_token: Math.floor(100 + rand() * 2500),
   session_id: r.session_id,
+  tool_name: r.tool_name,
   timestamp: r.timestamp,
   created_at: r.timestamp,
 }));
+
+const CORE_TOKEN_CATEGORIES = ['github', 'postgres', 'mongodb', 'linear', 'terraform', 'jira'];
+
+function previewTokenCategory(toolName: string): string {
+  const tool = toolName.trim().toLowerCase();
+  if (!tool) return 'meta';
+  if (/memory/.test(tool)) return 'memory';
+  if (/postgres|psql|sql|query|migration|schema|table/.test(tool)) return 'postgres';
+  if (/mongo/.test(tool)) return 'mongodb';
+  if (/linear/.test(tool)) return 'linear';
+  if (/terraform|(^|_)tf(_|$)/.test(tool)) return 'terraform';
+  if (/jira/.test(tool)) return 'jira';
+  if (/meta|aegis|policy/.test(tool)) return 'meta';
+  return 'github';
+}
+
+function matchesPreviewTokenRange(
+  row: TokenMeterResponse,
+  dateRange: TokenAnalyticsDateRange,
+  startDate?: string,
+  endDate?: string,
+): boolean {
+  if (dateRange === 'all') return true;
+
+  const source = row.timestamp ?? row.created_at;
+  if (!source) return false;
+
+  const value = new Date(source).getTime();
+  if (!Number.isFinite(value)) return false;
+
+  if (dateRange === 'custom') {
+    const start = startDate ? new Date(startDate).getTime() : NaN;
+    const end = endDate ? new Date(endDate).getTime() : NaN;
+    if (Number.isFinite(start) && value < start) return false;
+    if (Number.isFinite(end) && value > end) return false;
+    return true;
+  }
+
+  const now = new Date(NOW);
+  const start = new Date(now);
+  start.setHours(0, 0, 0, 0);
+
+  if (dateRange === 'today') {
+    const end = new Date(start);
+    end.setHours(23, 59, 59, 999);
+    return value >= start.getTime() && value <= end.getTime();
+  }
+
+  const span = dateRange === '7d' ? 7 : dateRange === '90d' ? 90 : 30;
+  start.setDate(start.getDate() - (span - 1));
+  return value >= start.getTime() && value <= now.getTime();
+}
+
+function buildPreviewTokenAnalytics(
+  userId = 'preview-user',
+  filters: {
+    date_range?: TokenAnalyticsDateRange;
+    start_date?: string;
+    end_date?: string;
+  } = {},
+): TokenAnalyticsResponse {
+  const dateRange = filters.date_range ?? '30d';
+  const categoryMap = new Map<string, TokenAnalyticsResponse['category_chart'][number]>();
+  const toolMap = new Map<string, TokenAnalyticsResponse['tool_chart'][number]>();
+
+  for (const category of CORE_TOKEN_CATEGORIES) {
+    categoryMap.set(category, {
+      name: category,
+      input_tokens: 0,
+      output_tokens: 0,
+      total_tokens: 0,
+      tool_call_count: 0,
+    });
+  }
+
+  const rows = TOKEN_METER.filter((row) => {
+    const toolName = row.tool_name?.trim();
+    return (
+      !!toolName &&
+      matchesPreviewTokenRange(row, dateRange, filters.start_date, filters.end_date)
+    );
+  });
+
+  for (const row of rows) {
+    const toolName = row.tool_name?.trim() ?? 'unknown';
+    const category = previewTokenCategory(toolName);
+    const input = row.input_token;
+    const output = row.output_token;
+
+    const update = (item: TokenAnalyticsResponse['tool_chart'][number]) => {
+      item.input_tokens += input;
+      item.output_tokens += output;
+      item.total_tokens += input + output;
+      item.tool_call_count += 1;
+    };
+
+    if (!categoryMap.has(category)) {
+      categoryMap.set(category, {
+        name: category,
+        input_tokens: 0,
+        output_tokens: 0,
+        total_tokens: 0,
+        tool_call_count: 0,
+      });
+    }
+    update(categoryMap.get(category)!);
+
+    if (!toolMap.has(toolName)) {
+      toolMap.set(toolName, {
+        name: toolName,
+        input_tokens: 0,
+        output_tokens: 0,
+        total_tokens: 0,
+        tool_call_count: 0,
+      });
+    }
+    update(toolMap.get(toolName)!);
+  }
+
+  const summary = Array.from(toolMap.values()).reduce(
+    (acc, item) => ({
+      input_tokens: acc.input_tokens + item.input_tokens,
+      output_tokens: acc.output_tokens + item.output_tokens,
+      total_tokens: acc.total_tokens + item.total_tokens,
+      tool_call_count: acc.tool_call_count + item.tool_call_count,
+    }),
+    { input_tokens: 0, output_tokens: 0, total_tokens: 0, tool_call_count: 0 },
+  );
+
+  return {
+    user_id: userId,
+    date_range: dateRange,
+    start_date: filters.start_date ?? null,
+    end_date: filters.end_date ?? null,
+    allocation: 'both',
+    summary,
+    category_chart: Array.from(categoryMap.values()),
+    tool_chart: Array.from(toolMap.values()).sort((a, b) => b.total_tokens - a.total_tokens),
+  };
+}
+
+function buildPreviewTokenUsageSessions(
+  filters: {
+    date_range?: TokenAnalyticsDateRange;
+    start_date?: string;
+    end_date?: string;
+    limit?: number;
+  } = {},
+): TokenUsageSessionItem[] {
+  const dateRange = filters.date_range ?? '30d';
+  const limit = Math.min(Math.max(filters.limit ?? 50, 1), 500);
+  const map = new Map<string, TokenUsageSessionItem>();
+
+  const rows = TOKEN_METER.filter((row) => {
+    const toolName = row.tool_name?.trim();
+    return (
+      !!toolName &&
+      matchesPreviewTokenRange(row, dateRange, filters.start_date, filters.end_date)
+    );
+  });
+
+  for (const row of rows) {
+    const sessionId = row.session_id || 'unknown';
+    const timestamp = row.timestamp ?? row.created_at ?? null;
+    if (!map.has(sessionId)) {
+      map.set(sessionId, {
+        session_id: sessionId,
+        input_tokens: 0,
+        output_tokens: 0,
+        total_tokens: 0,
+        tool_call_count: 0,
+        first_seen_at: timestamp,
+        last_seen_at: timestamp,
+      });
+    }
+
+    const item = map.get(sessionId)!;
+    item.input_tokens += row.input_token;
+    item.output_tokens += row.output_token;
+    item.total_tokens += row.input_token + row.output_token;
+    item.tool_call_count += 1;
+
+    if (timestamp) {
+      if (!item.first_seen_at || new Date(timestamp).getTime() < new Date(item.first_seen_at).getTime()) {
+        item.first_seen_at = timestamp;
+      }
+      if (!item.last_seen_at || new Date(timestamp).getTime() > new Date(item.last_seen_at).getTime()) {
+        item.last_seen_at = timestamp;
+      }
+    }
+  }
+
+  return Array.from(map.values())
+    .sort((a, b) => {
+      const bTime = b.last_seen_at ? new Date(b.last_seen_at).getTime() : 0;
+      const aTime = a.last_seen_at ? new Date(a.last_seen_at).getTime() : 0;
+      return bTime - aTime;
+    })
+    .slice(0, limit);
+}
 
 // Rooms
 const PREVIEW_ROOMS: RoomSummary[] = [
@@ -1033,6 +1237,12 @@ export function installPreviewApi() {
   });
 
   api.getUserTokenUsageAll = async () => [...TOKEN_METER];
+
+  api.getTokenUsageAnalytics = async (userId, filters = {}) =>
+    buildPreviewTokenAnalytics(userId, filters);
+
+  api.getTokenUsageSessions = async (_userId, filters = {}) =>
+    buildPreviewTokenUsageSessions(filters);
 
   api.getRepos = async () => ({ repos: PREVIEW_REPOS });
   api.getSlackBotStatus = async () => ({ connected: false });
