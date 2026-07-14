@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Token Spenditure",
+  title: "Analytics",
   description:
-    "Track input and output token usage across agents and sessions. Compare costs with and without Aegis governance.",
+    "Track token usage analytics across connectors, tools, agents, and sessions. Compare costs with and without Aegis governance.",
 };
 
 export default function TokenSpenditureLayout({

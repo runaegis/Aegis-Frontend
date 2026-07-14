@@ -22,7 +22,7 @@ interface TopbarProps {
   /**
    * Render the date-range picker. Default false. Opt in only on pages
    * where time-windowed data is the primary surface (Dashboard, Runs,
-   * Sessions, Token Spenditure). Configuration pages (Policies,
+   * Sessions, Analytics). Configuration pages (Policies,
    * Rooms, Connectors, Settings, Freeze) hide it because there's no
    * time-bound data to filter.
    */

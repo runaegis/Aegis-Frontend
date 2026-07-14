@@ -111,7 +111,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: 'Insights',
     items: [
-      { name: 'Token Spenditure', href: '/dashboard/token-spenditure', icon: Coins },
+      { name: 'Analytics', href: '/dashboard/token-spenditure', icon: Coins },
       { name: 'Memory', href: '/dashboard/memory', icon: BrainCircuit },
       { name: 'Prompts', href: '/dashboard/prompts', icon: ScrollText },
     ],
