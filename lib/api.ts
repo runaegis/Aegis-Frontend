@@ -64,6 +64,70 @@ type TokenUsageSessionFilters = {
   limit?: number;
 };
 
+export type WorkspaceAgentStatus = "active" | "removed";
+
+export type WorkspaceFileRef = {
+  file_id?: string;
+  url: string;
+  filename: string;
+  content_type?: string | null;
+  size: number;
+  uploader_member_id?: string | null;
+};
+
+export type WorkspaceAgent = {
+  id: string;
+  workspace_id: string;
+  user_id: string;
+  handle: string;
+  role_label: string | null;
+  status: WorkspaceAgentStatus;
+  created_at: string;
+};
+
+export type WorkspaceMessage = {
+  id: string;
+  workspace_id: string;
+  sender_member_id: string;
+  message_text: string | null;
+  mentioned_member_ids: string[];
+  file_refs: WorkspaceFileRef[];
+  created_at: string;
+};
+
+export type WorkspaceRecord = {
+  id: string;
+  owner_user_id: string;
+  title: string;
+  task: string | null;
+  created_at: string;
+};
+
+export type WorkspaceSummary = WorkspaceRecord & {
+  agent_count: number;
+  message_count: number;
+};
+
+export type WorkspaceDetail = {
+  workspace: WorkspaceRecord;
+  agents: WorkspaceAgent[];
+  messages: WorkspaceMessage[];
+};
+
+export type WorkspaceAgentKeyResponse = {
+  agent: WorkspaceAgent;
+  agent_key: string;
+  mcp_config_snippet: {
+    aegis: {
+      url: string;
+      headers: {
+        Authorization: string;
+        "X-Agent-Key": string;
+      };
+    };
+  };
+};
+
 function getAPIBase(): string {
   let url = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
   if (!url.startsWith("http://") && !url.startsWith("https://")) {
@@ -1877,5 +1941,172 @@ export const api = {
       throw new Error(`Failed to update prompt: ${await readErrorMessage(res)}`);
     }
     return res.json();
+  },
+
+  getWorkspaces: async (): Promise<WorkspaceSummary[]> => {
+    const res = await apiFetch(`${API_BASE}/api/workspaces`);
+    if (!res.ok) {
+      throw new Error(`Failed to load workspaces: ${await readErrorMessage(res)}`);
+    }
+    const data = await res.json();
+    return Array.isArray(data)
+      ? data.map((row: unknown) => parseRow(row) as WorkspaceSummary)
+      : [];
+  },
+
+  createWorkspace: async (payload: {
+    title: string;
+    task?: string | null;
+  }): Promise<WorkspaceDetail> => {
+    const res = await apiFetch(`${API_BASE}/api/workspaces`, {
+      method: "POST",
+      headers: getJsonHeaders(),
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to create workspace: ${await readErrorMessage(res)}`);
+    }
+    return res.json();
+  },
+
+  getWorkspace: async (workspaceId: string): Promise<WorkspaceDetail> => {
+    const res = await apiFetch(
+      `${API_BASE}/api/workspaces/${encodeURIComponent(workspaceId)}`,
+    );
+    if (!res.ok) {
+      throw new Error(`Failed to load workspace: ${await readErrorMessage(res)}`);
+    }
+    return res.json();
+  },
+
+  updateWorkspace: async (
+    workspaceId: string,
+    payload: { title?: string; task?: string | null },
+  ): Promise<WorkspaceRecord> => {
+    const res = await apiFetch(
+      `${API_BASE}/api/workspaces/${encodeURIComponent(workspaceId)}`,
+      {
+        method: "PATCH",
+        headers: getJsonHeaders(),
+        body: JSON.stringify(payload),
+      },
+    );
+    if (!res.ok) {
+      throw new Error(`Failed to update workspace: ${await readErrorMessage(res)}`);
+    }
+    return parseRow(await res.json()) as WorkspaceRecord;
+  },
+
+  createWorkspaceAgent: async (
+    workspaceId: string,
+    payload: { handle: string; role_label?: string | null },
+  ): Promise<WorkspaceAgentKeyResponse> => {
+    const res = await apiFetch(
+      `${API_BASE}/api/workspaces/${encodeURIComponent(workspaceId)}/agents`,
+      {
+        method: "POST",
+        headers: getJsonHeaders(),
+        body: JSON.stringify(payload),
+      },
+    );
+    if (!res.ok) {
+      throw new Error(`Failed to create agent: ${await readErrorMessage(res)}`);
+    }
+    return res.json();
+  },
+
+  updateWorkspaceAgent: async (
+    workspaceId: string,
+    agentId: string,
+    payload: {
+      handle?: string;
+      role_label?: string | null;
+      status?: WorkspaceAgentStatus;
+    },
+  ): Promise<WorkspaceAgent> => {
+    const res = await apiFetch(
+      `${API_BASE}/api/workspaces/${encodeURIComponent(workspaceId)}/agents/${encodeURIComponent(agentId)}`,
+      {
+        method: "PATCH",
+        headers: getJsonHeaders(),
+        body: JSON.stringify(payload),
+      },
+    );
+    if (!res.ok) {
+      throw new Error(`Failed to update agent: ${await readErrorMessage(res)}`);
+    }
+    return parseRow(await res.json()) as WorkspaceAgent;
+  },
+
+  rotateWorkspaceAgentKey: async (
+    workspaceId: string,
+    agentId: string,
+  ): Promise<WorkspaceAgentKeyResponse> => {
+    const res = await apiFetch(
+      `${API_BASE}/api/workspaces/${encodeURIComponent(workspaceId)}/agents/${encodeURIComponent(agentId)}/key`,
+      {
+        method: "POST",
+        headers: getJsonHeaders(),
+      },
+    );
+    if (!res.ok) {
+      throw new Error(`Failed to generate agent key: ${await readErrorMessage(res)}`);
+    }
+    return res.json();
+  },
+
+  revokeWorkspaceAgent: async (
+    workspaceId: string,
+    agentId: string,
+  ): Promise<WorkspaceAgent> => {
+    const res = await apiFetch(
+      `${API_BASE}/api/workspaces/${encodeURIComponent(workspaceId)}/agents/${encodeURIComponent(agentId)}/revoke`,
+      {
+        method: "POST",
+        headers: getJsonHeaders(),
+      },
+    );
+    if (!res.ok) {
+      throw new Error(`Failed to remove agent: ${await readErrorMessage(res)}`);
+    }
+    return parseRow(await res.json()) as WorkspaceAgent;
+  },
+
+  revokeWorkspaceAgentKey: async (
+    workspaceId: string,
+    agentId: string,
+  ): Promise<{ detail: string; agent: WorkspaceAgent }> => {
+    const res = await apiFetch(
+      `${API_BASE}/api/workspaces/${encodeURIComponent(workspaceId)}/agents/${encodeURIComponent(agentId)}/key`,
+      {
+        method: "DELETE",
+      },
+    );
+    if (!res.ok) {
+      throw new Error(`Failed to revoke agent key: ${await readErrorMessage(res)}`);
+    }
+    return res.json();
+  },
+
+  createWorkspaceMessage: async (
+    workspaceId: string,
+    payload: {
+      sender_member_id: string;
+      message_text?: string | null;
+      file_refs?: WorkspaceFileRef[];
+    },
+  ): Promise<WorkspaceMessage> => {
+    const res = await apiFetch(
+      `${API_BASE}/api/workspaces/${encodeURIComponent(workspaceId)}/messages`,
+      {
+        method: "POST",
+        headers: getJsonHeaders(),
+        body: JSON.stringify(payload),
+      },
+    );
+    if (!res.ok) {
+      throw new Error(`Failed to post message: ${await readErrorMessage(res)}`);
+    }
+    return parseRow(await res.json()) as WorkspaceMessage;
   },
 };
