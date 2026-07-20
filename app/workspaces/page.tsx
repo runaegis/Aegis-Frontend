@@ -18,6 +18,7 @@ import {
   Server,
   Shield,
   ShieldCheck,
+  Trash2,
   Users,
   type LucideIcon,
 } from 'lucide-react';
@@ -26,7 +27,12 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card, CardBody, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Input, Select } from '@/components/ui/Input';
-import { api, type WorkspaceAgentKeyResponse } from '@/lib/api';
+import {
+  api,
+  type WorkspaceAgentKeyResponse,
+  type WorkspacePointerStatus,
+  type WorkspaceTaskPointer,
+} from '@/lib/api';
 import { cn } from '@/lib/utils';
 
 type AgentStatus = 'active' | 'removed';
@@ -62,8 +68,10 @@ type AgentWorkspace = {
   task: string;
   agents: AgentMembership[];
   messages: WorkspaceMessage[];
+  pointers: WorkspaceTaskPointer[];
   agent_count?: number;
   message_count?: number;
+  pointer_count?: number;
   created_at: string;
 };
 
@@ -73,6 +81,7 @@ type Mention = {
 };
 
 const STATUS_OPTIONS: AgentStatus[] = ['active', 'removed'];
+const POINTER_STATUSES: WorkspacePointerStatus[] = ['pending', 'review', 'done'];
 
 type AgentVisual = {
   Icon: LucideIcon;
@@ -198,6 +207,12 @@ function renderTextWithMentions(text: string, agents: AgentMembership[]) {
   });
 }
 
+function pointerStatusLabel(status: WorkspacePointerStatus) {
+  if (status === 'pending') return 'Pending';
+  if (status === 'review') return 'Review';
+  return 'Done';
+}
+
 export default function WorkspacesPage() {
   const [workspaces, setWorkspaces] = useState<AgentWorkspace[]>([]);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState('');
@@ -213,6 +228,8 @@ export default function WorkspacesPage() {
   const [showInspect, setShowInspect] = useState(false);
   const [query, setQuery] = useState('');
   const [messageDraft, setMessageDraft] = useState('');
+  const [pointerTitle, setPointerTitle] = useState('');
+  const [pointerDescription, setPointerDescription] = useState('');
 
   const activeWorkspace =
     workspaces.find((workspace) => workspace.id === activeWorkspaceId) ?? workspaces[0];
@@ -230,8 +247,10 @@ export default function WorkspacesPage() {
                 task: detail.workspace.task ?? '',
                 agents: detail.agents,
                 messages: detail.messages,
+                pointers: detail.pointers ?? [],
                 agent_count: detail.agents.length,
                 message_count: detail.messages.length,
+                pointer_count: detail.pointers?.length ?? 0,
                 created_at: detail.workspace.created_at,
               }
             : workspace,
@@ -255,8 +274,10 @@ export default function WorkspacesPage() {
         task: workspace.task ?? '',
         agents: [],
         messages: [],
+        pointers: [],
         agent_count: workspace.agent_count,
         message_count: workspace.message_count,
+        pointer_count: workspace.pointer_count,
         created_at: workspace.created_at,
       }));
       setWorkspaces(nextWorkspaces);
@@ -334,6 +355,117 @@ export default function WorkspacesPage() {
           : workspace,
       ),
     );
+  };
+
+  const mergePointer = (pointer: WorkspaceTaskPointer) => {
+    if (!activeWorkspace) return;
+    setWorkspaces((current) =>
+      current.map((workspace) =>
+        workspace.id === activeWorkspace.id
+          ? {
+              ...workspace,
+              pointers: workspace.pointers
+                .map((item) => (item.id === pointer.id ? pointer : item))
+                .sort((a, b) => a.sort_order - b.sort_order || a.created_at.localeCompare(b.created_at)),
+            }
+          : workspace,
+      ),
+    );
+  };
+
+  const updatePointerLocal = (
+    pointerId: string,
+    patch: Partial<Pick<WorkspaceTaskPointer, 'title' | 'description' | 'status' | 'sort_order'>>,
+  ) => {
+    if (!activeWorkspace) return;
+    setWorkspaces((current) =>
+      current.map((workspace) =>
+        workspace.id === activeWorkspace.id
+          ? {
+              ...workspace,
+              pointers: workspace.pointers.map((pointer) =>
+                pointer.id === pointerId ? { ...pointer, ...patch } : pointer,
+              ),
+            }
+          : workspace,
+      ),
+    );
+  };
+
+  const createPointer = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!activeWorkspace) return;
+
+    const title = pointerTitle.trim();
+    if (!title) return;
+
+    void (async () => {
+      try {
+        const pointer = await api.createWorkspacePointer(activeWorkspace.id, {
+          title,
+          description: pointerDescription.trim() || null,
+          status: 'pending',
+          sort_order: activeWorkspace.pointers.length,
+          created_by_member_id: selectedMessageSender?.id ?? null,
+        });
+        setWorkspaces((current) =>
+          current.map((workspace) =>
+            workspace.id === activeWorkspace.id
+              ? {
+                  ...workspace,
+                  pointers: [...workspace.pointers, pointer],
+                  pointer_count: (workspace.pointer_count ?? workspace.pointers.length) + 1,
+                }
+              : workspace,
+          ),
+        );
+        setPointerTitle('');
+        setPointerDescription('');
+        setError(null);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      }
+    })();
+  };
+
+  const updatePointer = async (
+    pointer: WorkspaceTaskPointer,
+    patch: {
+      title?: string;
+      description?: string | null;
+      status?: WorkspacePointerStatus;
+      sort_order?: number;
+    },
+  ) => {
+    if (!activeWorkspace) return;
+    try {
+      const updated = await api.updateWorkspacePointer(activeWorkspace.id, pointer.id, patch);
+      mergePointer(updated);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const deletePointer = async (pointer: WorkspaceTaskPointer) => {
+    if (!activeWorkspace) return;
+    try {
+      await api.deleteWorkspacePointer(activeWorkspace.id, pointer.id);
+      setWorkspaces((current) =>
+        current.map((workspace) =>
+          workspace.id === activeWorkspace.id
+            ? {
+                ...workspace,
+                pointers: workspace.pointers.filter((item) => item.id !== pointer.id),
+                pointer_count: Math.max(0, (workspace.pointer_count ?? workspace.pointers.length) - 1),
+              }
+            : workspace,
+        ),
+      );
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
   };
 
   const saveActiveWorkspace = async () => {
@@ -462,8 +594,10 @@ export default function WorkspacesPage() {
           task: detail.workspace.task ?? '',
           agents: detail.agents,
           messages: detail.messages,
+          pointers: detail.pointers ?? [],
           agent_count: detail.agents.length,
           message_count: detail.messages.length,
+          pointer_count: detail.pointers?.length ?? 0,
           created_at: detail.workspace.created_at,
         };
         setWorkspaces((current) => [workspace, ...current]);
@@ -710,6 +844,9 @@ export default function WorkspacesPage() {
                           {workspace.message_count ?? workspace.messages.length} chats · {workspaceMentions.length} mentions
                         </span>
                       </div>
+                      <div className="mt-1 text-[10.5px] text-[var(--neutral-soft-400)]">
+                        {workspace.pointer_count ?? workspace.pointers.length} task pointers
+                      </div>
                     </button>
                   );
                 })}
@@ -744,6 +881,132 @@ export default function WorkspacesPage() {
                   Create workspace
                 </Button>
               </form>
+            </CardBody>
+          </Card>
+
+          <Card className="border-transparent bg-transparent shadow-none">
+            <CardHeader className="border-0 px-1 pb-2 pt-0">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--neutral-soft-400)]">
+                  Task pointers
+                </p>
+                <CardTitle className="mt-1">Goal checklist</CardTitle>
+              </div>
+              <Badge tone="neutral">{activeWorkspace.pointers.length}</Badge>
+            </CardHeader>
+            <CardBody className="space-y-3 px-1 pt-0">
+              <form onSubmit={createPointer} className="space-y-2 rounded-[14px] bg-white p-3 shadow-[0_10px_30px_rgba(23,23,23,0.05)] ring-1 ring-[var(--stroke-soft-200)]">
+                <Input
+                  value={pointerTitle}
+                  onChange={(event) => setPointerTitle(event.target.value)}
+                  placeholder="Add pointer, e.g. Wire frontend"
+                />
+                <textarea
+                  value={pointerDescription}
+                  onChange={(event) => setPointerDescription(event.target.value)}
+                  placeholder="Optional detail..."
+                  className="min-h-[64px] w-full resize-none rounded-[8px] border border-[var(--stroke-sub-300)] bg-white px-3 py-2 text-[12.5px] text-[var(--neutral-strong-950)] placeholder:text-[var(--neutral-soft-400)] hover:border-[var(--neutral-soft-400)] focus:border-[var(--primary-base)] focus:outline-none focus:ring-[3px] focus:ring-[var(--primary-alpha-16)]"
+                />
+                <Button type="submit" variant="primary" size="sm" fullWidth disabled={!pointerTitle.trim()}>
+                  Add pointer
+                </Button>
+              </form>
+
+              <div className="space-y-3">
+                {POINTER_STATUSES.map((status) => {
+                  const pointers = activeWorkspace.pointers
+                    .filter((pointer) => pointer.status === status)
+                    .sort((a, b) => a.sort_order - b.sort_order || a.created_at.localeCompare(b.created_at));
+
+                  return (
+                    <div key={status} className="space-y-1.5">
+                      <div className="flex items-center justify-between px-1">
+                        <p className="text-[10.5px] font-bold uppercase tracking-[0.06em] text-[var(--neutral-soft-400)]">
+                          {pointerStatusLabel(status)}
+                        </p>
+                        <Badge tone="neutral">{pointers.length}</Badge>
+                      </div>
+                      {pointers.length === 0 ? (
+                        <div className="rounded-[12px] border border-dashed border-[var(--stroke-soft-200)] px-3 py-2 text-[11px] text-[var(--neutral-soft-400)]">
+                          No {pointerStatusLabel(status).toLowerCase()} pointers.
+                        </div>
+                      ) : (
+                        pointers.map((pointer) => (
+                          <div
+                            key={pointer.id}
+                            className="rounded-[13px] bg-white p-2.5 shadow-[0_8px_24px_rgba(23,23,23,0.05)] ring-1 ring-[var(--stroke-soft-200)]"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0 flex-1 space-y-1.5">
+                                <input
+                                  value={pointer.title}
+                                  onChange={(event) =>
+                                    updatePointerLocal(pointer.id, { title: event.target.value })
+                                  }
+                                  onBlur={(event) => {
+                                    const title = event.target.value.trim();
+                                    if (title) void updatePointer(pointer, { title });
+                                  }}
+                                  className="w-full rounded-[7px] border border-transparent bg-transparent px-1 py-0.5 text-[12.5px] font-semibold leading-[1.35] text-[var(--neutral-strong-950)] hover:border-[var(--stroke-soft-200)] focus:border-[var(--primary-base)] focus:bg-white focus:outline-none focus:ring-[2px] focus:ring-[var(--primary-alpha-16)]"
+                                />
+                                <textarea
+                                  value={pointer.description ?? ''}
+                                  onChange={(event) =>
+                                    updatePointerLocal(pointer.id, {
+                                      description: event.target.value,
+                                    })
+                                  }
+                                  onBlur={(event) =>
+                                    void updatePointer(pointer, {
+                                      description: event.target.value.trim() || null,
+                                    })
+                                  }
+                                  placeholder="Add detail..."
+                                  className="min-h-[44px] w-full resize-none rounded-[7px] border border-transparent bg-transparent px-1 py-0.5 text-[11.5px] leading-[1.4] text-[var(--neutral-sub-600)] placeholder:text-[var(--neutral-soft-400)] hover:border-[var(--stroke-soft-200)] focus:border-[var(--primary-base)] focus:bg-white focus:outline-none focus:ring-[2px] focus:ring-[var(--primary-alpha-16)]"
+                                />
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => void deletePointer(pointer)}
+                                className="shrink-0 rounded-[7px] p-1 text-[var(--neutral-soft-400)] transition-colors hover:bg-[var(--error-lighter)] hover:text-[var(--error-dark)]"
+                                aria-label="Delete pointer"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                            <div className="mt-2 grid grid-cols-3 gap-1">
+                              {POINTER_STATUSES.map((nextStatus) => (
+                                <button
+                                  key={nextStatus}
+                                  type="button"
+                                  onClick={() =>
+                                    nextStatus !== pointer.status
+                                      ? void updatePointer(pointer, { status: nextStatus })
+                                      : undefined
+                                  }
+                                  className={cn(
+                                    'rounded-[7px] px-1.5 py-1 text-[10.5px] font-bold transition-colors',
+                                    nextStatus === pointer.status
+                                      ? 'bg-[var(--primary-alpha-10)] text-[var(--primary-dark)]'
+                                      : 'bg-[var(--neutral-weak-50)] text-[var(--neutral-soft-400)] hover:text-[var(--neutral-strong-950)]',
+                                  )}
+                                >
+                                  {pointerStatusLabel(nextStatus)}
+                                </button>
+                              ))}
+                            </div>
+                            {showInspect && (
+                              <p className="mt-2 truncate font-mono text-[10px] text-[var(--neutral-soft-400)]">
+                                {pointer.id}
+                              </p>
+                            )}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </CardBody>
           </Card>
         </aside>

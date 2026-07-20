@@ -95,6 +95,21 @@ export type WorkspaceMessage = {
   created_at: string;
 };
 
+export type WorkspacePointerStatus = "pending" | "review" | "done";
+
+export type WorkspaceTaskPointer = {
+  id: string;
+  workspace_id: string;
+  title: string;
+  description: string | null;
+  status: WorkspacePointerStatus;
+  sort_order: number;
+  created_by_member_id: string | null;
+  created_by_user_id: string;
+  created_at: string;
+  updated_at: string;
+};
+
 export type WorkspaceRecord = {
   id: string;
   owner_user_id: string;
@@ -106,12 +121,14 @@ export type WorkspaceRecord = {
 export type WorkspaceSummary = WorkspaceRecord & {
   agent_count: number;
   message_count: number;
+  pointer_count?: number;
 };
 
 export type WorkspaceDetail = {
   workspace: WorkspaceRecord;
   agents: WorkspaceAgent[];
   messages: WorkspaceMessage[];
+  pointers?: WorkspaceTaskPointer[];
 };
 
 export type WorkspaceAgentKeyResponse = {
@@ -2108,5 +2125,87 @@ export const api = {
       throw new Error(`Failed to post message: ${await readErrorMessage(res)}`);
     }
     return parseRow(await res.json()) as WorkspaceMessage;
+  },
+
+  getWorkspacePointers: async (
+    workspaceId: string,
+    status?: WorkspacePointerStatus,
+  ): Promise<WorkspaceTaskPointer[]> => {
+    const url = new URL(
+      `${API_BASE}/api/workspaces/${encodeURIComponent(workspaceId)}/pointers`,
+    );
+    if (status) url.searchParams.set("status", status);
+    const res = await apiFetch(url.toString());
+    if (!res.ok) {
+      throw new Error(`Failed to load task pointers: ${await readErrorMessage(res)}`);
+    }
+    const data = await res.json();
+    return Array.isArray(data)
+      ? data.map((row: unknown) => parseRow(row) as WorkspaceTaskPointer)
+      : [];
+  },
+
+  createWorkspacePointer: async (
+    workspaceId: string,
+    payload: {
+      title: string;
+      description?: string | null;
+      status?: WorkspacePointerStatus;
+      sort_order?: number;
+      created_by_member_id?: string | null;
+    },
+  ): Promise<WorkspaceTaskPointer> => {
+    const res = await apiFetch(
+      `${API_BASE}/api/workspaces/${encodeURIComponent(workspaceId)}/pointers`,
+      {
+        method: "POST",
+        headers: getJsonHeaders(),
+        body: JSON.stringify(payload),
+      },
+    );
+    if (!res.ok) {
+      throw new Error(`Failed to create task pointer: ${await readErrorMessage(res)}`);
+    }
+    return parseRow(await res.json()) as WorkspaceTaskPointer;
+  },
+
+  updateWorkspacePointer: async (
+    workspaceId: string,
+    pointerId: string,
+    payload: {
+      title?: string;
+      description?: string | null;
+      status?: WorkspacePointerStatus;
+      sort_order?: number;
+    },
+  ): Promise<WorkspaceTaskPointer> => {
+    const res = await apiFetch(
+      `${API_BASE}/api/workspaces/${encodeURIComponent(workspaceId)}/pointers/${encodeURIComponent(pointerId)}`,
+      {
+        method: "PATCH",
+        headers: getJsonHeaders(),
+        body: JSON.stringify(payload),
+      },
+    );
+    if (!res.ok) {
+      throw new Error(`Failed to update task pointer: ${await readErrorMessage(res)}`);
+    }
+    return parseRow(await res.json()) as WorkspaceTaskPointer;
+  },
+
+  deleteWorkspacePointer: async (
+    workspaceId: string,
+    pointerId: string,
+  ): Promise<{ detail: string; pointer_id: string }> => {
+    const res = await apiFetch(
+      `${API_BASE}/api/workspaces/${encodeURIComponent(workspaceId)}/pointers/${encodeURIComponent(pointerId)}`,
+      {
+        method: "DELETE",
+      },
+    );
+    if (!res.ok) {
+      throw new Error(`Failed to delete task pointer: ${await readErrorMessage(res)}`);
+    }
+    return res.json();
   },
 };
