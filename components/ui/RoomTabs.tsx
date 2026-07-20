@@ -21,6 +21,7 @@ import { usePathname } from 'next/navigation';
 import {
   Activity,
   History,
+  KeyRound,
   Plug,
   Settings as SettingsIcon,
   Shield,
@@ -49,6 +50,7 @@ const TABS: TabDef[] = [
   { segment: 'activity',  label: 'Activity', icon: History },
   { segment: 'tools',     label: 'Tools',    icon: Shield },
   { segment: 'members',   label: 'Members',  icon: Users },
+  { segment: 'api',       label: 'API',      icon: KeyRound },
   { segment: 'connect',   label: 'Connect',  icon: Plug },
   { segment: 'settings',  label: 'Settings', icon: SettingsIcon },
 ];
