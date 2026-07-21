@@ -21,6 +21,7 @@ import {
   PanelLeftOpen,
   BrainCircuit,
   ScrollText,
+  MessagesSquare,
   type LucideIcon,
 } from 'lucide-react';
 import { useUser } from '@/lib/hooks';
@@ -96,6 +97,7 @@ const NAV_GROUPS: NavGroup[] = [
       { name: 'Runs', href: '/dashboard/runs', icon: Activity },
       { name: 'Sessions', href: '/dashboard/sessions', icon: Layers },
       { name: 'Rooms', href: '/dashboard/rooms', icon: Users },
+      { name: 'Workspaces', href: '/dashboard/workspaces', icon: MessagesSquare },
     ],
   },
   {
