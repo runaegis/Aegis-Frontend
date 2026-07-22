@@ -20,6 +20,7 @@ import type {
   RoomInvite,
   RoomMember,
   RoomSessionAction,
+  RoomSlackRouting,
   RoomSummary,
   Session,
   SessionAction,
@@ -842,6 +843,28 @@ const PREVIEW_ROOM_DETAILS: Record<string, RoomDetails> = Object.fromEntries(
   PREVIEW_ROOMS.map((r) => [r.room_id!, { ...r }]),
 );
 
+// Per-room Slack approval routing (demo). One room is wired to a channel with
+// an approver allowlist; the others are connected but not yet routed, so the
+// UI shows the enable flow. Consumed by api.getRoomSlackRouting shim below.
+const PREVIEW_SLACK_ROUTING: Record<string, RoomSlackRouting> = {
+  room_dash: {
+    room_id: 'room_dash',
+    enabled: true,
+    slack_channel: '#aegis-approvals',
+    slack_channel_id: 'C08AEGIS01',
+    approver_ids: ['U08OWNER01', 'U08LEAD02'],
+    connected_workspace: 'acme-corp',
+    updated_at: new Date(NOW - 3 * ONE_DAY).toISOString(),
+  },
+  room_mcp: {
+    room_id: 'room_mcp',
+    enabled: false,
+    slack_channel: '',
+    approver_ids: [],
+    connected_workspace: 'acme-corp',
+  },
+};
+
 const PREVIEW_MEMBERS: Record<string, RoomMember[]> = {
   room_dash: [
     { id: 'm1', user_id: 'preview-user', username: 'demo',  role: 'OWNER',     joined_at: new Date(NOW - 12 * ONE_DAY).toISOString() },
@@ -1198,6 +1221,37 @@ export function installPreviewApi() {
       a.approved_at = new Date().toISOString();
     }
     return { success: true };
+  };
+
+  // Per-room Slack approval routing. Default: connected workspace but not yet
+  // routed, so the settings UI shows the enable flow for un-seeded rooms.
+  api.getRoomSlackRouting = async (roomId: string) =>
+    PREVIEW_SLACK_ROUTING[roomId] ?? {
+      room_id: roomId,
+      enabled: false,
+      slack_channel: '',
+      approver_ids: [],
+      connected_workspace: 'acme-corp',
+    };
+  api.updateRoomSlackRouting = async (
+    roomId: string,
+    payload: Partial<RoomSlackRouting>,
+  ) => {
+    const prev =
+      PREVIEW_SLACK_ROUTING[roomId] ?? {
+        room_id: roomId,
+        enabled: false,
+        slack_channel: '',
+        approver_ids: [],
+        connected_workspace: 'acme-corp',
+      };
+    PREVIEW_SLACK_ROUTING[roomId] = {
+      ...prev,
+      ...payload,
+      room_id: roomId,
+      updated_at: new Date().toISOString(),
+    };
+    return PREVIEW_SLACK_ROUTING[roomId];
   };
   api.getAuditTrail = async (_uid?: string, limit = 50, offset = 0) =>
     RUNS.slice(offset, offset + limit);

@@ -13,6 +13,7 @@ import {
   RoomMember,
   RoomInvite,
   RoomSessionAction,
+  RoomSlackRouting,
   PaginatedResponse,
   Memory,
   SlackIntegrationStatus,
@@ -1639,6 +1640,30 @@ export const api = {
 
     return parseRow(await res.json()) as RoomDetails;
   },
+
+  // Per-room Slack approval routing. Backend endpoints are not built yet;
+  // in preview mode these are shimmed by preview-data.ts. The Slack worker
+  // (aegis-slack-approvals) is the runtime that consumes this config.
+  async getRoomSlackRouting(roomId: string): Promise<RoomSlackRouting | null> {
+    const res = await apiFetch(`${API_BASE}/room/${encodeURIComponent(roomId)}/slack-routing`);
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(await readErrorMessage(res));
+    return (await res.json()) as RoomSlackRouting;
+  },
+
+  async updateRoomSlackRouting(
+    roomId: string,
+    payload: Partial<RoomSlackRouting>,
+  ): Promise<RoomSlackRouting> {
+    const res = await apiFetch(`${API_BASE}/room/${encodeURIComponent(roomId)}/slack-routing`, {
+      method: 'PATCH',
+      headers: getJsonHeaders(),
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error(await readErrorMessage(res));
+    return (await res.json()) as RoomSlackRouting;
+  },
+
   createRoom: async (repoName: string): Promise<RoomDetails> => {
     const res = await apiFetch(`${API_BASE}/room/`, {
       method: "POST",

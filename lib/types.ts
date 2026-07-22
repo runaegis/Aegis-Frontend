@@ -265,6 +265,25 @@ export interface RoomDetails extends RoomSummary {
   [key: string]: any;
 }
 
+/**
+ * Per-room Slack approval routing. When enabled, this room's REQUIRE_APPROVAL
+ * decisions are delivered to the given Slack channel with interactive
+ * approve/deny, and only members of `approver_ids` may act on them.
+ */
+export interface RoomSlackRouting {
+  room_id: string;
+  enabled: boolean;
+  /** Display name, e.g. "#aegis-approvals". */
+  slack_channel: string;
+  /** Slack channel id, e.g. "C08…". */
+  slack_channel_id?: string;
+  /** Slack user IDs (or emails) allowed to approve from Slack. */
+  approver_ids: string[];
+  /** The connected Slack workspace, if any. Null means not connected yet. */
+  connected_workspace?: string | null;
+  updated_at?: string;
+}
+
 export interface RoomMember {
   username: string;
   role?: string;
