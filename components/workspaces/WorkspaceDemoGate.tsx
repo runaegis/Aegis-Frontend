@@ -6,9 +6,10 @@
  * Production-safe by design: the demo layer is installed ONLY when demo
  * mode is on, using the same signals the dashboard already uses
  * (`?demo=1`, the dev-only `?preview=1` alias, or the persisted
- * `aegis_demo` flag). With demo off, every component talks to the real
- * `api.*` and the surface behaves like any other page, including its
- * error state when the backend is not reachable.
+ * `aegis_demo` flag). `?real=1` clears that persisted demo flag for
+ * this browser. With demo off, every component talks to the real `api.*`
+ * and the surface behaves like any other page, including its error state
+ * when the backend is not reachable.
  *
  * That matters because these routes live outside `/dashboard`, so they
  * never run the dashboard layout's `installPreviewApi()` and have to
@@ -24,6 +25,10 @@ export function isWorkspaceDemoMode(): boolean {
   if (typeof window === 'undefined') return false;
   try {
     const params = new URLSearchParams(window.location.search);
+    if (params.get('real') === '1') {
+      localStorage.setItem('aegis_demo', 'false');
+      return false;
+    }
     if (params.get('demo') === '1') {
       localStorage.setItem('aegis_demo', 'true');
       return true;

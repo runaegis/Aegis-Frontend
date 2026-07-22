@@ -126,7 +126,7 @@ export default function RootLayout({
             embedded contexts (iframes with cookies disabled, etc.). */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var p=location.pathname;var onDash=p.startsWith('/dashboard');var onOnboard=p.startsWith('/onboarding');var onWorkspace=p.startsWith('/workspaces');if(!onDash&&!onOnboard&&!onWorkspace)return;if(onDash||onWorkspace){if(localStorage.getItem('aegis_theme')==='dark')document.documentElement.dataset.theme='dark';}if(onDash){if(localStorage.getItem('aegis_sidebar_collapsed')==='true')document.documentElement.dataset.sidebarCollapsed='true';}var d=localStorage.getItem('aegis_demo');var url=new URLSearchParams(location.search);if(url.get('demo')==='1'||url.get('preview')==='1'||d==='true')document.documentElement.dataset.demo='true';}catch(e){}})();`,
+            __html: `(function(){try{var p=location.pathname;var onDash=p.startsWith('/dashboard');var onOnboard=p.startsWith('/onboarding');var onWorkspace=p.startsWith('/workspaces');if(!onDash&&!onOnboard&&!onWorkspace)return;if(onDash||onWorkspace){if(localStorage.getItem('aegis_theme')==='dark')document.documentElement.dataset.theme='dark';}if(onDash){if(localStorage.getItem('aegis_sidebar_collapsed')==='true')document.documentElement.dataset.sidebarCollapsed='true';}var d=localStorage.getItem('aegis_demo');var url=new URLSearchParams(location.search);if(url.get('real')==='1')return;if(url.get('demo')==='1'||url.get('preview')==='1'||d==='true')document.documentElement.dataset.demo='true';}catch(e){}})();`,
           }}
         />
       </head>

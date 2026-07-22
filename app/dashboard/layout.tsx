@@ -32,12 +32,17 @@ import { DashboardDataProvider } from '@/lib/dashboardDataContext';
 //   localStorage.aegis_demo === 'false'  → OFF (in real workspace)
 //
 // The `?demo=1` query param force-enables and persists 'true'.
+// The `?real=1` query param force-disables and persists 'false'.
 // The legacy `?preview=1` + `aegis_preview` are kept as dev-only aliases
 // so existing screenshots / bookmarks don't break — they map onto the
 // same mock layer.
 function isDemoMode(): boolean {
   if (typeof window === 'undefined') return false;
   const params = new URLSearchParams(window.location.search);
+  if (params.get('real') === '1') {
+    localStorage.setItem('aegis_demo', 'false');
+    return false;
+  }
   if (params.get('demo') === '1') {
     localStorage.setItem('aegis_demo', 'true');
     return true;
@@ -58,6 +63,7 @@ function isFirstVisit(): boolean {
   // If they came in via ?demo=1 we treat that as an implicit choice
   // (intentional URL), so don't gate them with a modal.
   const params = new URLSearchParams(window.location.search);
+  if (params.get('real') === '1') return false;
   if (params.get('demo') === '1') return false;
   return localStorage.getItem('aegis_demo') === null;
 }
