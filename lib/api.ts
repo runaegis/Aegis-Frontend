@@ -13,6 +13,7 @@ import {
   RoomMember,
   RoomInvite,
   RoomSessionAction,
+  EnforcementMode,
   PaginatedResponse,
   Memory,
   SlackIntegrationStatus,
@@ -1697,6 +1698,30 @@ export const api = {
     }
 
     return parseRow(await res.json()) as RoomDetails;
+  },
+
+  /**
+   * Set a room's enforcement posture (observe / warn / enforce) — the Shadow
+   * Mode ramp. Backend: `PATCH /room/{id}/enforcement-mode` with `{ mode }`.
+   * The demo workspace overrides this in preview-data.
+   */
+  setRoomEnforcementMode: async (
+    roomId: string,
+    mode: EnforcementMode,
+  ): Promise<void> => {
+    const res = await apiFetch(
+      `${API_BASE}/room/${encodeURIComponent(roomId)}/enforcement-mode`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode }),
+      },
+    );
+    if (!res.ok) {
+      throw new Error(
+        `Failed to update enforcement mode: ${await readErrorMessage(res)}`,
+      );
+    }
   },
 
   getRoomMembers: async (roomId: string): Promise<RoomMember[]> => {

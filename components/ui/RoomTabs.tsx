@@ -20,6 +20,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   Activity,
+  Eye,
   History,
   Plug,
   Settings as SettingsIcon,
@@ -46,6 +47,7 @@ interface TabDef {
 // is last because it's rarely-used config.
 const TABS: TabDef[] = [
   { segment: '',          label: 'Overview', icon: Activity },
+  { segment: 'shadow',    label: 'Shadow',   icon: Eye },
   { segment: 'activity',  label: 'Activity', icon: History },
   { segment: 'tools',     label: 'Tools',    icon: Shield },
   { segment: 'members',   label: 'Members',  icon: Users },

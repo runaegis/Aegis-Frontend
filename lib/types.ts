@@ -255,6 +255,15 @@ export interface RoomSummary {
   role?: string;
   is_active?: boolean;
 
+  /**
+   * Enforcement posture for this room. New rooms default to `observe`
+   * (Shadow Mode): Aegis classifies and records every action but never
+   * blocks, rewrites, or pauses. `warn` surfaces would-be decisions to the
+   * agent without stopping it; `enforce` applies decisions for real. Absent
+   * is treated as `observe` in the UI so onboarding is safe by default.
+   */
+  enforcement_mode?: EnforcementMode;
+
   /** Room creation time (UTC). Prefer over membership join time when present. */
   room_created_at?: string;
   /** Membership join time — only used when room_created_at is absent. */
@@ -284,4 +293,55 @@ export interface RoomInvite {
   expires_at?: string | null;
   created_at?: string;
   [key: string]: any;
+}
+
+// ─── Shadow Mode ──────────────────────────────────────────────────────
+/**
+ * A room's enforcement posture. The observe → warn → enforce ramp is the
+ * onboarding path: a new customer runs in `observe` (nothing is ever
+ * blocked), reviews the Shadow Report, then turns enforcement on.
+ */
+export type EnforcementMode = 'observe' | 'warn' | 'enforce';
+
+/**
+ * One high-signal action Aegis would have acted on, surfaced in the Shadow
+ * Report's "Moments that mattered". Derived from a recorded `SessionAction`
+ * whose would-be decision was DENY / REWRITE / REQUIRE_APPROVAL — the ones a
+ * prospect cares about ("here's what we'd have caught"). No new backend
+ * field: built from data the audit log already stores.
+ */
+export interface ShadowMoment {
+  action: RoomSessionAction;
+  /** The would-be decision (normalized): DENY | REWRITE | REQUIRE_APPROVAL. */
+  wouldDecision: string;
+  /** Plain-English one-liner of what the agent tried and why it mattered. */
+  headline: string;
+}
+
+/**
+ * Aggregated observe-mode result over a window, rendered as the Shadow
+ * Report. Every field is computed from recorded `session_actions`, so the
+ * report is real the moment an observed room has traffic — the only new
+ * backend piece is the observe branch that records decisions without
+ * enforcing them.
+ */
+export interface ShadowReport {
+  roomId: string;
+  repoName: string;
+  /** Window the report covers, e.g. '24h' | '7d' | '30d'. */
+  window: string;
+  generatedAt: string;
+  /** Total actions observed in the window. */
+  totalObserved: number;
+  /** Would-be decision counts (what Aegis *would* have done in enforce mode). */
+  counts: {
+    allow: number;
+    deny: number;
+    rewrite: number;
+    approval: number;
+  };
+  /** Breakdown by tool / policy for the distribution strip. */
+  distribution: Array<{ label: string; count: number }>;
+  /** The ranked "moments that mattered" (highest blast radius first). */
+  moments: ShadowMoment[];
 }
