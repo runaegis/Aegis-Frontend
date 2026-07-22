@@ -1,8 +1,13 @@
 {
     "mcpServers": {
-      "aegis_dep": {
+      "aegis_local_frontend": {
         "transport": "sse",
-        "url": "https://mcp.runaegis.co/sse?user_id=a4006c5c-04e9-402b-823a-cf7dd71fb758&room_id=b15b7d62-4231-47da-b883-2d4a0208ef88&access_token=eyJhbGciOiJIUzUxMiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYTQwMDZjNWMtMDRlOS00MDJiLTgyM2EtY2Y3ZGQ3MWZiNzU4IiwiZXhwIjoxNzgzOTQ0MTExfQ.aQFy5U9nSXSOgcaGzAtIRvmIWmh7Olc6IS2u_nnN1HmU4Mrrft530YDtD7ydqH0vd-z0QZP8ByvQhWIs2jnGyA&role=OWNER"
+        "url": "http://localhost:8082/sse",
+        "headers": {
+          "X-User-ID": "a4006c5c-04e9-402b-823a-cf7dd71fb758",
+          "X-Room-ID": "b15b7d62-4231-47da-b883-2d4a0208ef88",
+          "X-Agent-Key": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0eXAiOiJhZWdpc19hZ2VudF9rZXkiLCJ3b3Jrc3BhY2VfaWQiOiI1ZTFlMWVlNS00NDdjLTRkMmItODY0MC03YjE3ZjgxMGEzMDYiLCJhZ2VudF9pZCI6IjUwMWEzZTUzLWUxNDAtNDE2YS1hNWNhLWY4YmQwZDk2Y2IwMiIsImhhbmRsZSI6ImZyb250ZW5kIiwiaWF0IjoxNzg0NTY3OTc4LCJub25jZSI6ImswTGlxNTBWS0NuakJxcmsxM25JbXcifQ.HuNEmgrAb4NvpXhm7thjo14be6FHu7Su-kIjJVP1jds"
+        }
       }
     }
 }

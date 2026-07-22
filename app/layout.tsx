@@ -112,15 +112,21 @@ export default function RootLayout({
 
             Reads `aegis_theme` and `aegis_sidebar_collapsed` from
             localStorage and writes the matching dataset attributes on
-            <html>. Both attributes are also scoped to /dashboard —
-            auth/onboarding always render in default chrome.
+            <html>.
+
+            Theme applies to /dashboard AND /workspaces: the workspace
+            room is full-bleed and lives outside the dashboard shell, so
+            without this it would render light for a user who chose dark.
+            Sidebar-collapsed stays dashboard-only because only the
+            dashboard has that sidebar. Auth/onboarding keep default
+            chrome by design.
 
             Inline + sync because it has to run before any CSS paints.
             Wrapped in try/catch because localStorage may throw in
             embedded contexts (iframes with cookies disabled, etc.). */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var p=location.pathname;var onDash=p.startsWith('/dashboard');var onOnboard=p.startsWith('/onboarding');if(!onDash&&!onOnboard)return;if(onDash){if(localStorage.getItem('aegis_theme')==='dark')document.documentElement.dataset.theme='dark';if(localStorage.getItem('aegis_sidebar_collapsed')==='true')document.documentElement.dataset.sidebarCollapsed='true';}var d=localStorage.getItem('aegis_demo');var url=new URLSearchParams(location.search);if(url.get('demo')==='1'||url.get('preview')==='1'||d==='true')document.documentElement.dataset.demo='true';}catch(e){}})();`,
+            __html: `(function(){try{var p=location.pathname;var onDash=p.startsWith('/dashboard');var onOnboard=p.startsWith('/onboarding');var onWorkspace=p.startsWith('/workspaces');if(!onDash&&!onOnboard&&!onWorkspace)return;if(onDash||onWorkspace){if(localStorage.getItem('aegis_theme')==='dark')document.documentElement.dataset.theme='dark';}if(onDash){if(localStorage.getItem('aegis_sidebar_collapsed')==='true')document.documentElement.dataset.sidebarCollapsed='true';}var d=localStorage.getItem('aegis_demo');var url=new URLSearchParams(location.search);if(url.get('real')==='1')return;if(url.get('demo')==='1'||url.get('preview')==='1'||d==='true')document.documentElement.dataset.demo='true';}catch(e){}})();`,
           }}
         />
       </head>
