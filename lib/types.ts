@@ -285,3 +285,23 @@ export interface RoomInvite {
   created_at?: string;
   [key: string]: any;
 }
+
+export interface ApiTokenPrefix {
+  api_key_prefix: string;
+  mcp_url_prefix: string;
+}
+
+export interface ApiKeySummary {
+  id: string;
+  name: string;
+  room_id: string;
+  user_id: string;
+  key_prefix: string;
+  active: boolean;
+  created_at: string;
+  last_used_at: string | null;
+}
+
+export interface CreatedApiKey extends ApiKeySummary {
+  api_key: string;
+}

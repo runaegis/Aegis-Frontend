@@ -23,6 +23,9 @@ import {
   TokenAnalyticsDateRange,
   TokenAnalyticsResponse,
   TokenUsageSessionItem,
+  ApiTokenPrefix,
+  ApiKeySummary,
+  CreatedApiKey,
 } from "./types";
 import { LogOut } from "lucide-react";
 import {
@@ -269,6 +272,7 @@ function parseRow(row: unknown, columns?: string[]): unknown {
     "expires_at",
     "first_seen_at",
     "last_seen_at",
+    "last_used_at",
   ];
   for (const field of datetimeFields) {
     if (obj[field]) obj[field] = parseDatetime(String(obj[field]));
@@ -1638,6 +1642,65 @@ export const api = {
     }
 
     return parseRow(await res.json()) as RoomDetails;
+  },
+
+  getApiTokenPrefix: async (): Promise<ApiTokenPrefix> => {
+    const res = await apiFetch(`${API_BASE}/api-token/prefix`);
+
+    if (!res.ok) {
+      throw new Error(`Failed to load API token prefix: ${await readErrorMessage(res)}`);
+    }
+
+    return res.json();
+  },
+
+  getApiKeys: async (roomId?: string): Promise<ApiKeySummary[]> => {
+    const url = new URL(`${API_BASE}/api-token/api-keys`);
+    if (roomId) url.searchParams.set("room_id", roomId);
+
+    const res = await apiFetch(url.toString());
+
+    if (!res.ok) {
+      throw new Error(`Failed to load API keys: ${await readErrorMessage(res)}`);
+    }
+
+    const data = await res.json();
+    return Array.isArray(data)
+      ? data.map((row: unknown) => parseRow(row) as ApiKeySummary)
+      : [];
+  },
+
+  createApiKey: async (
+    payload: { room_id: string; name: string },
+  ): Promise<CreatedApiKey> => {
+    const res = await apiFetch(`${API_BASE}/api-token/api-key`, {
+      method: "POST",
+      headers: getJsonHeaders(),
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      throw new Error(`Failed to create API key: ${await readErrorMessage(res)}`);
+    }
+
+    return parseRow(await res.json()) as CreatedApiKey;
+  },
+
+  deleteApiKey: async (
+    keyId: string,
+  ): Promise<{ success: boolean; message: string }> => {
+    const res = await apiFetch(
+      `${API_BASE}/api-token/api-key/${encodeURIComponent(keyId)}`,
+      {
+        method: "DELETE",
+      },
+    );
+
+    if (!res.ok) {
+      throw new Error(`Failed to delete API key: ${await readErrorMessage(res)}`);
+    }
+
+    return res.json();
   },
   createRoom: async (repoName: string): Promise<RoomDetails> => {
     const res = await apiFetch(`${API_BASE}/room/`, {
