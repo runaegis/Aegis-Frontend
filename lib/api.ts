@@ -23,6 +23,9 @@ import {
   TokenAnalyticsDateRange,
   TokenAnalyticsResponse,
   TokenUsageSessionItem,
+  ApiTokenPrefix,
+  ApiKeySummary,
+  CreatedApiKey,
 } from "./types";
 import { LogOut } from "lucide-react";
 import {
@@ -62,6 +65,87 @@ type TokenUsageSessionFilters = {
   start_date?: string;
   end_date?: string;
   limit?: number;
+};
+
+export type WorkspaceAgentStatus = "active" | "removed";
+
+export type WorkspaceFileRef = {
+  file_id?: string;
+  url: string;
+  filename: string;
+  content_type?: string | null;
+  size: number;
+  uploader_member_id?: string | null;
+};
+
+export type WorkspaceAgent = {
+  id: string;
+  workspace_id: string;
+  user_id: string;
+  handle: string;
+  role_label: string | null;
+  status: WorkspaceAgentStatus;
+  created_at: string;
+};
+
+export type WorkspaceMessage = {
+  id: string;
+  workspace_id: string;
+  sender_member_id: string;
+  message_text: string | null;
+  mentioned_member_ids: string[];
+  file_refs: WorkspaceFileRef[];
+  created_at: string;
+};
+
+export type WorkspacePointerStatus = "pending" | "review" | "done";
+
+export type WorkspaceTaskPointer = {
+  id: string;
+  workspace_id: string;
+  title: string;
+  description: string | null;
+  status: WorkspacePointerStatus;
+  sort_order: number;
+  created_by_member_id: string | null;
+  created_by_user_id: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type WorkspaceRecord = {
+  id: string;
+  owner_user_id: string;
+  title: string;
+  task: string | null;
+  created_at: string;
+};
+
+export type WorkspaceSummary = WorkspaceRecord & {
+  agent_count: number;
+  message_count: number;
+  pointer_count?: number;
+};
+
+export type WorkspaceDetail = {
+  workspace: WorkspaceRecord;
+  agents: WorkspaceAgent[];
+  messages: WorkspaceMessage[];
+  pointers?: WorkspaceTaskPointer[];
+};
+
+export type WorkspaceAgentKeyResponse = {
+  agent: WorkspaceAgent;
+  agent_key: string;
+  mcp_config_snippet: {
+    aegis: {
+      url: string;
+      headers: {
+        Authorization: string;
+        "X-Agent-Key": string;
+      };
+    };
+  };
 };
 
 function getAPIBase(): string {
@@ -188,6 +272,7 @@ function parseRow(row: unknown, columns?: string[]): unknown {
     "expires_at",
     "first_seen_at",
     "last_seen_at",
+    "last_used_at",
   ];
   for (const field of datetimeFields) {
     if (obj[field]) obj[field] = parseDatetime(String(obj[field]));
@@ -1558,6 +1643,65 @@ export const api = {
 
     return parseRow(await res.json()) as RoomDetails;
   },
+
+  getApiTokenPrefix: async (): Promise<ApiTokenPrefix> => {
+    const res = await apiFetch(`${API_BASE}/api-token/prefix`);
+
+    if (!res.ok) {
+      throw new Error(`Failed to load API token prefix: ${await readErrorMessage(res)}`);
+    }
+
+    return res.json();
+  },
+
+  getApiKeys: async (roomId?: string): Promise<ApiKeySummary[]> => {
+    const url = new URL(`${API_BASE}/api-token/api-keys`);
+    if (roomId) url.searchParams.set("room_id", roomId);
+
+    const res = await apiFetch(url.toString());
+
+    if (!res.ok) {
+      throw new Error(`Failed to load API keys: ${await readErrorMessage(res)}`);
+    }
+
+    const data = await res.json();
+    return Array.isArray(data)
+      ? data.map((row: unknown) => parseRow(row) as ApiKeySummary)
+      : [];
+  },
+
+  createApiKey: async (
+    payload: { room_id: string; name: string },
+  ): Promise<CreatedApiKey> => {
+    const res = await apiFetch(`${API_BASE}/api-token/api-key`, {
+      method: "POST",
+      headers: getJsonHeaders(),
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      throw new Error(`Failed to create API key: ${await readErrorMessage(res)}`);
+    }
+
+    return parseRow(await res.json()) as CreatedApiKey;
+  },
+
+  deleteApiKey: async (
+    keyId: string,
+  ): Promise<{ success: boolean; message: string }> => {
+    const res = await apiFetch(
+      `${API_BASE}/api-token/api-key/${encodeURIComponent(keyId)}`,
+      {
+        method: "DELETE",
+      },
+    );
+
+    if (!res.ok) {
+      throw new Error(`Failed to delete API key: ${await readErrorMessage(res)}`);
+    }
+
+    return res.json();
+  },
   createRoom: async (repoName: string): Promise<RoomDetails> => {
     const res = await apiFetch(`${API_BASE}/room/`, {
       method: "POST",
@@ -1875,6 +2019,255 @@ export const api = {
     );
     if (!res.ok) {
       throw new Error(`Failed to update prompt: ${await readErrorMessage(res)}`);
+    }
+    return res.json();
+  },
+
+  getWorkspaces: async (): Promise<WorkspaceSummary[]> => {
+    const res = await apiFetch(`${API_BASE}/api/workspaces`);
+    if (!res.ok) {
+      throw new Error(`Failed to load workspaces: ${await readErrorMessage(res)}`);
+    }
+    const data = await res.json();
+    return Array.isArray(data)
+      ? data.map((row: unknown) => parseRow(row) as WorkspaceSummary)
+      : [];
+  },
+
+  createWorkspace: async (payload: {
+    title: string;
+    task?: string | null;
+  }): Promise<WorkspaceDetail> => {
+    const res = await apiFetch(`${API_BASE}/api/workspaces`, {
+      method: "POST",
+      headers: getJsonHeaders(),
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to create workspace: ${await readErrorMessage(res)}`);
+    }
+    return res.json();
+  },
+
+  getWorkspace: async (workspaceId: string): Promise<WorkspaceDetail> => {
+    const res = await apiFetch(
+      `${API_BASE}/api/workspaces/${encodeURIComponent(workspaceId)}`,
+    );
+    if (!res.ok) {
+      throw new Error(`Failed to load workspace: ${await readErrorMessage(res)}`);
+    }
+    return res.json();
+  },
+
+  updateWorkspace: async (
+    workspaceId: string,
+    payload: { title?: string; task?: string | null },
+  ): Promise<WorkspaceRecord> => {
+    const res = await apiFetch(
+      `${API_BASE}/api/workspaces/${encodeURIComponent(workspaceId)}`,
+      {
+        method: "PATCH",
+        headers: getJsonHeaders(),
+        body: JSON.stringify(payload),
+      },
+    );
+    if (!res.ok) {
+      throw new Error(`Failed to update workspace: ${await readErrorMessage(res)}`);
+    }
+    return parseRow(await res.json()) as WorkspaceRecord;
+  },
+
+  createWorkspaceAgent: async (
+    workspaceId: string,
+    payload: { handle: string; role_label?: string | null },
+  ): Promise<WorkspaceAgentKeyResponse> => {
+    const res = await apiFetch(
+      `${API_BASE}/api/workspaces/${encodeURIComponent(workspaceId)}/agents`,
+      {
+        method: "POST",
+        headers: getJsonHeaders(),
+        body: JSON.stringify(payload),
+      },
+    );
+    if (!res.ok) {
+      throw new Error(`Failed to create agent: ${await readErrorMessage(res)}`);
+    }
+    return res.json();
+  },
+
+  updateWorkspaceAgent: async (
+    workspaceId: string,
+    agentId: string,
+    payload: {
+      handle?: string;
+      role_label?: string | null;
+      status?: WorkspaceAgentStatus;
+    },
+  ): Promise<WorkspaceAgent> => {
+    const res = await apiFetch(
+      `${API_BASE}/api/workspaces/${encodeURIComponent(workspaceId)}/agents/${encodeURIComponent(agentId)}`,
+      {
+        method: "PATCH",
+        headers: getJsonHeaders(),
+        body: JSON.stringify(payload),
+      },
+    );
+    if (!res.ok) {
+      throw new Error(`Failed to update agent: ${await readErrorMessage(res)}`);
+    }
+    return parseRow(await res.json()) as WorkspaceAgent;
+  },
+
+  rotateWorkspaceAgentKey: async (
+    workspaceId: string,
+    agentId: string,
+  ): Promise<WorkspaceAgentKeyResponse> => {
+    const res = await apiFetch(
+      `${API_BASE}/api/workspaces/${encodeURIComponent(workspaceId)}/agents/${encodeURIComponent(agentId)}/key`,
+      {
+        method: "POST",
+        headers: getJsonHeaders(),
+      },
+    );
+    if (!res.ok) {
+      throw new Error(`Failed to generate agent key: ${await readErrorMessage(res)}`);
+    }
+    return res.json();
+  },
+
+  revokeWorkspaceAgent: async (
+    workspaceId: string,
+    agentId: string,
+  ): Promise<WorkspaceAgent> => {
+    const res = await apiFetch(
+      `${API_BASE}/api/workspaces/${encodeURIComponent(workspaceId)}/agents/${encodeURIComponent(agentId)}/revoke`,
+      {
+        method: "POST",
+        headers: getJsonHeaders(),
+      },
+    );
+    if (!res.ok) {
+      throw new Error(`Failed to remove agent: ${await readErrorMessage(res)}`);
+    }
+    return parseRow(await res.json()) as WorkspaceAgent;
+  },
+
+  revokeWorkspaceAgentKey: async (
+    workspaceId: string,
+    agentId: string,
+  ): Promise<{ detail: string; agent: WorkspaceAgent }> => {
+    const res = await apiFetch(
+      `${API_BASE}/api/workspaces/${encodeURIComponent(workspaceId)}/agents/${encodeURIComponent(agentId)}/key`,
+      {
+        method: "DELETE",
+      },
+    );
+    if (!res.ok) {
+      throw new Error(`Failed to revoke agent key: ${await readErrorMessage(res)}`);
+    }
+    return res.json();
+  },
+
+  createWorkspaceMessage: async (
+    workspaceId: string,
+    payload: {
+      sender_member_id: string;
+      message_text?: string | null;
+      file_refs?: WorkspaceFileRef[];
+    },
+  ): Promise<WorkspaceMessage> => {
+    const res = await apiFetch(
+      `${API_BASE}/api/workspaces/${encodeURIComponent(workspaceId)}/messages`,
+      {
+        method: "POST",
+        headers: getJsonHeaders(),
+        body: JSON.stringify(payload),
+      },
+    );
+    if (!res.ok) {
+      throw new Error(`Failed to post message: ${await readErrorMessage(res)}`);
+    }
+    return parseRow(await res.json()) as WorkspaceMessage;
+  },
+
+  getWorkspacePointers: async (
+    workspaceId: string,
+    status?: WorkspacePointerStatus,
+  ): Promise<WorkspaceTaskPointer[]> => {
+    const url = new URL(
+      `${API_BASE}/api/workspaces/${encodeURIComponent(workspaceId)}/pointers`,
+    );
+    if (status) url.searchParams.set("status", status);
+    const res = await apiFetch(url.toString());
+    if (!res.ok) {
+      throw new Error(`Failed to load task pointers: ${await readErrorMessage(res)}`);
+    }
+    const data = await res.json();
+    return Array.isArray(data)
+      ? data.map((row: unknown) => parseRow(row) as WorkspaceTaskPointer)
+      : [];
+  },
+
+  createWorkspacePointer: async (
+    workspaceId: string,
+    payload: {
+      title: string;
+      description?: string | null;
+      status?: WorkspacePointerStatus;
+      sort_order?: number;
+      created_by_member_id?: string | null;
+    },
+  ): Promise<WorkspaceTaskPointer> => {
+    const res = await apiFetch(
+      `${API_BASE}/api/workspaces/${encodeURIComponent(workspaceId)}/pointers`,
+      {
+        method: "POST",
+        headers: getJsonHeaders(),
+        body: JSON.stringify(payload),
+      },
+    );
+    if (!res.ok) {
+      throw new Error(`Failed to create task pointer: ${await readErrorMessage(res)}`);
+    }
+    return parseRow(await res.json()) as WorkspaceTaskPointer;
+  },
+
+  updateWorkspacePointer: async (
+    workspaceId: string,
+    pointerId: string,
+    payload: {
+      title?: string;
+      description?: string | null;
+      status?: WorkspacePointerStatus;
+      sort_order?: number;
+    },
+  ): Promise<WorkspaceTaskPointer> => {
+    const res = await apiFetch(
+      `${API_BASE}/api/workspaces/${encodeURIComponent(workspaceId)}/pointers/${encodeURIComponent(pointerId)}`,
+      {
+        method: "PATCH",
+        headers: getJsonHeaders(),
+        body: JSON.stringify(payload),
+      },
+    );
+    if (!res.ok) {
+      throw new Error(`Failed to update task pointer: ${await readErrorMessage(res)}`);
+    }
+    return parseRow(await res.json()) as WorkspaceTaskPointer;
+  },
+
+  deleteWorkspacePointer: async (
+    workspaceId: string,
+    pointerId: string,
+  ): Promise<{ detail: string; pointer_id: string }> => {
+    const res = await apiFetch(
+      `${API_BASE}/api/workspaces/${encodeURIComponent(workspaceId)}/pointers/${encodeURIComponent(pointerId)}`,
+      {
+        method: "DELETE",
+      },
+    );
+    if (!res.ok) {
+      throw new Error(`Failed to delete task pointer: ${await readErrorMessage(res)}`);
     }
     return res.json();
   },
