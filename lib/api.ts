@@ -155,6 +155,10 @@ function getAPIBase(): string {
 
 const API_BASE = getAPIBase();
 
+export function getWorkspaceMessageStreamUrl(workspaceId: string): string {
+  return `${API_BASE}/api/workspaces/${encodeURIComponent(workspaceId)}/stream`;
+}
+
 if (typeof window !== "undefined") {
   console.log("[Aegis API] Using endpoint:", API_BASE);
 }

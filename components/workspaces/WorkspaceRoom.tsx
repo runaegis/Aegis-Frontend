@@ -5,9 +5,11 @@ import Link from 'next/link';
 import { ArrowLeft, CheckCircle2, MessagesSquare, Moon, PanelRight, Sun, Users2, X } from 'lucide-react';
 import {
   api,
+  getWorkspaceMessageStreamUrl,
   type WorkspaceAgentKeyResponse,
   type WorkspaceDetail,
   type WorkspaceFileRef,
+  type WorkspaceMessage,
   type WorkspacePointerStatus,
   type WorkspaceSummary,
 } from '@/lib/api';
@@ -20,7 +22,7 @@ import { AgentKeyDialog } from './AgentKeyDialog';
 import { AgentRoster } from './AgentRoster';
 import { Composer } from './Composer';
 import { MentionText, AgentGlyph, AgentHandle, AgentHueProvider } from './agent-visuals';
-import { SampleDataChip } from './WorkspaceDemoGate';
+import { SampleDataChip, useIsDemo } from './WorkspaceDemoGate';
 import { TaskChecklist } from './TaskChecklist';
 import { FilesPanel } from './FilesPanel';
 import { RoomSummary } from './RoomSummary';
@@ -40,8 +42,19 @@ function metaFrom(d: WorkspaceDetail): SiblingMeta {
   };
 }
 
+function mergeMessage(messages: WorkspaceMessage[], incoming: WorkspaceMessage): WorkspaceMessage[] {
+  const index = messages.findIndex((message) => message.id === incoming.id);
+  const next =
+    index >= 0
+      ? messages.map((message) => (message.id === incoming.id ? incoming : message))
+      : [...messages, incoming];
+
+  return next.sort((a, b) => a.created_at.localeCompare(b.created_at));
+}
+
 export function WorkspaceRoom({ workspaceId }: { workspaceId: string }) {
   const { theme, setTheme } = useTheme();
+  const isDemo = useIsDemo();
   const [detail, setDetail] = useState<WorkspaceDetail | null>(null);
   const [siblings, setSiblings] = useState<WorkspaceSummary[]>([]);
   const [siblingMeta, setSiblingMeta] = useState<Record<string, SiblingMeta>>({});
@@ -101,6 +114,39 @@ export function WorkspaceRoom({ workspaceId }: { workspaceId: string }) {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    if (isDemo) return;
+
+    const es = new EventSource(getWorkspaceMessageStreamUrl(workspaceId), {
+      withCredentials: true,
+    });
+
+    es.onmessage = (event) => {
+      if (!event.data) return;
+
+      try {
+        const incoming = JSON.parse(event.data) as WorkspaceMessage;
+        if (!incoming?.id) return;
+        if (incoming.workspace_id && incoming.workspace_id !== workspaceId) return;
+
+        setDetail((current) =>
+          current
+            ? {
+                ...current,
+                messages: mergeMessage(current.messages, incoming),
+              }
+            : current,
+        );
+      } catch {
+        // Ignore malformed keepalive or diagnostic events from the stream.
+      }
+    };
+
+    return () => {
+      es.close();
+    };
+  }, [isDemo, workspaceId]);
+
   const agents = detail?.agents ?? [];
   const pointers = useMemo(
     () => (detail?.pointers ?? []).slice().sort((a, b) => a.sort_order - b.sort_order),
@@ -108,7 +154,10 @@ export function WorkspaceRoom({ workspaceId }: { workspaceId: string }) {
   );
   const activeCount = agents.filter((a) => a.status === 'active').length;
   const doneCount = pointers.filter((p) => p.status === 'done').length;
-  const fileCount = (detail?.messages ?? []).reduce((n, m) => n + m.file_refs.length, 0);
+  const fileCount = (detail?.messages ?? []).reduce(
+    (n, m) => n + (m.file_refs?.length ?? 0),
+    0,
+  );
 
   // ---- mutations -------------------------------------------------------
   const sendMessage = async (text: string, files: WorkspaceFileRef[]) => {
