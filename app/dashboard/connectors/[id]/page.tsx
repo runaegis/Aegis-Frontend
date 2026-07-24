@@ -223,7 +223,7 @@ export default function ConnectorDetailPage() {
             <motion.div variants={fadeUp} className="rounded-[12px] border border-[var(--stroke-soft-200)] bg-white p-5 shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
               <p className="text-[10.5px] font-semibold uppercase tracking-[0.1em] text-[var(--neutral-soft-400)]">Use this connector</p>
               <p className="mt-2 text-[12.5px] leading-[1.55] text-[var(--neutral-sub-600)]">
-                Connectors are enabled per room. Open a room&rsquo;s <span className="font-medium text-[var(--neutral-strong-950)]">Connect</span> tab to wire {def.name} to a repo, team, and role allowlist.
+                Connectors are enabled per room. Open a room&rsquo;s <span className="font-medium text-[var(--neutral-strong-950)]">Connect</span> tab to wire {def.name} to its room-scoped resource (repo, database, project, or workspace) and role allowlist.
               </p>
               <Link href="/dashboard/rooms" className="mt-4 block">
                 <Button variant="primary" size="md" className="w-full justify-center" trailingIcon={<ArrowUpRight className="h-3.5 w-3.5" strokeWidth={2.25} />}>

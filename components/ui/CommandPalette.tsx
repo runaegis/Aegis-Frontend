@@ -52,6 +52,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { api } from '@/lib/api';
+import { useUser } from '@/lib/hooks';
 
 interface Command {
   id: string;
@@ -72,6 +73,7 @@ export function CommandPalette() {
   const router = useRouter();
   const pathname = usePathname();
   const reduce = useReducedMotion();
+  const { clearUser } = useUser();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
@@ -216,12 +218,10 @@ export function CommandPalette() {
         icon: LogOut,
         keywords: ['logout', 'log out', 'exit'],
         group: 'Actions' as const,
-        perform: () => {
+        perform: async () => {
           setOpen(false);
-          localStorage.removeItem('access_token');
-          localStorage.removeItem('refresh_token');
-          localStorage.removeItem('aegis_preview');
-          api.logOut();
+          await api.logOut();
+          clearUser();
           router.replace('/auth');
         },
       },
@@ -253,7 +253,7 @@ export function CommandPalette() {
     ];
 
     return [...navCommands, ...actionCommands, ...externalCommands];
-  }, [goto, pathname, open]); // re-read on open via the `open` dep so action labels reflect current state
+  }, [clearUser, goto, pathname, router]);
 
   // Fuzzy-ish match: split query into tokens, every token must hit
   // either the label or a keyword. Simple, fast, no library needed.

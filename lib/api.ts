@@ -1,4 +1,3 @@
-import { get } from "http";
 import {
   SessionAction,
   AggregatedSessionAction,
@@ -26,29 +25,45 @@ import {
   ApiTokenPrefix,
   ApiKeySummary,
   CreatedApiKey,
+  ConnectorCatalogItem,
+  PrivateConnectorCredentialStatus,
+  OnboardingStatusResponse,
 } from "./types";
-import { LogOut } from "lucide-react";
 import {
   matchesActionDateFilters,
   type ActionDateFilters,
 } from "./dashboardDateRange";
 import { normalizeApiTimestamp, normalizeDecision } from "./utils";
 
-type SaveUserPayload = Pick<User, "github_pat">;
+type SaveUserPayload = Record<string, unknown>;
 
 type UpdateUserDetailsPayload = {
+  name?: string;
   username?: string;
   email?: string;
-  github_pat?: string;
-  github_user_id?: number | string;
-  postgres_connection_string?: string;
-  jira_url?: string;
-  jira_username?: string;
-  jira_api_token?: string;
-  mongodb_connection_string?: string;
-  linear_api_key?: string;
-  terraform_api_token?: string;
-  terraform_url?: string;
+};
+
+type LoginEmailPayload = {
+  email: string;
+  password: string;
+};
+
+type RegisterEmailPayload = {
+  name: string;
+  email: string;
+  password: string;
+};
+
+type ResetPasswordPayload = {
+  token: string;
+  new_password: string;
+};
+
+export type ApiErrorInfo = {
+  status?: number;
+  code?: string;
+  message: string;
+  payload?: unknown;
 };
 
 type TokenAnalyticsFilters = {
@@ -171,6 +186,10 @@ function clearStoredAuthState(): void {
 
   localStorage.removeItem("aegis_user");
   localStorage.removeItem("aegis_onboarding_step");
+  localStorage.removeItem("aegis_email");
+  localStorage.removeItem("access_token");
+  localStorage.removeItem("refresh_token");
+  localStorage.removeItem("aegis_preview");
 }
 
 async function refreshSession(): Promise<boolean> {
@@ -198,6 +217,20 @@ export class AuthError extends Error {
   constructor(message = "Unauthorized") {
     super(message);
     this.name = "AuthError";
+  }
+}
+
+export class ApiError extends Error {
+  status?: number;
+  code?: string;
+  payload?: unknown;
+
+  constructor({ status, code, message, payload }: ApiErrorInfo) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.code = code;
+    this.payload = payload;
   }
 }
 
@@ -288,151 +321,201 @@ function getJsonHeaders(): HeadersInit {
   return headers;
 }
 
-async function readErrorMessage(res: Response): Promise<string> {
+function pickString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+function parseErrorPayload(payload: unknown): Pick<ApiErrorInfo, "code" | "message"> {
+  if (typeof payload === "string") {
+    return { message: payload };
+  }
+
+  if (!payload || typeof payload !== "object") {
+    return { message: "Request failed" };
+  }
+
+  const raw = payload as Record<string, unknown>;
+  const detail =
+    raw.detail && typeof raw.detail === "object"
+      ? (raw.detail as Record<string, unknown>)
+      : null;
+  const error =
+    raw.error && typeof raw.error === "object"
+      ? (raw.error as Record<string, unknown>)
+      : null;
+  const detailError =
+    detail?.error && typeof detail.error === "object"
+      ? (detail.error as Record<string, unknown>)
+      : null;
+
+  const code =
+    pickString(raw.code) ??
+    pickString(raw.error_code) ??
+    pickString(detail?.code) ??
+    pickString(detail?.error_code) ??
+    pickString(error?.code) ??
+    pickString(detailError?.code);
+
+  const message =
+    pickString(raw.message) ??
+    pickString(raw.detail) ??
+    pickString(detail?.message) ??
+    pickString(detail?.detail) ??
+    pickString(error?.message) ??
+    pickString(detailError?.message) ??
+    "Request failed";
+
+  return { code, message };
+}
+
+export async function readApiError(res: Response): Promise<ApiError> {
   try {
-    const body = await res.json();
-
-    if (body?.detail?.error?.message) {
-      return body.detail.error.message;
-    }
-
-    if (body?.error?.message) {
-      return body.error.message;
-    }
-
-    if (typeof body?.detail === 'string') {
-      return body.detail;
-    }
-
-    return 'Request failed';
+    const payload = await res.json();
+    const parsed = parseErrorPayload(payload);
+    return new ApiError({
+      status: res.status,
+      code: parsed.code,
+      message: parsed.message,
+      payload,
+    });
   } catch {
-    return 'Network error';
+    return new ApiError({
+      status: res.status,
+      message: res.statusText || "Network error",
+    });
   }
 }
 
-async function fetchAuthenticatedUserDetails(
-  fallback: UpdateUserDetailsPayload = {},
-): Promise<User> {
-  const endpoints = [`${API_BASE}/user`, `${API_BASE}/auth/user`];
-  let lastError: string | null = null;
+async function readErrorMessage(res: Response): Promise<string> {
+  return (await readApiError(res)).message;
+}
 
-  for (const endpoint of endpoints) {
-    const res = await apiFetch(endpoint);
-
-    if (!res.ok) {
-      lastError = await readErrorMessage(res);
-      continue;
-    }
-
-    let data: unknown;
-    try {
-      data = await res.json();
-    } catch {
-      lastError = "Server returned an invalid user payload.";
-      continue;
-    }
-
-    const raw = extractUserPayload(data);
-    if (!raw) {
-      lastError = "Server returned an incomplete user payload.";
-      continue;
-    }
-
-    return normalizeUserPayload(raw, fallback);
+export function getApiErrorMessage(error: unknown, fallback = "Request failed"): string {
+  if (error instanceof ApiError || error instanceof Error) {
+    return error.message || fallback;
   }
 
-  throw new Error(lastError || "Failed to load user details.");
+  const parsed = parseErrorPayload(error);
+  return parsed.message || fallback;
+}
+
+export function getApiErrorCode(error: unknown): string | undefined {
+  if (error instanceof ApiError) return error.code;
+  return parseErrorPayload(error).code;
+}
+
+async function authRequest<T>(
+  path: string,
+  init: RequestInit = {},
+  parser: (payload: unknown) => T = (payload) => payload as T,
+): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...init,
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    throw await readApiError(res);
+  }
+
+  if (res.status === 204) {
+    return parser(null);
+  }
+
+  let payload: unknown = null;
+  try {
+    payload = await res.json();
+  } catch {
+    payload = null;
+  }
+
+  return parser(payload);
+}
+
+async function fetchAuthenticatedUserDetails(): Promise<User> {
+  const res = await apiFetch(`${API_BASE}/auth/user`);
+
+  if (!res.ok) {
+    throw await readApiError(res);
+  }
+
+  let data: unknown;
+  try {
+    data = await res.json();
+  } catch {
+    throw new Error("Server returned an invalid user payload.");
+  }
+
+  const raw = extractUserPayload(data);
+  if (!raw) {
+    throw new Error("Server returned an incomplete user payload.");
+  }
+
+  return normalizeUserPayload(raw);
 }
 
 function normalizeUserPayload(
   raw: Partial<User> & Record<string, unknown>,
   fallback: UpdateUserDetailsPayload = {},
 ): User {
-  const githubUserId =
-    typeof raw.github_user_id === "number"
-      ? raw.github_user_id
-      : typeof raw.github_user_id === "string"
-        ? Number(raw.github_user_id)
-        : typeof fallback.github_user_id === "number"
-          ? fallback.github_user_id
-          : typeof fallback.github_user_id === "string"
-            ? Number(fallback.github_user_id)
-            : 0;
-
-  const accessToken =
-    typeof raw.access_token === "string"
-      ? raw.access_token
-      : typeof raw.github_pat === "string"
-        ? raw.github_pat
-        : fallback.github_pat;
+  const email =
+    typeof raw.email === "string" ? raw.email : fallback.email ?? "";
+  const name =
+    typeof raw.name === "string"
+      ? raw.name
+      : typeof raw.username === "string"
+        ? raw.username
+        : fallback.name ?? fallback.username ?? "";
+  const username =
+    typeof raw.username === "string"
+      ? raw.username
+      : name || email.split("@")[0] || "";
+  const legacyOnboardingStep =
+    typeof raw.onboarding_step === "number"
+      ? raw.onboarding_step
+      : typeof raw.onboarding_step === "string"
+        ? Number(raw.onboarding_step)
+        : null;
+  const onboardingStatus =
+    typeof raw.onboarding_status === "boolean"
+      ? raw.onboarding_status
+      : Number.isFinite(legacyOnboardingStep)
+        ? Number(legacyOnboardingStep) >= 4
+        : null;
 
   return {
     id: typeof raw.id === "string" ? raw.id : undefined,
-    github_user_id: Number.isFinite(githubUserId) ? githubUserId : 0,
-    username:
-      typeof raw.username === "string"
-        ? raw.username
-        : fallback.username ?? "",
-    email:
-      typeof raw.email === "string"
-        ? raw.email
-        : fallback.email ?? "",
+    name: name || null,
+    username,
+    email,
+    avatar_url:
+      typeof raw.avatar_url === "string" ? raw.avatar_url : null,
+    email_verified_at:
+      typeof raw.email_verified_at === "string" ? raw.email_verified_at : null,
+    is_active:
+      typeof raw.is_active === "boolean" ? raw.is_active : undefined,
+    primary_auth_method:
+      typeof raw.primary_auth_method === "string"
+        ? raw.primary_auth_method
+        : null,
+    onboarding_status: onboardingStatus,
     created_at:
-      typeof raw.created_at === "string" ? raw.created_at : undefined,
-    access_token: accessToken,
-    github_pat: accessToken,
-    postgres_connection_string:
-      typeof raw.postgres_connection_string === "string"
-        ? raw.postgres_connection_string
-        : fallback.postgres_connection_string,
-    jira_url:
-      typeof raw.jira_url === "string"
-        ? raw.jira_url
-        : fallback.jira_url,
-    jira_username:
-      typeof raw.jira_username === "string"
-        ? raw.jira_username
-        : fallback.jira_username,
-    jira_api_token:
-      typeof raw.jira_api_token === "string"
-        ? raw.jira_api_token
-        : fallback.jira_api_token,
-    mongodb_connection_string:
-      typeof raw.mongodb_connection_string === "string"
-        ? raw.mongodb_connection_string
-        : fallback.mongodb_connection_string,
-    linear_api_key:
-      typeof raw.linear_api_key === "string"
-        ? raw.linear_api_key
-        : fallback.linear_api_key,
-    terraform_api_token:
-      typeof raw.terraform_api_token === "string"
-        ? raw.terraform_api_token
-        : fallback.terraform_api_token,
-    terraform_url:
-      typeof raw.terraform_url === "string"
-        ? raw.terraform_url
-        : fallback.terraform_url,
+      typeof raw.created_at === "string" ? raw.created_at : null,
   };
 }
 
 function hasUserPayloadShape(raw: Record<string, unknown>): boolean {
   return [
     "id",
-    "github_user_id",
+    "name",
     "username",
     "email",
-    "access_token",
-    "github_pat",
+    "avatar_url",
+    "email_verified_at",
+    "is_active",
+    "primary_auth_method",
+    "onboarding_status",
     "created_at",
-    "postgres_connection_string",
-    "jira_url",
-    "jira_username",
-    "jira_api_token",
-    "mongodb_connection_string",
-    "linear_api_key",
-    "terraform_api_token",
-    "terraform_url",
   ].some((key) => key in raw);
 }
 
@@ -905,8 +988,255 @@ function normalizeTokenUsageSessionItem(row: unknown): TokenUsageSessionItem {
   };
 }
 
+function unwrapArrayPayload<T = unknown>(payload: unknown, keys: string[]): T[] {
+  if (Array.isArray(payload)) return payload as T[];
+  if (!payload || typeof payload !== "object") return [];
+
+  const raw = payload as Record<string, unknown>;
+  for (const key of keys) {
+    if (Array.isArray(raw[key])) return raw[key] as T[];
+  }
+
+  return [];
+}
+
+function normalizeConnectorCatalogItem(
+  row: unknown,
+): ConnectorCatalogItem | null {
+  if (!row || typeof row !== "object") return null;
+
+  const raw = parseRow(row) as Record<string, unknown>;
+  const connectorKey =
+    typeof raw.connector_key === "string"
+      ? raw.connector_key
+      : typeof raw.key === "string"
+        ? raw.key
+        : "";
+  if (!connectorKey) return null;
+
+  return {
+    connector_key: connectorKey,
+    display_name:
+      typeof raw.display_name === "string"
+        ? raw.display_name
+        : typeof raw.name === "string"
+          ? raw.name
+          : connectorKey,
+    description:
+      typeof raw.description === "string" ? raw.description : null,
+    private_config_schema:
+      raw.private_config_schema && typeof raw.private_config_schema === "object"
+        ? (raw.private_config_schema as Record<string, unknown>)
+        : {},
+    public_config_schema:
+      raw.public_config_schema && typeof raw.public_config_schema === "object"
+        ? (raw.public_config_schema as Record<string, unknown>)
+        : {},
+    policy_catalog:
+      raw.policy_catalog && typeof raw.policy_catalog === "object"
+        ? (raw.policy_catalog as Record<string, unknown>)
+        : {},
+    is_active:
+      typeof raw.is_active === "boolean" ? raw.is_active : true,
+  };
+}
+
+function normalizePrivateCredentialStatus(
+  row: unknown,
+): PrivateConnectorCredentialStatus | null {
+  if (!row || typeof row !== "object") return null;
+
+  const raw = parseRow(row) as Record<string, unknown>;
+  const connectorKey =
+    typeof raw.connector_key === "string"
+      ? raw.connector_key
+      : typeof raw.key === "string"
+        ? raw.key
+        : "";
+  if (!connectorKey) return null;
+
+  const configuredKeys = Array.isArray(raw.configured_keys)
+    ? raw.configured_keys.filter((key): key is string => typeof key === "string")
+    : [];
+
+  return {
+    connector_key: connectorKey,
+    configured:
+      typeof raw.configured === "boolean"
+        ? raw.configured
+        : configuredKeys.length > 0,
+    configured_keys: configuredKeys,
+    credential_metadata:
+      raw.credential_metadata && typeof raw.credential_metadata === "object"
+        ? (raw.credential_metadata as Record<string, unknown>)
+        : null,
+    created_at: typeof raw.created_at === "string" ? raw.created_at : null,
+    updated_at: typeof raw.updated_at === "string" ? raw.updated_at : null,
+    revoked_at: typeof raw.revoked_at === "string" ? raw.revoked_at : null,
+  };
+}
+
 export const api = {
   healthCheck: () => apiFetch(`${API_BASE}/health`).then((r) => r.json()),
+
+  loginEmail: async (payload: LoginEmailPayload): Promise<void> => {
+    await authRequest("/auth/login", {
+      method: "POST",
+      headers: getJsonHeaders(),
+      body: JSON.stringify(payload),
+    });
+  },
+
+  registerEmail: async (
+    payload: RegisterEmailPayload,
+  ): Promise<Record<string, unknown> | null> =>
+    authRequest<Record<string, unknown> | null>("/auth/register", {
+      method: "POST",
+      headers: getJsonHeaders(),
+      body: JSON.stringify(payload),
+    }),
+
+  refreshSession: refreshSession,
+
+  resendVerification: async (
+    email: string,
+  ): Promise<Record<string, unknown> | null> =>
+    authRequest<Record<string, unknown> | null>("/auth/resend-verification", {
+      method: "POST",
+      headers: getJsonHeaders(),
+      body: JSON.stringify({ email }),
+    }),
+
+  forgotPassword: async (email: string): Promise<void> => {
+    try {
+      await authRequest("/auth/forgot-password", {
+        method: "POST",
+        headers: getJsonHeaders(),
+        body: JSON.stringify({ email }),
+      });
+    } catch (error) {
+      if (error instanceof ApiError && error.status && error.status < 500) {
+        return;
+      }
+      throw error;
+    }
+  },
+
+  validateResetToken: async (
+    token: string,
+  ): Promise<Record<string, unknown> | null> =>
+    authRequest<Record<string, unknown> | null>(
+      `/auth/validate-reset-token?token=${encodeURIComponent(token)}`,
+    ),
+
+  resetPassword: async (
+    payload: ResetPasswordPayload,
+  ): Promise<Record<string, unknown> | null> =>
+    authRequest<Record<string, unknown> | null>("/auth/reset-password", {
+      method: "POST",
+      headers: getJsonHeaders(),
+      body: JSON.stringify(payload),
+    }),
+
+  getOnboardingStatus: async (): Promise<OnboardingStatusResponse> =>
+    authRequest<OnboardingStatusResponse>(
+      "/auth/onboarding-status",
+      { method: "GET" },
+      (payload) => ({
+        onboarding_status:
+          !!(
+            payload &&
+            typeof payload === "object" &&
+            (payload as Record<string, unknown>).onboarding_status === true
+          ),
+      }),
+    ),
+
+  updateOnboardingStatus: async (
+    onboardingStatus: boolean,
+  ): Promise<OnboardingStatusResponse> =>
+    authRequest<OnboardingStatusResponse>(
+      "/auth/onboarding-status",
+      {
+        method: "POST",
+        headers: getJsonHeaders(),
+        body: JSON.stringify({ onboarding_status: onboardingStatus }),
+      },
+      (payload) => ({
+        onboarding_status:
+          !!(
+            payload &&
+            typeof payload === "object" &&
+            (payload as Record<string, unknown>).onboarding_status === true
+          ),
+      }),
+    ),
+
+  getConnectorCatalog: async (
+    activeOnly = true,
+  ): Promise<ConnectorCatalogItem[]> => {
+    const url = new URL(`${API_BASE}/connectors/catalog`);
+    if (activeOnly) url.searchParams.set("active_only", "true");
+
+    const res = await apiFetch(url.toString());
+    if (!res.ok) throw await readApiError(res);
+
+    const payload = await res.json();
+    return unwrapArrayPayload(payload, [
+      "items",
+      "connectors",
+      "catalog",
+      "data",
+    ])
+      .map(normalizeConnectorCatalogItem)
+      .filter((item): item is ConnectorCatalogItem => item !== null);
+  },
+
+  getPrivateConnectorCredentials: async (): Promise<
+    PrivateConnectorCredentialStatus[]
+  > => {
+    const res = await apiFetch(`${API_BASE}/connectors/private`);
+    if (!res.ok) throw await readApiError(res);
+
+    const payload = await res.json();
+    return unwrapArrayPayload(payload, [
+      "items",
+      "credentials",
+      "connectors",
+      "data",
+    ])
+      .map(normalizePrivateCredentialStatus)
+      .filter(
+        (item): item is PrivateConnectorCredentialStatus => item !== null,
+      );
+  },
+
+  savePrivateConnectorCredentials: async (
+    connectorKey: string,
+    credentials: Record<string, string>,
+    credentialMetadata: Record<string, unknown> = {},
+  ): Promise<PrivateConnectorCredentialStatus> => {
+    const res = await apiFetch(
+      `${API_BASE}/connectors/private/${encodeURIComponent(connectorKey)}`,
+      {
+        method: "PUT",
+        headers: getJsonHeaders(),
+        body: JSON.stringify({
+          credentials,
+          credential_metadata: credentialMetadata,
+        }),
+      },
+    );
+
+    if (!res.ok) throw await readApiError(res);
+
+    const status = normalizePrivateCredentialStatus(await res.json());
+    if (!status) {
+      throw new Error("Server returned an invalid credential status.");
+    }
+
+    return status;
+  },
 
   logOut: async () => {
     try {
@@ -1020,36 +1350,6 @@ export const api = {
       }
       return json;
     }),
-
-  updateOnboardingStep: (onboardingStep: number) =>
-    apiFetch(`${API_BASE}/auth/onboarding-step`, {
-      method: "POST",
-      // credentials: 'include',
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        onboarding_step: onboardingStep,
-      }),
-    }).then(async (res) => {
-      const json = await res.json();
-
-      if (!res.ok) {
-        const message =
-          typeof json.detail === "string"
-            ? json.detail
-            : JSON.stringify(json.detail);
-
-        throw new Error(message || `HTTP ${res.status}`);
-      }
-
-      return json;
-    }),
-
-  getOnboardingStep: () =>
-    apiFetch(`${API_BASE}/auth/onboarding-step`, {
-      // credentials: 'include',
-    }).then((res) => res.json()),
 
   getUserDetails: async (): Promise<User> => fetchAuthenticatedUserDetails(),
 
@@ -1369,117 +1669,21 @@ export const api = {
   },
 
   saveUser: async (user: SaveUserPayload) => {
-    const createResponse = await apiFetch(`${API_BASE}/user`, {
-      method: "POST",
-      headers: getJsonHeaders(),
-      body: JSON.stringify({
-        github_pat: user.github_pat,
-      }),
-    });
-
-    if (!createResponse.ok) {
-      throw new Error(await readErrorMessage(createResponse));
-    }
-
-    let data: unknown = null;
-    try {
-      data = await createResponse.json();
-    } catch {
-      data = null;
-    }
-
-    const raw = extractUserPayload(data);
-    if (raw) {
-      return normalizeUserPayload(raw, {
-        github_pat: user.github_pat ?? undefined,
-      });
-    }
-
-    if (
-      data &&
-      typeof data === "object" &&
-      "success" in data &&
-      data.success === false
-    ) {
-      const message =
-        "message" in data && typeof data.message === "string"
-          ? data.message
-          : "Failed to create user";
-      throw new Error(message);
-    }
-
-    return fetchAuthenticatedUserDetails({
-      github_pat: user.github_pat ?? undefined,
-    });
+    void user;
+    return fetchAuthenticatedUserDetails();
   },
 
   updateUserDetails: async (
     payload: UpdateUserDetailsPayload,
   ): Promise<User> => {
-    const body: Record<string, string | number> = {};
+    const body: Record<string, string> = {};
 
-    if (typeof payload.username === "string" && payload.username.trim()) {
-      body.username = payload.username.trim();
+    const name = payload.name ?? payload.username;
+    if (typeof name === "string" && name.trim()) {
+      body.name = name.trim();
     }
     if (typeof payload.email === "string" && payload.email.trim()) {
       body.email = payload.email.trim();
-    }
-    if (typeof payload.github_pat === "string" && payload.github_pat.trim()) {
-      body.github_pat = payload.github_pat.trim();
-    }
-    if (
-      typeof payload.postgres_connection_string === "string" &&
-      payload.postgres_connection_string.trim()
-    ) {
-      body.postgres_connection_string =
-        payload.postgres_connection_string.trim();
-    }
-    if (typeof payload.jira_url === "string" && payload.jira_url.trim()) {
-      body.jira_url = payload.jira_url.trim();
-    }
-    if (
-      typeof payload.jira_username === "string" &&
-      payload.jira_username.trim()
-    ) {
-      body.jira_username = payload.jira_username.trim();
-    }
-    if (
-      typeof payload.jira_api_token === "string" &&
-      payload.jira_api_token.trim()
-    ) {
-      body.jira_api_token = payload.jira_api_token.trim();
-    }
-    if (
-      typeof payload.mongodb_connection_string === "string" &&
-      payload.mongodb_connection_string.trim()
-    ) {
-      body.mongodb_connection_string =
-        payload.mongodb_connection_string.trim();
-    }
-    if (
-      typeof payload.linear_api_key === "string" &&
-      payload.linear_api_key.trim()
-    ) {
-      body.linear_api_key = payload.linear_api_key.trim();
-    }
-    if (
-      typeof payload.terraform_api_token === "string" &&
-      payload.terraform_api_token.trim()
-    ) {
-      body.terraform_api_token = payload.terraform_api_token.trim();
-    }
-    if (
-      typeof payload.terraform_url === "string" &&
-      payload.terraform_url.trim()
-    ) {
-      body.terraform_url = payload.terraform_url.trim();
-    }
-    if (
-      payload.github_user_id !== undefined &&
-      payload.github_user_id !== null &&
-      String(payload.github_user_id).trim()
-    ) {
-      body.github_user_id = String(payload.github_user_id).trim();
     }
 
     if (!Object.keys(body).length) {

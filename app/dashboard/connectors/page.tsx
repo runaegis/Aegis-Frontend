@@ -6,8 +6,7 @@
  * 2-column card grid. Each card has a brand-color radial signature in
  * the upper-left, anchoring its visual identity without committing to a
  * marketing-site full-color treatment. GitHub leads as the live
- * production integration; Slack follows as the actively-building
- * critical-path item; the rest are queued in priority order.
+ * production integration; other live connectors follow.
  *
  * Design pulls from:
  *   • Linear app directory — large brand marks doing the heavy lifting,
@@ -36,14 +35,16 @@ const DISPLAY_ORDER: ConnectorId[] = [
   'github',
   'github-actions',
   'postgres',
-  'jira',
-  'slack',
+  'mongodb',
   'linear',
+  'jira',
   'terraform',
 ];
 
 export default function ConnectorsPage() {
   const reduce = useReducedMotion();
+  const total = DISPLAY_ORDER.length;
+  const live = DISPLAY_ORDER.filter((id) => STATUS_BY_ID[id] === 'live').length;
 
   return (
     <>
@@ -61,7 +62,7 @@ export default function ConnectorsPage() {
             variants={fadeUp}
             className="mb-3 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-[var(--primary-base)]"
           >
-            Connector catalog · 7 integrations · 4 live
+            Connector catalog · {total} integrations · {live} live
           </motion.p>
           <motion.h1
             variants={fadeUp}
@@ -73,9 +74,7 @@ export default function ConnectorsPage() {
             variants={fadeUp}
             className="mt-4 max-w-[560px] text-[14.5px] leading-[1.6] text-[var(--neutral-sub-600)]"
           >
-            GitHub, GitHub Actions, PostgreSQL, and Jira are live today. Three
-            more surfaces are in progress, each governed by the same Allow,
-            Approval, Deny model.
+            GitHub, GitHub Actions, PostgreSQL, MongoDB, Linear, Jira, and Terraform are live today — each governed by the same Allow, Approval, Deny model.
           </motion.p>
         </motion.section>
 

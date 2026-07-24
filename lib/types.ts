@@ -129,21 +129,40 @@ export interface Session {
 }
 
 export interface User {
-  id?: string; // UUID primary key from database
-  github_user_id: number;
+  id?: string;
+  name?: string | null;
   username: string;
   email: string;
-  created_at?: string;
-  github_pat?: string | null;
-  access_token?: string | null;
-  postgres_connection_string?: string | null;
-  jira_url?: string | null;
-  jira_username?: string | null;
-  jira_api_token?: string | null;
-  mongodb_connection_string?: string | null;
-  linear_api_key?: string | null;
-  terraform_api_token?: string | null;
-  terraform_url?: string | null;
+  avatar_url?: string | null;
+  email_verified_at?: string | null;
+  is_active?: boolean;
+  primary_auth_method?: string | null;
+  onboarding_status?: boolean | null;
+  created_at?: string | null;
+}
+
+export interface OnboardingStatusResponse {
+  onboarding_status: boolean;
+}
+
+export interface ConnectorCatalogItem {
+  connector_key: string;
+  display_name: string;
+  description?: string | null;
+  private_config_schema?: Record<string, unknown> | null;
+  public_config_schema?: Record<string, unknown> | null;
+  policy_catalog?: Record<string, unknown> | null;
+  is_active?: boolean;
+}
+
+export interface PrivateConnectorCredentialStatus {
+  connector_key: string;
+  configured: boolean;
+  configured_keys: string[];
+  credential_metadata?: Record<string, unknown> | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  revoked_at?: string | null;
 }
 
 export interface SlackIntegrationStatus {

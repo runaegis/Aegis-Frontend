@@ -1368,47 +1368,103 @@ export function installPreviewApi() {
     return { success: true };
   };
 
-  api.saveUser = async (u) => ({
-    ...u,
-    id: 'preview-user',
-    username: 'demo',
-    email: 'preview@runaegis.co',
-    github_user_id: 0,
-    created_at: new Date().toISOString(),
-    postgres_connection_string: null,
-    jira_url: null,
-    jira_username: null,
-    jira_api_token: null,
-    mongodb_connection_string: null,
-    linear_api_key: null,
-    terraform_api_token: null,
-    terraform_url: null,
-  });
+  api.saveUser = async (u) => {
+    void u;
+    return {
+      id: 'preview-user',
+      name: 'Demo',
+      username: 'demo',
+      email: 'preview@runaegis.co',
+      onboarding_status: false,
+      created_at: new Date().toISOString(),
+    };
+  };
   api.getUserDetails = async () => ({
     id: 'preview-user',
+    name: 'Demo',
     username: 'demo',
     email: 'preview@runaegis.co',
-    github_user_id: 0,
-    access_token: null,
-    github_pat: null,
-    postgres_connection_string: null,
-    jira_url: null,
-    jira_username: null,
-    jira_api_token: null,
-    mongodb_connection_string: null,
-    linear_api_key: null,
-    terraform_api_token: null,
-    terraform_url: null,
+    avatar_url: null,
+    email_verified_at: new Date().toISOString(),
+    is_active: true,
+    primary_auth_method: 'preview',
+    onboarding_status: true,
+    created_at: new Date().toISOString(),
   });
-  // Preview onboarding when the user is actually ON /onboarding (so
-  // designers can review the flow). Anywhere else, claim "complete" so
-  // they don't get pulled back into the wizard mid-session. The numeric
-  // value matters: > 4 redirects to /dashboard, 1..4 renders that step.
-  api.getOnboardingStep = async () => {
+  api.getOnboardingStatus = async () => {
     const onOnboarding =
       typeof window !== 'undefined' &&
       window.location.pathname.startsWith('/onboarding');
-    return { onboarding_step: onOnboarding ? 1 : 6 };
+    return { onboarding_status: !onOnboarding };
   };
-  api.updateOnboardingStep = async () => ({ success: true });
+  api.updateOnboardingStatus = async (status) => ({ onboarding_status: status });
+  api.getConnectorCatalog = async () => [
+    {
+      connector_key: 'github',
+      display_name: 'GitHub',
+      description: 'Connect a personal access token for source control workflows.',
+      private_config_schema: {
+        type: 'object',
+        required: ['github_pat'],
+        properties: {
+          github_pat: {
+            type: 'string',
+            title: 'GitHub PAT',
+            description: 'Classic personal access token with repo access.',
+          },
+        },
+      },
+      public_config_schema: {},
+      policy_catalog: {},
+      is_active: true,
+    },
+    {
+      connector_key: 'postgres',
+      display_name: 'PostgreSQL',
+      description: 'Connect a personal database URL for query and migration workflows.',
+      private_config_schema: {
+        type: 'object',
+        required: ['connection_string'],
+        properties: {
+          connection_string: {
+            type: 'string',
+            title: 'Connection string',
+            description: 'Personal PostgreSQL connection URL.',
+          },
+        },
+      },
+      public_config_schema: {},
+      policy_catalog: {},
+      is_active: true,
+    },
+    {
+      connector_key: 'linear',
+      display_name: 'Linear',
+      description: 'Connect a personal API key for planning context.',
+      private_config_schema: {
+        type: 'object',
+        required: ['api_key'],
+        properties: {
+          api_key: {
+            type: 'string',
+            title: 'API key',
+            description: 'Personal Linear API key.',
+          },
+        },
+      },
+      public_config_schema: {},
+      policy_catalog: {},
+      is_active: true,
+    },
+  ];
+  api.getPrivateConnectorCredentials = async () => [];
+  api.savePrivateConnectorCredentials = async (connectorKey, credentials) => ({
+    connector_key: connectorKey,
+    configured: true,
+    configured_keys: Object.keys(credentials),
+    credential_metadata: null,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    revoked_at: null,
+  });
 }

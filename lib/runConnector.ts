@@ -37,6 +37,17 @@ const TOOL_CONNECTOR: Record<string, ConnectorId> = {
   run_migration: 'postgres',
   list_tables: 'postgres',
   describe_table: 'postgres',
+  // MongoDB (tool names vary; keep explicit mappings for the common ones)
+  mongo_find: 'mongodb',
+  mongo_aggregate: 'mongodb',
+  mongo_insert: 'mongodb',
+  mongo_update: 'mongodb',
+  mongo_delete: 'mongodb',
+  mongodb_find: 'mongodb',
+  mongodb_aggregate: 'mongodb',
+  mongodb_insert: 'mongodb',
+  mongodb_update: 'mongodb',
+  mongodb_delete: 'mongodb',
   // Terraform
   terraform_plan: 'terraform',
   terraform_apply: 'terraform',
@@ -71,6 +82,7 @@ export function connectorForTool(toolName?: string | null): ConnectorId {
   if (/linear/.test(t)) return 'linear';
   if (/slack|message|channel|notify/.test(t)) return 'slack';
   if (/sql|query|migration|psql|postgres|truncate|(^|_)drop_|(^|_)table(_|$)|schema/.test(t)) return 'postgres';
+  if (/mongo|mongodb/.test(t)) return 'mongodb';
   if (/workflow|secret|dispatch/.test(t)) return 'github-actions';
   if (/memory/.test(t)) return 'memory';
   return 'github';
@@ -109,7 +121,7 @@ function tableFromSql(sql: string | null): string | null {
  */
 export interface TargetSource {
   tool_name?: string | null;
-  arguments?: Record<string, any> | null;
+  arguments?: Record<string, unknown> | null;
   target_repo?: string | null;
   target_branch?: string | null;
 }
@@ -127,6 +139,12 @@ export function deriveTarget(action: TargetSource): RunTarget {
         secondary: str(args.table) ?? tableFromSql(sql),
       };
     }
+    case 'mongodb':
+      return {
+        kind: 'DATABASE',
+        primary: str(args.database) ?? str(args.db) ?? str(action.target_repo),
+        secondary: str(args.collection) ?? str(args.coll) ?? str(args.table),
+      };
     case 'terraform':
       return {
         kind: 'WORKSPACE',
@@ -179,6 +197,7 @@ export const RUN_CONNECTOR_FILTERS: ConnectorId[] = [
   'github',
   'github-actions',
   'postgres',
+  'mongodb',
   'terraform',
   'slack',
   'linear',

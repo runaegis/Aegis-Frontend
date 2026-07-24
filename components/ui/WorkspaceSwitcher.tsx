@@ -42,7 +42,7 @@ import { api } from '@/lib/api';
 
 export function WorkspaceSwitcher() {
   const router = useRouter();
-  const { user } = useUser();
+  const { user, clearUser } = useUser();
   const [open, setOpen] = useState(false);
   const [demoOn, setDemoOn] = useState<boolean | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -94,17 +94,11 @@ export function WorkspaceSwitcher() {
     window.location.reload();
   };
 
-  const handleSignOut = () => {
+  const handleSignOut = async () => {
     setOpen(false);
-    try {
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('refresh_token');
-      localStorage.removeItem('aegis_preview');
-      api.logOut();
-      router.replace('/auth');
-    } catch{
-
-    }
+    await api.logOut();
+    clearUser();
+    router.replace('/auth');
   };
 
   const handleSettings = () => {
@@ -139,7 +133,7 @@ export function WorkspaceSwitcher() {
   // or the welcome modal pre-auth). For those users, the "Switch to my
   // workspace" row would just bounce them to /auth without explanation —
   // we relabel it to make the sign-up requirement honest.
-  const hasRealAccount = (user?.github_user_id ?? 0) > 0;
+  const hasRealAccount = Boolean(user?.id || user?.email);
   const showUnauthLabel = !!demoOn && !hasRealAccount;
 
   const handleSignUpFromDemo = () => {

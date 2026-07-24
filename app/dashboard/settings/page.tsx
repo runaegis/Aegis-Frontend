@@ -32,7 +32,7 @@ import {
 } from 'lucide-react';
 import Topbar from '@/components/layout/Topbar';
 import { api } from '@/lib/api';
-import { useOnboardingStep, useUser } from '@/lib/hooks';
+import { useUser } from '@/lib/hooks';
 import { Repo, SlackIntegrationStatus } from '@/lib/types';
 import { getInitials } from '@/lib/utils';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
@@ -129,7 +129,6 @@ const FLAT_SECTIONS: Section[] = GROUPS.flatMap((g) => g.items);
 // ── Page ────────────────────────────────────────────────────────────────────
 export default function SettingsPage() {
   const { user, setUser, clearUser } = useUser();
-  const { setStep } = useOnboardingStep();
   const reduce = useReducedMotion();
   const toast = useToast();
   const router = useRouter();
@@ -277,8 +276,11 @@ export default function SettingsPage() {
             {active === 'danger' && (
               <DangerSection
                 onReset={() => {
-                  setStep(1);
-                  window.location.href = '/onboarding';
+                  api.updateOnboardingStatus(false)
+                    .catch(() => undefined)
+                    .finally(() => {
+                      window.location.href = '/onboarding';
+                    });
                 }}
                 onLogout={() => {
                   clearUser();
@@ -430,24 +432,17 @@ function ProfileSection({
   onSuccess: (s: string) => void;
   reduce: boolean;
 }) {
-  const [username, setUsername] = useState(user?.username || '');
+  const [username, setUsername] = useState(user?.name || user?.username || '');
   const [email, setEmail] = useState(user?.email || '');
-  const [githubUserId, setGithubUserId] = useState(String(user?.github_user_id ?? ''));
-  const [token, setToken] = useState(user?.access_token || user?.github_pat || '');
-  const [postgresConnectionString, setPostgresConnectionString] = useState(
-    user?.postgres_connection_string || '',
-  );
-  const [jiraUrl, setJiraUrl] = useState(user?.jira_url || '');
-  const [jiraUsername, setJiraUsername] = useState(user?.jira_username || '');
-  const [jiraApiToken, setJiraApiToken] = useState(user?.jira_api_token || '');
-  const [mongodbConnectionString, setMongodbConnectionString] = useState(
-    user?.mongodb_connection_string || '',
-  );
-  const [linearApiKey, setLinearApiKey] = useState(user?.linear_api_key || '');
-  const [terraformApiToken, setTerraformApiToken] = useState(
-    user?.terraform_api_token || '',
-  );
-  const [terraformUrl, setTerraformUrl] = useState(user?.terraform_url || '');
+  const [githubPat, setGithubPat] = useState('');
+  const [postgresConnectionString, setPostgresConnectionString] = useState('');
+  const [jiraUrl, setJiraUrl] = useState('');
+  const [jiraUsername, setJiraUsername] = useState('');
+  const [jiraApiToken, setJiraApiToken] = useState('');
+  const [mongodbConnectionString, setMongodbConnectionString] = useState('');
+  const [linearApiKey, setLinearApiKey] = useState('');
+  const [terraformApiToken, setTerraformApiToken] = useState('');
+  const [terraformUrl, setTerraformUrl] = useState('');
   const [saving, setSaving] = useState(false);
   // Avatar upload — useCustomAvatar() reads localStorage + listens
   // for changes, so the hero updates immediately after upload/remove
@@ -458,18 +453,8 @@ function ProfileSection({
 
   useEffect(() => {
     if (user) {
-      setUsername(user.username || '');
+      setUsername(user.name || user.username || '');
       setEmail(user.email || '');
-      setGithubUserId(String(user.github_user_id ?? ''));
-      setToken(user.access_token || user.github_pat || '');
-      setPostgresConnectionString(user.postgres_connection_string || '');
-      setJiraUrl(user.jira_url || '');
-      setJiraUsername(user.jira_username || '');
-      setJiraApiToken(user.jira_api_token || '');
-      setMongodbConnectionString(user.mongodb_connection_string || '');
-      setLinearApiKey(user.linear_api_key || '');
-      setTerraformApiToken(user.terraform_api_token || '');
-      setTerraformUrl(user.terraform_url || '');
     }
   }, [user]);
 
@@ -499,53 +484,16 @@ function ProfileSection({
     setUser({
       ...(user ?? {}),
       ...updatedUser,
-      access_token: updatedUser.access_token ?? user?.access_token ?? '',
-      github_pat:
-        updatedUser.github_pat ??
-        updatedUser.access_token ??
-        user?.github_pat ??
-        user?.access_token,
-      postgres_connection_string:
-        updatedUser.postgres_connection_string ??
-        user?.postgres_connection_string ??
-        '',
-      jira_url: updatedUser.jira_url ?? user?.jira_url ?? '',
-      jira_username: updatedUser.jira_username ?? user?.jira_username ?? '',
-      jira_api_token:
-        updatedUser.jira_api_token ?? user?.jira_api_token ?? '',
-      mongodb_connection_string:
-        updatedUser.mongodb_connection_string ??
-        user?.mongodb_connection_string ??
-        '',
-      linear_api_key: updatedUser.linear_api_key ?? user?.linear_api_key ?? '',
-      terraform_api_token:
-        updatedUser.terraform_api_token ?? user?.terraform_api_token ?? '',
-      terraform_url: updatedUser.terraform_url ?? user?.terraform_url ?? '',
     });
   };
 
   const saveIdentity = async () => {
     if (!user) return;
-    const trimmedGithubUserId = githubUserId.trim();
-    const originalGithubUserId = String(user.github_user_id ?? '').trim();
-    const githubUserIdChanged = trimmedGithubUserId !== originalGithubUserId;
-
-    if (githubUserIdChanged && !trimmedGithubUserId) {
-      onError('GitHub user ID cannot be empty.');
-      return;
-    }
-
-    if (trimmedGithubUserId && !/^\d+$/.test(trimmedGithubUserId)) {
-      onError('GitHub user ID must contain only numbers.');
-      return;
-    }
-
     setSaving(true);
     try {
       const updated = await api.updateUserDetails({
-        username,
+        name: username,
         email,
-        github_user_id: githubUserIdChanged ? trimmedGithubUserId : undefined,
       });
       applyUpdatedUser(updated);
       onSuccess('Profile updated');
@@ -557,25 +505,7 @@ function ProfileSection({
 
   const updateSecrets = async () => {
     if (!user) return;
-    setSaving(true);
-    try {
-      const updated = await api.updateUserDetails({
-        github_pat: token,
-        postgres_connection_string: postgresConnectionString,
-        jira_url: jiraUrl,
-        jira_username: jiraUsername,
-        jira_api_token: jiraApiToken,
-        mongodb_connection_string: mongodbConnectionString,
-        linear_api_key: linearApiKey,
-        terraform_api_token: terraformApiToken,
-        terraform_url: terraformUrl,
-      });
-      applyUpdatedUser(updated);
-      onSuccess('Credentials updated');
-    } catch (err) {
-      onError(err instanceof Error ? err.message : 'Failed to update credentials');
-    }
-    setSaving(false);
+    onError('Credential updates have moved to Connectors. This section will be migrated next.');
   };
 
   return (
@@ -646,14 +576,6 @@ function ProfileSection({
           <Field label="Email" hint="Used for approval and incident notifications.">
             <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
           </Field>
-          <Field label="GitHub user ID" hint="Numeric GitHub account ID.">
-            <Input
-              value={githubUserId}
-              onChange={(e) => setGithubUserId(e.target.value.replace(/\D/g, ''))}
-              inputMode="numeric"
-              pattern="[0-9]*"
-            />
-          </Field>
           <div className="mt-5 flex items-center justify-end gap-2">
             <Button
               variant="primary"
@@ -677,8 +599,8 @@ function ProfileSection({
           <Field label="GitHub PAT" hint="Treat this like a password. Rotate it if exposed.">
             <Input
               type="password"
-              value={token}
-              onChange={(e) => setToken(e.target.value)}
+              value={githubPat}
+              onChange={(e) => setGithubPat(e.target.value)}
             />
           </Field>
           <Field
@@ -763,9 +685,9 @@ function ProfileSection({
               href="https://github.com/settings/tokens"
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-[12.5px] font-medium text-[var(--neutral-sub-600)] hover:text-[var(--primary-base)]"
+              className="inline-flex items-center gap-1 text-[12.5px] font-medium text-[var(--neutral-sub-600)] hover:text-[var(--neutral-strong-950)]"
             >
-              Manage tokens on GitHub
+              Manage PATs on GitHub
               <ExternalLink className="h-3 w-3" strokeWidth={2} />
             </a>
             <Button
@@ -1105,26 +1027,22 @@ function GitHubSection({
       <motion.div variants={fadeUp}>
         <SettingsCard
           title="GitHub connection"
-          description="Aegis uses GitHub to inspect repos, branches, and pull-request state."
+          description="Connector-owned GitHub settings will move into the Connectors area."
           action={
-            <Badge tone="success" uppercase leadingDot>
-              Connected
+            <Badge tone="neutral" uppercase leadingDot>
+              Pending migration
             </Badge>
           }
         >
           <div className="divide-y divide-[var(--stroke-soft-200)]">
             <Row
-              title="Username"
-              description="Display name pulled from your GitHub account."
-              meta={<CodeChip>{user?.username || '—'}</CodeChip>}
-            />
-            <Row
-              title="GitHub user ID"
-              meta={<CodeChip>{user?.github_user_id || '—'}</CodeChip>}
+              title="Account"
+              description="Auth profile currently loaded from /auth/user."
+              meta={<CodeChip>{user?.email || '—'}</CodeChip>}
             />
             <Row
               title="Token scopes"
-              description="Required scopes for read + PR creation flows."
+              description="Connector credential storage is no longer part of the auth user profile."
               meta={
                 <div className="flex flex-wrap gap-1">
                   <CodeChip>repo</CodeChip>

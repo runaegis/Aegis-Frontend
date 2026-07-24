@@ -298,7 +298,7 @@ export default function DashboardHomePage() {
           </motion.p>
         </motion.header>
 
-        {/* ─── GitHub token alert (only when invalid/missing) ─────────── */}
+        {/* GitHub PAT alert, only when invalid or missing. */}
         <GithubPatStatus className="mb-6" />
 
         {/* ─── Hero — Decision distribution ─────────────────────────── */}

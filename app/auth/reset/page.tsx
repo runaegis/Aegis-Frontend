@@ -31,7 +31,7 @@ import {
   LockKeyhole,
   MailCheck,
 } from 'lucide-react';
-import { apiFetch } from '@/lib/api';
+import { api, getApiErrorCode, getApiErrorMessage } from '@/lib/api';
 import { AegisLogo } from '@/components/ui/AegisLogo';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -44,7 +44,6 @@ const FEATURE_BULLETS = [
 ];
 
 function ResetPasswordPage() {
-  const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
   const reduce = useReducedMotion();
   const searchParams = useSearchParams();
   const token = searchParams.get('token');
@@ -69,28 +68,17 @@ function ResetPasswordPage() {
         return;
       }
       try {
-        const res = await apiFetch(
-          `${BACKEND_URL}/auth/validate-reset-token?token=${encodeURIComponent(token)}`,
-          {
-            method: 'GET',
-            headers: { 'Content-Type': 'application/json' },
-          },
-        );
-        if (res.ok) {
-          setTokenValid(true);
-          setError(null);
-        } else {
-          const data = await res.json();
-          setError(data.detail || 'Reset link has expired or is invalid');
-        }
-      } catch {
-        setError('Failed to validate reset link');
+        await api.validateResetToken(token);
+        setTokenValid(true);
+        setError(null);
+      } catch (err: unknown) {
+        setError(getApiErrorMessage(err, 'Reset link has expired or is invalid'));
       } finally {
         setValidating(false);
       }
     };
     validateToken();
-  }, [token, BACKEND_URL]);
+  }, [token]);
 
   // ─── Password strength rules ───────────────────────────────────────────
   const hasValidLength = password.length >= 8;
@@ -127,18 +115,7 @@ function ResetPasswordPage() {
     if (!validatePasswords()) return;
     setLoading(true);
     try {
-      const res = await apiFetch(`${BACKEND_URL}/auth/reset-password`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, password }),
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        throw data.detail || {
-          code: 'RESET_FAILED',
-          message: 'Failed to reset password',
-        };
-      }
+      await api.resetPassword({ token: token ?? '', new_password: password });
       setSuccess(true);
       setPassword('');
       setConfirmPassword('');
@@ -146,10 +123,7 @@ function ResetPasswordPage() {
         router.push('/auth');
       }, 2000);
     } catch (err: unknown) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const e = err as any;
-      const detail = e?.detail || e;
-      switch (detail?.code) {
+      switch (getApiErrorCode(err)) {
         case 'INVALID_RESET_TOKEN':
           setError('This reset link is invalid or has expired.');
           break;
@@ -157,7 +131,7 @@ function ResetPasswordPage() {
           setError('Password does not meet security requirements.');
           break;
         default:
-          setError(detail?.message || 'Failed to reset password. Please try again.');
+          setError(getApiErrorMessage(err, 'Failed to reset password. Please try again.'));
       }
     } finally {
       setLoading(false);
