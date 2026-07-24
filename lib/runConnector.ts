@@ -58,6 +58,18 @@ const TOOL_CONNECTOR: Record<string, ConnectorId> = {
   update_memory: 'memory',
   list_memory: 'memory',
   get_memory_from_name: 'memory',
+  // Agent Workspace tools — same Aegis-owned surface as memory; use the
+  // memory mark so they don't render as GitHub (or Slack via the
+  // `message` keyword fallback below).
+  workspace_list_handles: 'memory',
+  workspace_get_context: 'memory',
+  workspace_check_mentions: 'memory',
+  workspace_list_pointers: 'memory',
+  workspace_post: 'memory',
+  workspace_add_pointer: 'memory',
+  workspace_update_pointer: 'memory',
+  workspace_get_messages: 'memory',
+  workspace_delete_pointer: 'memory',
   // Everything else defaults to GitHub (the original connector).
 };
 
@@ -65,6 +77,10 @@ export function connectorForTool(toolName?: string | null): ConnectorId {
   const t = (toolName ?? '').trim().toLowerCase();
   if (!t) return 'github';
   if (TOOL_CONNECTOR[t]) return TOOL_CONNECTOR[t];
+  // Aegis Agent Workspace family (workspace_*). Checked before the Slack
+  // keyword heuristic so names like workspace_get_messages / workspace_post
+  // don't get misclassified.
+  if (t.startsWith('workspace_')) return 'memory';
   // Keyword fallback so unfamiliar tool names still classify sensibly.
   if (/terraform|(^|_)tf(_|$)/.test(t)) return 'terraform';
   if (/jira/.test(t)) return 'jira';
