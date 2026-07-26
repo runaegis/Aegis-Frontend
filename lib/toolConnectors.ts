@@ -26,6 +26,19 @@ export const MEMORY_TOOLS = new Set([
   'get_memory_from_name',
 ]);
 
+/** Agent Workspace tools — Aegis-owned multi-agent room surface. */
+export const WORKSPACE_TOOLS = new Set([
+  'workspace_list_handles',
+  'workspace_get_context',
+  'workspace_check_mentions',
+  'workspace_list_pointers',
+  'workspace_post',
+  'workspace_add_pointer',
+  'workspace_update_pointer',
+  'workspace_get_messages',
+  'workspace_delete_pointer',
+]);
+
 export function isPostgresTool(toolName?: string | null): boolean {
   return POSTGRES_TOOLS.has((toolName ?? '').trim().toLowerCase());
 }
@@ -34,10 +47,16 @@ export function isMemoryTool(toolName?: string | null): boolean {
   return MEMORY_TOOLS.has((toolName ?? '').trim().toLowerCase());
 }
 
+export function isWorkspaceTool(toolName?: string | null): boolean {
+  const t = (toolName ?? '').trim().toLowerCase();
+  return WORKSPACE_TOOLS.has(t) || t.startsWith('workspace_');
+}
+
 export function connectorForTool(toolName?: string | null): ConnectorId {
   const t = (toolName ?? '').trim().toLowerCase();
   if (POSTGRES_TOOLS.has(t)) return 'postgres';
   if (GITHUB_ACTIONS_TOOLS.has(t)) return 'github-actions';
   if (MEMORY_TOOLS.has(t)) return 'memory';
+  if (WORKSPACE_TOOLS.has(t) || t.startsWith('workspace_')) return 'workspace';
   return 'github';
 }

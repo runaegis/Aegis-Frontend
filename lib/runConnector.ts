@@ -58,6 +58,16 @@ const TOOL_CONNECTOR: Record<string, ConnectorId> = {
   update_memory: 'memory',
   list_memory: 'memory',
   get_memory_from_name: 'memory',
+  // Agent Workspace tools — Aegis-owned multi-agent room surface.
+  workspace_list_handles: 'workspace',
+  workspace_get_context: 'workspace',
+  workspace_check_mentions: 'workspace',
+  workspace_list_pointers: 'workspace',
+  workspace_post: 'workspace',
+  workspace_add_pointer: 'workspace',
+  workspace_update_pointer: 'workspace',
+  workspace_get_messages: 'workspace',
+  workspace_delete_pointer: 'workspace',
   // Everything else defaults to GitHub (the original connector).
 };
 
@@ -65,6 +75,10 @@ export function connectorForTool(toolName?: string | null): ConnectorId {
   const t = (toolName ?? '').trim().toLowerCase();
   if (!t) return 'github';
   if (TOOL_CONNECTOR[t]) return TOOL_CONNECTOR[t];
+  // Aegis Agent Workspace family (workspace_*). Checked before the Slack
+  // keyword heuristic so names like workspace_get_messages / workspace_post
+  // don't get misclassified.
+  if (t.startsWith('workspace_')) return 'workspace';
   // Keyword fallback so unfamiliar tool names still classify sensibly.
   if (/terraform|(^|_)tf(_|$)/.test(t)) return 'terraform';
   if (/jira/.test(t)) return 'jira';
@@ -163,6 +177,17 @@ export function deriveTarget(action: TargetSource): RunTarget {
         primary: str(args.title) ?? str(args.id) ?? null,
         secondary: null,
       };
+    case 'workspace':
+      return {
+        kind: 'ROOM',
+        primary:
+          str(args.title) ??
+          str(args.content) ??
+          str(args.pointer_id) ??
+          str(args.handle) ??
+          null,
+        secondary: null,
+      };
     case 'github':
     default:
       return {
@@ -184,4 +209,5 @@ export const RUN_CONNECTOR_FILTERS: ConnectorId[] = [
   'linear',
   'jira',
   'memory',
+  'workspace',
 ];
