@@ -19,15 +19,40 @@
  * Data lives in CONNECTORS (components/ui/ConnectorMark.tsx).
  */
 
+import { useEffect, useMemo, useState } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
-import { ArrowUpRight, Clock, Loader2, ShieldCheck } from 'lucide-react';
+import { ArrowUpRight, CheckCircle2, Clock, KeyRound, Loader2, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
 import Topbar from '@/components/layout/Topbar';
 import { ConnectorMark, CONNECTORS, type ConnectorId } from '@/components/ui/ConnectorMark';
+import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import ErrorBanner from '@/components/ui/ErrorBanner';
+import { useToast } from '@/components/ui/Toast';
+import { api } from '@/lib/api';
+import { useUser } from '@/lib/hooks';
+import type { ConnectorCatalogItem, PrivateConnectorCredentialStatus } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { DUR, EASE, fadeUp, staggerContainer } from '@/lib/motion';
 import { STATUS_BY_ID, type ConnectorStatus } from '@/lib/connectorCatalog';
+import { ConnectorCredentialsModal } from '@/components/connectors/ConnectorCredentialsModal';
+
+function isDemoMode(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return (
+      document.documentElement.dataset.demo === 'true' ||
+      localStorage.getItem('aegis_demo') === 'true'
+    );
+  } catch {
+    return false;
+  }
+}
+
+function credentialKeyFor(id: ConnectorId): string | null {
+  if (id === 'github-actions') return 'github';
+  return id;
+}
 
 // Display order — Live first, then In Progress, then queued in the
 // priority order from the Notion roadmap.
@@ -43,8 +68,50 @@ const DISPLAY_ORDER: ConnectorId[] = [
 
 export default function ConnectorsPage() {
   const reduce = useReducedMotion();
+  const toast = useToast();
+  const { user, isLoading: userLoading } = useUser();
+  const demo = useMemo(() => isDemoMode(), []);
+
+  const [catalogByKey, setCatalogByKey] = useState<Record<string, ConnectorCatalogItem>>({});
+  const [privateByKey, setPrivateByKey] = useState<Record<string, PrivateConnectorCredentialStatus>>({});
+  const [credsLoading, setCredsLoading] = useState(true);
+  const [credsError, setCredsError] = useState<string | null>(null);
+  const [activeCredKey, setActiveCredKey] = useState<string | null>(null);
+
   const total = DISPLAY_ORDER.length;
   const live = DISPLAY_ORDER.filter((id) => STATUS_BY_ID[id] === 'live').length;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const load = async () => {
+      if (!demo && !user?.id) {
+        if (!userLoading) setCredsLoading(false);
+        return;
+      }
+      setCredsLoading(true);
+      setCredsError(null);
+      try {
+        const [catalog, priv] = await Promise.all([
+          api.getConnectorCatalog(true),
+          api.getPrivateConnectorCredentials(),
+        ]);
+        if (cancelled) return;
+        setCatalogByKey(Object.fromEntries(catalog.map((c) => [c.connector_key, c])));
+        setPrivateByKey(Object.fromEntries(priv.map((s) => [s.connector_key, s])));
+      } catch (err) {
+        if (cancelled) return;
+        setCredsError(err instanceof Error ? err.message : 'Failed to load connector credentials');
+      } finally {
+        if (!cancelled) setCredsLoading(false);
+      }
+    };
+
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [demo, user?.id, userLoading]);
 
   return (
     <>
@@ -74,9 +141,35 @@ export default function ConnectorsPage() {
             variants={fadeUp}
             className="mt-4 max-w-[560px] text-[14.5px] leading-[1.6] text-[var(--neutral-sub-600)]"
           >
-            GitHub, GitHub Actions, PostgreSQL, MongoDB, Linear, Jira, and Terraform are live today — each governed by the same Allow, Approval, Deny model.
+            GitHub, GitHub Actions, PostgreSQL, MongoDB, Linear, Jira, and Terraform are live today. Each is governed by the same Allow, Approval, Deny model.
           </motion.p>
         </motion.section>
+
+        {credsError && (
+          <div className="mb-6">
+            <ErrorBanner
+              message={credsError}
+              onDismiss={() => setCredsError(null)}
+              onRetry={async () => {
+                if (!demo && !user?.id) return;
+                setCredsError(null);
+                setCredsLoading(true);
+                try {
+                  const [catalog, priv] = await Promise.all([
+                    api.getConnectorCatalog(true),
+                    api.getPrivateConnectorCredentials(),
+                  ]);
+                  setCatalogByKey(Object.fromEntries(catalog.map((c) => [c.connector_key, c])));
+                  setPrivateByKey(Object.fromEntries(priv.map((s) => [s.connector_key, s])));
+                } catch (err) {
+                  setCredsError(err instanceof Error ? err.message : 'Failed to load connector credentials');
+                } finally {
+                  setCredsLoading(false);
+                }
+              }}
+            />
+          </div>
+        )}
 
         {/* ─── Grid ──────────────────────────────────────────────────── */}
         <motion.div
@@ -86,7 +179,21 @@ export default function ConnectorsPage() {
           className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3"
         >
           {DISPLAY_ORDER.map((id) => (
-            <ConnectorCard key={id} id={id} status={STATUS_BY_ID[id]} />
+            <ConnectorCard
+              key={id}
+              id={id}
+              status={STATUS_BY_ID[id]}
+              credsLoading={credsLoading}
+              privateStatus={(() => {
+                const key = credentialKeyFor(id);
+                return key ? privateByKey[key] ?? null : null;
+              })()}
+              onOpenCredentials={() => {
+                const key = credentialKeyFor(id);
+                if (!key) return;
+                setActiveCredKey(key);
+              }}
+            />
           ))}
         </motion.div>
 
@@ -107,6 +214,19 @@ export default function ConnectorsPage() {
           .
         </motion.p>
       </div>
+
+      <ConnectorCredentialsModal
+        open={activeCredKey !== null}
+        connectorKey={activeCredKey ?? ''}
+        connectorName={catalogByKey[activeCredKey ?? '']?.display_name ?? 'Connector'}
+        status={activeCredKey ? privateByKey[activeCredKey] ?? null : null}
+        catalogItem={activeCredKey ? catalogByKey[activeCredKey] ?? null : null}
+        onClose={() => setActiveCredKey(null)}
+        onSaved={(status) => {
+          setPrivateByKey((prev) => ({ ...prev, [status.connector_key]: status }));
+          toast.success('Credentials saved');
+        }}
+      />
     </>
   );
 }
@@ -115,11 +235,18 @@ export default function ConnectorsPage() {
 function ConnectorCard({
   id,
   status,
+  credsLoading,
+  privateStatus,
+  onOpenCredentials,
 }: {
   id: ConnectorId;
   status: ConnectorStatus;
+  credsLoading: boolean;
+  privateStatus: PrivateConnectorCredentialStatus | null;
+  onOpenCredentials: () => void;
 }) {
   const def = CONNECTORS[id];
+  const connected = !!privateStatus?.configured;
 
   return (
     <motion.article
@@ -183,6 +310,16 @@ function ConnectorCard({
             </>
           )}
         </p>
+        {connected && !credsLoading && (
+          <div className="mt-2">
+            <Badge
+              tone="success"
+              leadingIcon={<CheckCircle2 className="h-3 w-3" strokeWidth={2.25} />}
+            >
+              Credentials saved
+            </Badge>
+          </div>
+        )}
       </div>
 
       {/* Description — fills remaining vertical space so the footer
@@ -206,15 +343,32 @@ function ConnectorCard({
               <ShieldCheck className="h-3.5 w-3.5" strokeWidth={2} />
               Live today
             </span>
-            <Link href={`/dashboard/connectors/${id}`}>
+            <div className="flex items-center gap-1.5">
               <Button
                 variant="secondary"
                 size="sm"
-                trailingIcon={<ArrowUpRight className="h-3 w-3" strokeWidth={2.25} />}
+                disabled={credsLoading}
+                onClick={onOpenCredentials}
+                leadingIcon={
+                  credsLoading ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2} />
+                  ) : (
+                    <KeyRound className="h-3.5 w-3.5" strokeWidth={2.25} />
+                  )
+                }
               >
-                View connector
+                {connected ? 'Update credentials' : 'Add credentials'}
               </Button>
-            </Link>
+              <Link href={`/dashboard/connectors/${id}`}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  trailingIcon={<ArrowUpRight className="h-3 w-3" strokeWidth={2.25} />}
+                >
+                  View
+                </Button>
+              </Link>
+            </div>
           </>
         )}
         {status === 'in-progress' && (

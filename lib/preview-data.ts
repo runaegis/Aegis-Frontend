@@ -12,9 +12,12 @@ import {
 } from './dashboardDateRange';
 import type {
   AggregatedSessionAction,
+  ConnectorCatalogItem,
   MCPApproval,
+  Memory,
   Metrics,
   PaginatedResponse,
+  PrivateConnectorCredentialStatus,
   Repo,
   RoomDetails,
   RoomInvite,
@@ -27,6 +30,8 @@ import type {
   TokenAnalyticsResponse,
   TokenMeterResponse,
   TokenUsageSessionItem,
+  UserPrompt,
+  UserPromptPayload,
 } from './types';
 
 // ── deterministic PRNG so render is stable across re-mounts ────────────────
@@ -1057,6 +1062,88 @@ const PREVIEW_FREEZE_WINDOWS = [
   },
 ];
 
+const PREVIEW_PRIVATE_CONNECTOR_STATUS: Record<string, PrivateConnectorCredentialStatus> = {
+  github: {
+    connector_key: 'github',
+    configured: true,
+    configured_keys: ['github_pat'],
+    credential_metadata: null,
+    created_at: new Date(NOW - 18 * ONE_DAY).toISOString(),
+    updated_at: new Date(NOW - 4 * ONE_DAY).toISOString(),
+    revoked_at: null,
+  },
+  postgres: {
+    connector_key: 'postgres',
+    configured: true,
+    configured_keys: ['connection_string'],
+    credential_metadata: null,
+    created_at: new Date(NOW - 16 * ONE_DAY).toISOString(),
+    updated_at: new Date(NOW - 6 * ONE_DAY).toISOString(),
+    revoked_at: null,
+  },
+};
+
+const PREVIEW_USER_PROMPTS: UserPrompt[] = [
+  {
+    id: 'prompt_1',
+    user_id: 'preview-user',
+    name: 'PR review checklist',
+    description: 'Run before approving a merge.',
+    prompt:
+      'Review the PR for {repo}.\n\n' +
+      '- Summarize intent in 3 bullets.\n' +
+      '- Call out security + correctness risks.\n' +
+      '- Identify migrations or rollout concerns.\n' +
+      '- Recommend tests to add or run.\n',
+    created_at: new Date(NOW - 21 * ONE_DAY).toISOString(),
+    updated_at: new Date(NOW - 3 * ONE_DAY).toISOString(),
+  },
+  {
+    id: 'prompt_2',
+    user_id: 'preview-user',
+    name: 'Incident note',
+    description: 'Draft a crisp postmortem update.',
+    prompt:
+      'Write an incident update for {incident_id}.\n\n' +
+      'Include:\n' +
+      '- Impact\n' +
+      '- Current status\n' +
+      '- Next steps\n' +
+      '- ETA (if known)\n',
+    created_at: new Date(NOW - 14 * ONE_DAY).toISOString(),
+    updated_at: new Date(NOW - 14 * ONE_DAY).toISOString(),
+  },
+];
+
+const PREVIEW_MEMORIES: Memory[] = [
+  {
+    id: 'mem_1',
+    user_id: 'preview-user',
+    title: 'Branch rules',
+    memory:
+      'Never push to `main`.\n\n' +
+      '- Create a feature branch\n' +
+      '- Open a PR\n' +
+      '- Wait for CI + approval\n',
+    is_pinned: true,
+    created_at: new Date(NOW - 40 * ONE_DAY).toISOString(),
+    updated_at: new Date(NOW - 12 * ONE_DAY).toISOString(),
+  },
+  {
+    id: 'mem_2',
+    user_id: 'preview-user',
+    title: 'Release checklist',
+    memory:
+      'Before shipping:\n\n' +
+      '1. Confirm freeze windows\n' +
+      '2. Verify migrations have rollback\n' +
+      '3. Capture audit export\n',
+    is_pinned: false,
+    created_at: new Date(NOW - 18 * ONE_DAY).toISOString(),
+    updated_at: new Date(NOW - 2 * ONE_DAY).toISOString(),
+  },
+];
+
 // Computed metrics
 function computeMetrics(runs: SessionAction[]): Metrics {
   return {
@@ -1368,6 +1455,72 @@ export function installPreviewApi() {
     return { success: true };
   };
 
+  api.getUserPrompts = async () => {
+    // Matches backend ordering: updated_at desc, created_at desc, id asc.
+    return [...PREVIEW_USER_PROMPTS].sort((a, b) => {
+      const ta = new Date(a.updated_at ?? a.created_at ?? 0).getTime();
+      const tb = new Date(b.updated_at ?? b.created_at ?? 0).getTime();
+      if (ta !== tb) return tb - ta;
+      const ca = new Date(a.created_at ?? 0).getTime();
+      const cb = new Date(b.created_at ?? 0).getTime();
+      if (ca !== cb) return cb - ca;
+      return (a.id ?? '').localeCompare(b.id ?? '');
+    });
+  };
+  api.createUserPrompt = async (payload: UserPromptPayload) => {
+    const promptText = String(payload.prompt ?? '').trim();
+    if (!promptText) throw new Error('prompt is required');
+    const now = new Date().toISOString();
+    const created: UserPrompt = {
+      id: `prompt_${Date.now()}`,
+      user_id: 'preview-user',
+      prompt: promptText,
+      name: (payload.name ?? '').trim() || 'temp name',
+      description: payload.description ? payload.description.trim() : null,
+      created_at: now,
+      updated_at: now,
+    };
+    PREVIEW_USER_PROMPTS.unshift(created);
+    return created;
+  };
+  api.updateUserPrompt = async (promptId: string, payload: UserPromptPayload) => {
+    const idx = PREVIEW_USER_PROMPTS.findIndex((p) => p.id === promptId);
+    if (idx < 0) throw new Error('Prompt not found');
+    const promptText = String(payload.prompt ?? '').trim();
+    if (!promptText) throw new Error('prompt is required');
+    const row = PREVIEW_USER_PROMPTS[idx];
+    row.prompt = promptText;
+    if (payload.name !== undefined) {
+      row.name = payload.name.trim() || 'temp name';
+    }
+    if (payload.description !== undefined) {
+      row.description = payload.description.trim() || null;
+    }
+    row.updated_at = new Date().toISOString();
+    return row;
+  };
+
+  api.getMemories = async (userId: string) =>
+    PREVIEW_MEMORIES.filter((m) => m.user_id === (userId || 'preview-user'));
+  api.updateMemory = async (
+    memoryId: string,
+    userId: string,
+    payload: Partial<Pick<Memory, 'title' | 'memory' | 'is_pinned'>>,
+  ) => {
+    const idx = PREVIEW_MEMORIES.findIndex((m) => m.id === memoryId && m.user_id === userId);
+    if (idx < 0) throw new Error('Memory not found');
+    const row = PREVIEW_MEMORIES[idx];
+    if (payload.title !== undefined) row.title = String(payload.title);
+    if (payload.memory !== undefined) row.memory = String(payload.memory);
+    if (payload.is_pinned !== undefined) row.is_pinned = !!payload.is_pinned;
+    row.updated_at = new Date().toISOString();
+    return row;
+  };
+  api.deleteMemory = async (memoryId: string, userId: string) => {
+    const idx = PREVIEW_MEMORIES.findIndex((m) => m.id === memoryId && m.user_id === userId);
+    if (idx >= 0) PREVIEW_MEMORIES.splice(idx, 1);
+  };
+
   api.saveUser = async (u) => {
     void u;
     return {
@@ -1438,6 +1591,25 @@ export function installPreviewApi() {
       is_active: true,
     },
     {
+      connector_key: 'mongodb',
+      display_name: 'MongoDB',
+      description: 'Connect a personal MongoDB URI for document workflows.',
+      private_config_schema: {
+        type: 'object',
+        required: ['connection_string'],
+        properties: {
+          connection_string: {
+            type: 'string',
+            title: 'Connection string',
+            description: 'Personal MongoDB connection URI.',
+          },
+        },
+      },
+      public_config_schema: {},
+      policy_catalog: {},
+      is_active: true,
+    },
+    {
       connector_key: 'linear',
       display_name: 'Linear',
       description: 'Connect a personal API key for planning context.',
@@ -1456,15 +1628,74 @@ export function installPreviewApi() {
       policy_catalog: {},
       is_active: true,
     },
+    {
+      connector_key: 'jira',
+      display_name: 'Jira',
+      description: 'Connect Jira URL, username, and API token for issue workflows.',
+      private_config_schema: {
+        type: 'object',
+        required: ['url', 'username', 'api_token'],
+        properties: {
+          url: {
+            type: 'string',
+            title: 'Jira URL',
+            description: 'Your Jira base URL. Example: https://your-company.atlassian.net',
+          },
+          username: {
+            type: 'string',
+            title: 'Jira username',
+            description: 'Usually the email address tied to your Jira account.',
+          },
+          api_token: {
+            type: 'string',
+            title: 'Jira API token',
+            description: 'Stored as a secret and used for Jira API access.',
+          },
+        },
+      },
+      public_config_schema: {},
+      policy_catalog: {},
+      is_active: true,
+    },
+    {
+      connector_key: 'terraform',
+      display_name: 'Terraform',
+      description: 'Connect Terraform URL and API token for plan and apply workflows.',
+      private_config_schema: {
+        type: 'object',
+        required: ['url', 'api_token'],
+        properties: {
+          url: {
+            type: 'string',
+            title: 'Terraform URL',
+            description: 'Terraform base URL. Example: https://app.terraform.io',
+          },
+          api_token: {
+            type: 'string',
+            title: 'Terraform API token',
+            description: 'Stored as a secret and used for Terraform API access.',
+          },
+        },
+      },
+      public_config_schema: {},
+      policy_catalog: {},
+      is_active: true,
+    },
   ];
-  api.getPrivateConnectorCredentials = async () => [];
-  api.savePrivateConnectorCredentials = async (connectorKey, credentials) => ({
-    connector_key: connectorKey,
-    configured: true,
-    configured_keys: Object.keys(credentials),
-    credential_metadata: null,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    revoked_at: null,
-  });
+  api.getPrivateConnectorCredentials = async () => Object.values(PREVIEW_PRIVATE_CONNECTOR_STATUS);
+  api.savePrivateConnectorCredentials = async (connectorKey, credentials) => {
+    const now = new Date().toISOString();
+    const prev = PREVIEW_PRIVATE_CONNECTOR_STATUS[connectorKey];
+    const next: PrivateConnectorCredentialStatus = {
+      connector_key: connectorKey,
+      configured: true,
+      configured_keys: Object.keys(credentials),
+      credential_metadata: null,
+      created_at: prev?.created_at ?? now,
+      updated_at: now,
+      revoked_at: null,
+    };
+    PREVIEW_PRIVATE_CONNECTOR_STATUS[connectorKey] = next;
+    return next;
+  };
 }
