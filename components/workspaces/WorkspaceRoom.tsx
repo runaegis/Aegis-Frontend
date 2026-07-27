@@ -2,7 +2,17 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, CheckCircle2, MessagesSquare, Moon, PanelRight, Sun, Users2, X } from 'lucide-react';
+import {
+  ArrowLeft,
+  CheckCircle2,
+  FileText,
+  MessagesSquare,
+  Moon,
+  PanelRight,
+  Sun,
+  Users2,
+  X,
+} from 'lucide-react';
 import {
   api,
   getWorkspaceMessageStreamUrl,
@@ -29,6 +39,7 @@ import { RoomSummary } from './RoomSummary';
 import { RoomSidebar, type SiblingMeta } from './RoomSidebar';
 import { InlineEdit } from './InlineEdit';
 import { Kbd, ShortcutsDialog, useWorkspaceShortcuts } from './shortcuts';
+import { WorkspaceAgentsMdDialog } from './WorkspaceAgentsMdDialog';
 
 type Tab = 'tasks' | 'agents' | 'files';
 
@@ -66,6 +77,7 @@ export function WorkspaceRoom({ workspaceId }: { workspaceId: string }) {
   // reachable on narrow screens instead of being hidden entirely.
   const [panelOpen, setPanelOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [agentsMdOpen, setAgentsMdOpen] = useState(false);
   // Counters, not booleans: bumping one is an event the child reacts to.
   const [composerFocus, setComposerFocus] = useState(0);
   const [taskFocus, setTaskFocus] = useState(0);
@@ -229,7 +241,7 @@ export function WorkspaceRoom({ workspaceId }: { workspaceId: string }) {
         setHelpOpen(false);
       },
     },
-    !issued,
+    !issued && !agentsMdOpen,
   );
 
   // ---- loading ---------------------------------------------------------
@@ -298,7 +310,16 @@ export function WorkspaceRoom({ workspaceId }: { workspaceId: string }) {
               />
             </h1>
             <SampleDataChip />
-            <div className="ml-auto flex items-center gap-3 font-mono text-[11.5px] text-[var(--neutral-sub-600)]">
+            <div className="ml-auto flex items-center gap-2 font-mono text-[11.5px] text-[var(--neutral-sub-600)]">
+              <button
+                type="button"
+                onClick={() => setAgentsMdOpen(true)}
+                title="View AGENTS.md workspace instructions"
+                className="inline-flex items-center gap-1 rounded-md border border-[var(--stroke-soft-200)] bg-[var(--white-0)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--neutral-sub-600)] transition-colors hover:bg-[var(--neutral-weak-50)] hover:text-[var(--neutral-strong-950)]"
+              >
+                <FileText size={12} />
+                AGENTS.md
+              </button>
               <span className="inline-flex items-center gap-1">
                 <Users2 size={12} /> {activeCount}
               </span>
@@ -502,6 +523,7 @@ export function WorkspaceRoom({ workspaceId }: { workspaceId: string }) {
       </aside>
 
       <AgentKeyDialog open={!!issued} onOpenChange={(open) => !open && setIssued(null)} issued={issued} />
+      <WorkspaceAgentsMdDialog open={agentsMdOpen} onOpenChange={setAgentsMdOpen} />
       <ShortcutsDialog open={helpOpen} onOpenChange={setHelpOpen} />
     </div>
     </AgentHueProvider>
