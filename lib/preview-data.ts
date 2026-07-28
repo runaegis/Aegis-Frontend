@@ -13,6 +13,7 @@ import {
 import type {
   AggregatedSessionAction,
   MCPApproval,
+  Memory,
   Metrics,
   PaginatedResponse,
   Repo,
@@ -1057,6 +1058,89 @@ const PREVIEW_FREEZE_WINDOWS = [
   },
 ];
 
+// Memories — seeded to exercise every derived oversight signal: one
+// possible secret (credential-shaped text), two stale (untouched > 45d),
+// and a duplicate-title pair. The rest are clean and recent.
+//
+// owner user_id stays 'preview-user' to match the other preview fixtures.
+// It intentionally differs from the demo session user (DEMO_USER, id
+// 'demo-user'): the getMemories mock ignores the requesting id and returns
+// this whole set, same as every other preview endpoint.
+const PREVIEW_MEMORIES: Memory[] = [
+  {
+    id: 'mem_creds',
+    user_id: 'preview-user',
+    title: 'Deploy service credentials',
+    memory:
+      'Prod deployer authenticates with AWS key AKIAIOSFODNN7EXAMPLE and connects to the database at postgresql://deployer:changeme-placeholder@prod-db.internal:5432/main. Rotate on the quarterly cadence.',
+    created_at: new Date(NOW - 38 * ONE_DAY).toISOString(),
+    updated_at: new Date(NOW - 6 * ONE_DAY).toISOString(),
+  },
+  {
+    id: 'mem_rollback',
+    user_id: 'preview-user',
+    title: 'Release rollback procedure',
+    memory:
+      'To roll back a bad release, revert the deploy workflow to the previous green tag and re-run the migration checker. Never force-push to main; open an Aegis rollback PR instead.',
+    created_at: new Date(NOW - 22 * ONE_DAY).toISOString(),
+    updated_at: new Date(NOW - 3 * ONE_DAY).toISOString(),
+  },
+  {
+    id: 'mem_branch',
+    user_id: 'preview-user',
+    title: 'Branch naming convention',
+    memory:
+      'Feature branches use feature/<ticket>-<slug>. Hotfixes use hotfix/<slug>. The default branch main is protected; direct writes are rewritten into a PR on an Aegis-managed branch.',
+    created_at: new Date(NOW - 16 * ONE_DAY).toISOString(),
+    updated_at: new Date(NOW - 1 * ONE_DAY).toISOString(),
+  },
+  {
+    id: 'mem_style',
+    user_id: 'preview-user',
+    title: 'Team code style preferences',
+    memory:
+      'TypeScript strict mode everywhere. Prefer named exports. No default-exported React components except pages. Run the formatter before every commit.',
+    created_at: new Date(NOW - 12 * ONE_DAY).toISOString(),
+    updated_at: new Date(NOW - 5 * ONE_DAY).toISOString(),
+  },
+  {
+    id: 'mem_checklist_a',
+    user_id: 'preview-user',
+    title: 'Deploy checklist',
+    memory:
+      'Confirm CI is green, migrations are reversible, and the on-call engineer is aware before triggering a production deploy.',
+    created_at: new Date(NOW - 30 * ONE_DAY).toISOString(),
+    updated_at: new Date(NOW - 2 * ONE_DAY).toISOString(),
+  },
+  {
+    id: 'mem_checklist_b',
+    user_id: 'preview-user',
+    title: 'Deploy checklist',
+    memory:
+      'Older copy: verify the staging smoke test passes and the changelog is updated before shipping.',
+    created_at: new Date(NOW - 26 * ONE_DAY).toISOString(),
+    updated_at: new Date(NOW - 21 * ONE_DAY).toISOString(),
+  },
+  {
+    id: 'mem_incident',
+    user_id: 'preview-user',
+    title: 'Prod incident retro',
+    memory:
+      'The May outage was caused by an unbounded query against the events table. Add a statement timeout and an index on created_at. Owner: platform team.',
+    created_at: new Date(NOW - 64 * ONE_DAY).toISOString(),
+    updated_at: new Date(NOW - 58 * ONE_DAY).toISOString(),
+  },
+  {
+    id: 'mem_migration',
+    user_id: 'preview-user',
+    title: 'Old migration notes',
+    memory:
+      'Legacy notes from the initial Postgres setup. Superseded by the current schema docs; kept for reference only.',
+    created_at: new Date(NOW - 55 * ONE_DAY).toISOString(),
+    updated_at: new Date(NOW - 50 * ONE_DAY).toISOString(),
+  },
+];
+
 // Computed metrics
 function computeMetrics(runs: SessionAction[]): Metrics {
   return {
@@ -1366,6 +1450,26 @@ export function installPreviewApi() {
     const idx = PREVIEW_FREEZE_WINDOWS.findIndex((w) => w.id === id);
     if (idx >= 0) PREVIEW_FREEZE_WINDOWS.splice(idx, 1);
     return { success: true };
+  };
+
+  // These ignore the requesting user id, like every other preview mock:
+  // getMemories returns the full sample set regardless of who asks, so the
+  // fixtures' 'preview-user' owner and the demo session user 'demo-user'
+  // intentionally do not need to match (the `_userId` param is unused).
+  api.getMemories = async () => PREVIEW_MEMORIES;
+  api.updateMemory = async (id, _userId, payload) => {
+    const idx = PREVIEW_MEMORIES.findIndex((m) => m.id === id);
+    if (idx < 0) throw new Error('Memory not found');
+    PREVIEW_MEMORIES[idx] = {
+      ...PREVIEW_MEMORIES[idx],
+      ...payload,
+      updated_at: new Date().toISOString(),
+    };
+    return PREVIEW_MEMORIES[idx];
+  };
+  api.deleteMemory = async (id) => {
+    const idx = PREVIEW_MEMORIES.findIndex((m) => m.id === id);
+    if (idx >= 0) PREVIEW_MEMORIES.splice(idx, 1);
   };
 
   api.saveUser = async (u) => ({

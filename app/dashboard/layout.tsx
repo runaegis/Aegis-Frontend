@@ -161,7 +161,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     // pre-signup) and inject a fake user record so user-scoped hooks
     // have something to bind to.
     if (isDemoMode()) {
-      // if (!user?.id) setUser(DEMO_USER);
+      // Demo skips auth, so seed the sample user record so user-scoped
+      // pages (Memory, Settings) have an id to bind to.
+      if (!user?.id) setUser(DEMO_USER);
       setIsReady(true);
       return;
     }
