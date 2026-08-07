@@ -33,7 +33,7 @@ import { Badge } from '@/components/ui/Badge';
 import { GenerativeAvatar } from '@/components/ui/GenerativeAvatar';
 import { Input } from '@/components/ui/Input';
 import { Skeleton } from '@/components/ui/Skeleton';
-import { cn, getRoomDisplayName, getRoomRoleBadgeTone } from '@/lib/utils';
+import { cn, getRoomDisplayName, getRoomRoleBadgeTone, getRoomRoleLabel } from '@/lib/utils';
 
 // Emphasized-decel easing — matches UserMenu so the two popovers
 // feel like the same family of motion.
@@ -46,6 +46,8 @@ interface RoomSwitcherProps {
   activeRoomName?: string;
   /** Role in the active room — shown as a badge next to the title. */
   role?: string;
+  /** Numeric RBAC rank for the active room — used for badge tone. */
+  roleRank?: number | null;
 }
 
 const getRoomId = (room: RoomSummary): string =>
@@ -55,6 +57,7 @@ export function RoomSwitcher({
   activeRoomId,
   activeRoomName,
   role,
+  roleRank,
 }: RoomSwitcherProps) {
   const router = useRouter();
   const reduce = useReducedMotion();
@@ -169,7 +172,7 @@ export function RoomSwitcher({
               aria-hidden
             />
             {role && (
-              <Badge tone={getRoomRoleBadgeTone(role)} uppercase>
+              <Badge tone={getRoomRoleBadgeTone(role, roleRank)} uppercase>
                 {role}
               </Badge>
             )}
@@ -267,9 +270,9 @@ export function RoomSwitcher({
                         >
                           {getRoomDisplayName(room)}
                         </p>
-                        {room.role && (
+                        {(room.role || typeof room.role_rank === 'number') && (
                           <p className="mt-0.5 text-[10.5px] uppercase tracking-[0.06em] text-[var(--neutral-soft-400)]">
-                            {room.role}
+                            {getRoomRoleLabel(room.role, room.role_rank)}
                           </p>
                         )}
                       </div>

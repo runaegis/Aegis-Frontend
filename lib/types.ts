@@ -314,6 +314,13 @@ export interface RoomMember {
   [key: string]: any;
 }
 
+export interface RoomMembership {
+  room_id: string;
+  user_id?: string | null;
+  role?: string | null;
+  role_rank?: number | null;
+}
+
 export interface RoomInvite {
   id?: string;
   invite_code?: string;

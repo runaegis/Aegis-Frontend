@@ -31,6 +31,7 @@ import type {
   RoomConnectorPoliciesResponse,
   RoomRolesResponse,
 } from '@/lib/types';
+import { hasRoomAdminAccess } from '@/lib/utils';
 
 type PublicField = {
   key: string;
@@ -123,7 +124,7 @@ function sortRoleEntries(roles: RoomRolesResponse['roles']) {
 }
 
 export default function RoomConnectorsPage() {
-  const { roomId, role, loading: roomLoading } = useRoom();
+  const { roomId, roleRank, loading: roomLoading } = useRoom();
   const toast = useToast();
   const reduce = useReducedMotion();
 
@@ -144,7 +145,7 @@ export default function RoomConnectorsPage() {
   const [loadingPolicies, setLoadingPolicies] = useState(false);
   const [savingPolicies, setSavingPolicies] = useState(false);
 
-  const canManageConnector = role === 'OWNER' || role === 'ADMIN';
+  const canManageConnector = hasRoomAdminAccess(roleRank);
 
   const load = useCallback(async () => {
     if (!roomId) return;

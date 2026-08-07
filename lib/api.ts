@@ -10,6 +10,7 @@ import {
   RoomSummary,
   RoomDetails,
   RoomMember,
+  RoomMembership,
   RoomInvite,
   RoomSessionAction,
   PaginatedResponse,
@@ -1075,6 +1076,77 @@ function normalizeRoomRolesResponse(payload: unknown): RoomRolesResponse {
   };
 }
 
+function normalizeRoomRoleLabel(raw: Record<string, unknown>): string | null {
+  return typeof raw.role === "string"
+    ? raw.role
+    : typeof raw.role_name === "string"
+      ? raw.role_name
+      : typeof raw.role_label === "string"
+        ? raw.role_label
+        : typeof raw.rank_name === "string"
+          ? raw.rank_name
+          : null;
+}
+
+function normalizeRoomRoleRank(raw: Record<string, unknown>): number | null {
+  if (typeof raw.role_rank === "number") return raw.role_rank;
+  if (typeof raw.rank === "number") return raw.rank;
+  if (typeof raw.role_rank === "string" && raw.role_rank.trim()) {
+    const parsed = Number(raw.role_rank);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  if (typeof raw.rank === "string" && raw.rank.trim()) {
+    const parsed = Number(raw.rank);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function normalizeRoomMember(row: unknown): RoomMember | null {
+  if (!row || typeof row !== "object") return null;
+
+  const raw = parseRow(row) as Record<string, unknown>;
+  const username =
+    typeof raw.username === "string"
+      ? raw.username
+      : typeof raw.user_name === "string"
+        ? raw.user_name
+        : typeof raw.name === "string"
+          ? raw.name
+          : typeof raw.email === "string"
+            ? raw.email
+            : "";
+
+  return {
+    ...raw,
+    id: typeof raw.id === "string" ? raw.id : undefined,
+    user_id: typeof raw.user_id === "string" ? raw.user_id : undefined,
+    username: username || "Unknown member",
+    role: normalizeRoomRoleLabel(raw) ?? undefined,
+    role_rank: normalizeRoomRoleRank(raw),
+    email: typeof raw.email === "string" ? raw.email : null,
+    joined_at: typeof raw.joined_at === "string" ? raw.joined_at : undefined,
+  };
+}
+
+function normalizeRoomMembership(row: unknown): RoomMembership | null {
+  if (!row || typeof row !== "object") return null;
+
+  const raw = parseRow(row) as Record<string, unknown>;
+
+  return {
+    room_id:
+      typeof raw.room_id === "string"
+        ? raw.room_id
+        : typeof raw.id === "string"
+          ? raw.id
+          : "",
+    user_id: typeof raw.user_id === "string" ? raw.user_id : null,
+    role: normalizeRoomRoleLabel(raw),
+    role_rank: normalizeRoomRoleRank(raw),
+  };
+}
+
 function normalizeRoomToolGroups(value: unknown): RoomToolGroup[] {
   if (Array.isArray(value)) {
     return value
@@ -2010,7 +2082,7 @@ export const api = {
       }),
     }).then((r) => r.json()),
 
-  getMyRoomMembership(roomId: string): Promise<{ role: string } | null> {
+  getMyRoomMembership(roomId: string): Promise<RoomMembership | null> {
     return apiFetch(`${API_BASE}/room/${encodeURIComponent(roomId)}/me`, {
       // credentials: 'include',
     })
@@ -2021,7 +2093,7 @@ export const api = {
       }
       ).then((data) => {
         if (data?.detail) throw new Error(data.detail);
-        return data;
+        return normalizeRoomMembership(data);
       });
   },
 
@@ -2183,7 +2255,11 @@ export const api = {
     }
 
     const data = await res.json();
-    return Array.isArray(data) ? data : [];
+    return Array.isArray(data)
+      ? data
+          .map(normalizeRoomMember)
+          .filter((member): member is RoomMember => member !== null)
+      : [];
   },
 
   getRoomRoles: async (roomId: string): Promise<RoomRolesResponse> => {

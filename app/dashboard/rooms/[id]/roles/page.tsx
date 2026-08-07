@@ -11,13 +11,14 @@ import { Skeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
 import { fadeUp, staggerContainer } from '@/lib/motion';
 import { useRoom } from '@/lib/roomContext';
+import { isRoomOwner } from '@/lib/utils';
 
 function sortRoleEntries(roles: Record<string, string>) {
   return Object.entries(roles).sort((a, b) => Number(a[0]) - Number(b[0]));
 }
 
 export default function RoomRolesPage() {
-  const { roomId, members, role, loading: roomLoading } = useRoom();
+  const { roomId, members, roleRank, loading: roomLoading } = useRoom();
   const toast = useToast();
   const reduce = useReducedMotion();
 
@@ -26,7 +27,7 @@ export default function RoomRolesPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  const canEdit = role === 'OWNER';
+  const canEdit = isRoomOwner(roleRank);
 
   const loadRoles = useCallback(async () => {
     if (!roomId) return;

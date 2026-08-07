@@ -54,6 +54,7 @@ import {
   cn,
   getRoomCreatedAt,
   getRoomDisplayName,
+  getRoomRoleLabel,
   getRoomRoleBadgeTone,
   getRoomSlug,
 } from '@/lib/utils';
@@ -546,13 +547,13 @@ export default function RoomsIndexPage() {
                             {getRoomTypeLabel(room.room_type)}
                           </Badge>
                         ) : null}
-                        {room.role && (
+                        {(room.role || typeof room.role_rank === 'number') && (
                           <Badge
-                            tone={getRoomRoleBadgeTone(room.role)}
+                            tone={getRoomRoleBadgeTone(room.role, room.role_rank)}
                             uppercase
                             className="text-[10.5px]"
                           >
-                            {room.role}
+                            {getRoomRoleLabel(room.role, room.role_rank)}
                           </Badge>
                         )}
                       </div>

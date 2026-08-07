@@ -2022,6 +2022,16 @@ export function installPreviewApi() {
   api.getRoomDetails = async (roomId: string) =>
     PREVIEW_ROOM_DETAILS[roomId] ?? PREVIEW_ROOMS[0];
   api.getRoomMembers = async (roomId: string) => PREVIEW_MEMBERS[roomId] ?? [];
+  api.getMyRoomMembership = async (roomId: string) => {
+    const member = (PREVIEW_MEMBERS[roomId] ?? []).find((item) => item.user_id === 'preview-user');
+    if (!member) return null;
+    return {
+      room_id: roomId,
+      user_id: member.user_id ?? null,
+      role: member.role ?? null,
+      role_rank: member.role_rank ?? null,
+    };
+  };
   api.getRoomRoles = async (roomId: string) =>
     PREVIEW_ROOM_ROLES[roomId] ?? {
       room_id: roomId,

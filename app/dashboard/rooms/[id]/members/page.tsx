@@ -50,7 +50,12 @@ import { useUser } from '@/lib/hooks';
 import { useRoom } from '@/lib/roomContext';
 import type { RoomInvite, RoomMember } from '@/lib/types';
 import { fadeUp, staggerContainer } from '@/lib/motion';
-import { getRoomRoleBadgeTone } from '@/lib/utils';
+import {
+  getRoomRoleBadgeTone,
+  getRoomRoleLabel,
+  hasRoomAdminAccess,
+  isRoomOwner,
+} from '@/lib/utils';
 
 const getInviteCode = (invite: RoomInvite): string =>
   String(invite.invite_code || invite.code || invite.id || '');
@@ -92,14 +97,14 @@ function buildShareMessage({
 }
 
 export default function RoomMembersPage() {
-  const { roomId, room, members, role: myRole, loading: roomLoading, refresh } = useRoom();
+  const { roomId, room, members, roleRank, loading: roomLoading, refresh } = useRoom();
   const { user } = useUser();
   const roomRepoName = room?.repo_name ?? 'this room';
   const toast = useToast();
   const reduce = useReducedMotion();
 
-  const canCreateInvites = myRole === 'OWNER' || myRole === 'ADMIN';
-  const canModifyMembers = myRole === 'OWNER';
+  const canCreateInvites = hasRoomAdminAccess(roleRank);
+  const canModifyMembers = isRoomOwner(roleRank);
 
   const [invites, setInvites] = useState<RoomInvite[]>([]);
   const [roles, setRoles] = useState<Record<string, string>>({});
@@ -324,11 +329,11 @@ export default function RoomMembersPage() {
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
                       <Badge
-                        tone={getRoomRoleBadgeTone(member.role)}
+                        tone={getRoomRoleBadgeTone(member.role, member.role_rank)}
                         uppercase
                         className="text-[10.5px]"
                       >
-                        {member.role || 'member'}
+                        {getRoomRoleLabel(member.role, member.role_rank)}
                       </Badge>
                       {canModifyMembers && !isSelf && editingMemberId === (member.user_id ?? member.username) ? (
                         <div className="flex items-center gap-1.5">

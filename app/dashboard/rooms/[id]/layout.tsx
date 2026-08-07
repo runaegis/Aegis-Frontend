@@ -59,7 +59,7 @@ export default function RoomScopeLayout({
 /** Renders the Topbar + tabs. Lives inside RoomProvider so it can
  *  use `useRoom()` and reflect the live room name / role. */
 function RoomScopeInner() {
-  const { roomId, room, role, loading, error } = useRoom();
+  const { roomId, room, role, roleRank, loading, error } = useRoom();
 
   // Title strategy: keep "Rooms" as the static page name (so the
   // breadcrumb is consistent across the section), use the repo name
@@ -157,6 +157,7 @@ function RoomScopeInner() {
                 activeRoomId={roomId}
                 activeRoomName={getRoomDisplayName(room)}
                 role={role}
+                roleRank={roleRank}
               />
             ) : null}
           </div>

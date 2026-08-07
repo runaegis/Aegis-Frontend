@@ -24,6 +24,7 @@ import type { ConnectorCatalogItem, RoomSummary } from '@/lib/types';
 import {
   getRoomCreatedAt,
   getRoomDisplayName,
+  getRoomRoleLabel,
   getRoomRoleBadgeTone,
   getRoomSlug,
 } from '@/lib/utils';
@@ -204,8 +205,8 @@ export default function PoliciesPage() {
                           <h2 className="truncate text-[15px] font-semibold text-[var(--neutral-strong-950)]">
                             {getRoomDisplayName(room)}
                           </h2>
-                          <Badge tone={getRoomRoleBadgeTone(room.role)} uppercase>
-                            {room.role ?? 'Member'}
+                          <Badge tone={getRoomRoleBadgeTone(room.role, room.role_rank)} uppercase>
+                            {getRoomRoleLabel(room.role, room.role_rank)}
                           </Badge>
                           <Badge tone="neutral">{getRoomTypeLabel(room.room_type)}</Badge>
                         </div>

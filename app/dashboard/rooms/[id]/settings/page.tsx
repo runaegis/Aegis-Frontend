@@ -14,10 +14,14 @@ import { Skeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
 import { fadeUp, staggerContainer } from '@/lib/motion';
 import { useRoom } from '@/lib/roomContext';
-import { parseApiUtcTimestamp } from '@/lib/utils';
+import {
+  getRoomRoleBadgeTone,
+  isRoomOwner,
+  parseApiUtcTimestamp,
+} from '@/lib/utils';
 
 export default function RoomSettingsPage() {
-  const { roomId, room, members, role, loading, refresh } = useRoom();
+  const { roomId, room, members, role, roleRank, loading, refresh } = useRoom();
   const router = useRouter();
   const toast = useToast();
   const reduce = useReducedMotion();
@@ -28,7 +32,7 @@ export default function RoomSettingsPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [working, setWorking] = useState(false);
 
-  const isOwner = role === 'OWNER';
+  const isOwner = isRoomOwner(roleRank);
   const transferTargets = useMemo(
     () =>
       members.filter(
@@ -149,9 +153,17 @@ export default function RoomSettingsPage() {
             />
             <SettingsRow label="Owner" value={room?.owner_username ?? '—'} />
             <SettingsRow
+              label="Your authority rank"
+              value={
+                <Badge tone={getRoomRoleBadgeTone(role, roleRank)} uppercase className="text-[10.5px]">
+                  {typeof roleRank === 'number' ? `Rank ${roleRank}` : 'Unknown'}
+                </Badge>
+              }
+            />
+            <SettingsRow
               label="Your role"
               value={
-                <Badge tone="primary" uppercase className="text-[10.5px]">
+                <Badge tone={getRoomRoleBadgeTone(role, roleRank)} uppercase className="text-[10.5px]">
                   {role}
                 </Badge>
               }
