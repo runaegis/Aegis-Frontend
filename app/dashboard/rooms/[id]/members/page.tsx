@@ -28,25 +28,27 @@ import {
   Copy,
   Hash,
   Link2,
-  MoreHorizontal,
   Plus,
+  Save,
   Trash2,
   UserPlus,
   Users,
+  X,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import AgentAvatar from '@/components/ui/AgentAvatar';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { CodeChip } from '@/components/ui/CodeChip';
 import EmptyState from '@/components/ui/EmptyState';
-import { Input } from '@/components/ui/Input';
+import { Input, Select } from '@/components/ui/Input';
 import { RelativeTime } from '@/components/ui/RelativeTime';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
 import { useUser } from '@/lib/hooks';
 import { useRoom } from '@/lib/roomContext';
-import type { RoomInvite } from '@/lib/types';
+import type { RoomInvite, RoomMember } from '@/lib/types';
 import { fadeUp, staggerContainer } from '@/lib/motion';
 import { getRoomRoleBadgeTone } from '@/lib/utils';
 
@@ -90,21 +92,17 @@ function buildShareMessage({
 }
 
 export default function RoomMembersPage() {
-  const { roomId, room, members, role: myRole, loading: roomLoading } = useRoom();
+  const { roomId, room, members, role: myRole, loading: roomLoading, refresh } = useRoom();
   const { user } = useUser();
   const roomRepoName = room?.repo_name ?? 'this room';
   const toast = useToast();
   const reduce = useReducedMotion();
 
   const canCreateInvites = myRole === 'OWNER' || myRole === 'ADMIN';
-  // canModifyMembers controls whether the disabled "..." kebab even
-  // appears next to other members' rows. A DEVELOPER seeing greyed-
-  // out admin affordances on their teammates' rows is confusing
-  // ("am I supposed to be able to do this?"). Only show the
-  // affordances to viewers who would eventually be able to use them.
-  const canModifyMembers = myRole === 'OWNER' || myRole === 'ADMIN';
+  const canModifyMembers = myRole === 'OWNER';
 
   const [invites, setInvites] = useState<RoomInvite[]>([]);
+  const [roles, setRoles] = useState<Record<string, string>>({});
   const [invitesLoading, setInvitesLoading] = useState(true);
   const [showInviteForm, setShowInviteForm] = useState(false);
   // Defaults chosen so a Tech Lead can one-click generate a useful
@@ -114,6 +112,10 @@ export default function RoomMembersPage() {
   const [maxUses, setMaxUses] = useState('10');
   const [expiresAt, setExpiresAt] = useState(() => defaultExpiresAt());
   const [submittingInvite, setSubmittingInvite] = useState(false);
+  const [editingMemberId, setEditingMemberId] = useState<string | null>(null);
+  const [memberRankDraft, setMemberRankDraft] = useState('3');
+  const [updatingMember, setUpdatingMember] = useState(false);
+  const [removeTarget, setRemoveTarget] = useState<RoomMember | null>(null);
 
   const loadInvites = useCallback(async () => {
     if (!roomId) return;
@@ -131,6 +133,54 @@ export default function RoomMembersPage() {
   useEffect(() => {
     void loadInvites();
   }, [loadInvites]);
+
+  useEffect(() => {
+    if (!roomId) return;
+    void api.getRoomRoles(roomId).then((response) => {
+      setRoles(response.roles);
+    }).catch(() => {
+      setRoles({});
+    });
+  }, [roomId]);
+
+  const beginEditMember = (member: RoomMember) => {
+    setEditingMemberId(member.user_id ?? member.username);
+    setMemberRankDraft(String(member.role_rank ?? 3));
+  };
+
+  const saveMemberRank = async (member: RoomMember) => {
+    if (!member.user_id) return;
+    setUpdatingMember(true);
+    try {
+      await api.updateRoomMemberRank(roomId, member.user_id, Number(memberRankDraft));
+      await refresh();
+      setEditingMemberId(null);
+      toast.success('Member role updated');
+    } catch (err) {
+      toast.error('Could not update member role', {
+        description: err instanceof Error ? err.message : 'Try again.',
+      });
+    } finally {
+      setUpdatingMember(false);
+    }
+  };
+
+  const removeMember = async () => {
+    if (!removeTarget?.user_id) return;
+    setUpdatingMember(true);
+    try {
+      await api.removeRoomMember(roomId, removeTarget.user_id);
+      await refresh();
+      setRemoveTarget(null);
+      toast.success('Member removed');
+    } catch (err) {
+      toast.error('Could not remove member', {
+        description: err instanceof Error ? err.message : 'Try again.',
+      });
+    } finally {
+      setUpdatingMember(false);
+    }
+  };
 
   const handleCreateInvite = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -243,18 +293,19 @@ export default function RoomMembersPage() {
             <ul className="divide-y divide-[var(--stroke-soft-200)]">
               {members.map((member, idx) => {
                 const isSelf = member.username === user?.username;
+                const memberName = member.username || member.user_id || 'Unknown member';
                 return (
                   <li
                     key={`${member.user_id ?? member.username}-${idx}`}
                     className="flex items-center gap-3 px-5 py-3"
                   >
                     <AgentAvatar
-                      name={member.username || member.user_id}
+                      name={memberName}
                       size="sm"
                     />
                     <div className="min-w-0 flex-1">
                       <p className="flex items-center gap-1.5 truncate text-[13px] font-medium text-[var(--neutral-strong-950)]">
-                        {member.username || member.user_id}
+                        {memberName}
                         {isSelf && (
                           <span className="rounded-[4px] bg-[var(--neutral-weak-50)] px-1.5 py-px text-[9.5px] font-semibold uppercase tracking-[0.08em] text-[var(--neutral-soft-400)]">
                             You
@@ -271,58 +322,75 @@ export default function RoomMembersPage() {
                         </p>
                       )}
                     </div>
-                    {/* Role tone reflects role hierarchy: OWNER →
-                        brand orange (highest authority), ADMIN →
-                        warning amber, DEVELOPER → info blue. Helps
-                        users scan a long member list and pick out
-                        leads/admins at a glance instead of seeing
-                        one uniform color. */}
-                    <Badge
-                      tone={getRoomRoleBadgeTone(member.role)}
-                      uppercase
-                      className="text-[10.5px]"
-                    >
-                      {member.role || 'member'}
-                    </Badge>
-                    {/* Disabled "..." button — surfaces that
-                        Change role / Remove member affordances are
-                        coming. Backend endpoints exist
-                        (PATCH /room/{id}/members/{user_id} for role
-                        and DELETE /room/{id}/members/{user_id} for
-                        remove). Wiring those up — popover menu,
-                        role picker, confirm dialog, optimistic
-                        updates — is its own feature task; we're
-                        keeping the kebab visible so the affordance
-                        is discoverable, but disabled until the
-                        frontend work lands. ADMIN/OWNER only and
-                        never on the current user's own row. */}
-                    {canModifyMembers && !isSelf && (
-                      <button
-                        type="button"
-                        disabled
-                        aria-label="Member actions (coming soon)"
-                        title="Change role · Remove member — frontend coming soon."
-                        className="flex h-7 w-7 shrink-0 cursor-not-allowed items-center justify-center rounded-[7px] text-[var(--neutral-soft-400)] opacity-60"
+                    <div className="flex shrink-0 items-center gap-2">
+                      <Badge
+                        tone={getRoomRoleBadgeTone(member.role)}
+                        uppercase
+                        className="text-[10.5px]"
                       >
-                        <MoreHorizontal
-                          className="h-3.5 w-3.5"
-                          strokeWidth={2}
-                          aria-hidden
-                        />
-                      </button>
-                    )}
+                        {member.role || 'member'}
+                      </Badge>
+                      {canModifyMembers && !isSelf && editingMemberId === (member.user_id ?? member.username) ? (
+                        <div className="flex items-center gap-1.5">
+                          <Select
+                            value={memberRankDraft}
+                            className="min-w-[130px]"
+                            onChange={(event) => setMemberRankDraft(event.target.value)}
+                            disabled={updatingMember}
+                          >
+                            {Object.entries(roles)
+                              .filter(([rank]) => Number(rank) !== 1)
+                              .sort((a, b) => Number(a[0]) - Number(b[0]))
+                              .map(([rank, label]) => (
+                                <option key={rank} value={rank}>
+                                  {label}
+                                </option>
+                              ))}
+                          </Select>
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => void saveMemberRank(member)}
+                            disabled={updatingMember}
+                            leadingIcon={<Save className="h-3 w-3" strokeWidth={2} />}
+                          >
+                            Save
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setEditingMemberId(null)}
+                            disabled={updatingMember}
+                            leadingIcon={<X className="h-3 w-3" strokeWidth={2} />}
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      ) : canModifyMembers && !isSelf ? (
+                        <div className="flex items-center gap-1.5">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => beginEditMember(member)}
+                          >
+                            Change role
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="danger"
+                            onClick={() => setRemoveTarget(member)}
+                            leadingIcon={<Trash2 className="h-3 w-3" strokeWidth={2} />}
+                          >
+                            Remove
+                          </Button>
+                        </div>
+                      ) : null}
+                    </div>
                   </li>
                 );
               })}
             </ul>
           )}
-          {/* No hint footer here. The previous "Change role · Remove
-              member — pending backend endpoint. Coming soon." text
-              was misleading once Jenil shipped the backend mutations
-              (PATCH/DELETE on /room/{id}/members/{user_id}). The
-              kebab button above carries the "coming soon" signal
-              already via its tooltip; an extra footer claiming the
-              backend is the blocker would just be wrong. */}
         </motion.section>
 
         {/* Invites panel */}
@@ -527,16 +595,13 @@ export default function RoomMembersPage() {
                           aria-hidden
                         />
                       </button>
-                      {/* Revoke — disabled today; the affordance
-                          signals that invite revocation is on the
-                          roadmap. ADMIN/OWNER only — DEVELOPER can't
-                          revoke even when wired. */}
+                      {/* Revoke is still pending a dedicated invite-delete API. */}
                       {canCreateInvites && (
                         <button
                           type="button"
                           disabled
                           aria-label="Revoke invite (coming soon)"
-                          title="Revoke this invite. Pending backend endpoint."
+                          title="Revoke this invite. Waiting on the invite revoke endpoint."
                           className="flex h-7 w-7 shrink-0 cursor-not-allowed items-center justify-center rounded-[7px] text-[var(--neutral-soft-400)] opacity-60"
                         >
                           <Trash2
@@ -552,18 +617,31 @@ export default function RoomMembersPage() {
               })}
             </ul>
           )}
-          {/* Roadmap signal for the missing DELETE-on-invite endpoint.
-              py-2 (not py-2.5) so the hint hugs the text rather than
-              leaving extra breathing room below — the bg-neutral-weak
-              fill made the extra ~2px read as a visible margin. */}
-          {canCreateInvites && invites.length > 0 && (
-            <div className="border-t border-[var(--stroke-soft-200)] bg-[var(--neutral-weak-50)] px-5 py-2">
-              <p className="text-[11px] italic text-[var(--neutral-soft-400)]">
-              </p>
-            </div>
-          )}
         </motion.section>
       </motion.div>
+
+      <ConfirmDialog
+        open={removeTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setRemoveTarget(null);
+        }}
+        title="Remove member?"
+        description={
+          removeTarget ? (
+            <>
+              <span className="font-semibold text-[var(--neutral-strong-950)]">
+                {removeTarget.username}
+              </span>{' '}
+              will lose access to this room immediately.
+            </>
+          ) : (
+            'This member will lose access immediately.'
+          )
+        }
+        confirmLabel="Remove member"
+        loading={updatingMember}
+        onConfirm={removeMember}
+      />
     </div>
   );
 }

@@ -43,12 +43,17 @@ export interface SessionAction {
   session_id: string;
   agent_name: string;
   tool_name: string;
+  connector_key?: string | null;
   arguments: Record<string, any>;
   /** Human-readable bullet points; preferred over raw `arguments` in the UI when present. */
   action_pointers?: string[];
   action_summary: string;
   result: string;
   decision: "ALLOW" | "DENY" | "cd" | "REQUIRE_APPROVAL" | string;
+  target_type?: string | null;
+  target_ref?: string | null;
+  target_display?: string | null;
+  target_metadata?: Record<string, unknown> | null;
   target_repo: string;
   target_branch: string | null;
   sequence_order: number;
@@ -106,6 +111,15 @@ export interface MCPApproval {
   result: any;
   context: Record<string, any>;
   action_summary: string;
+  room_id?: string | null;
+  connector_key?: string | null;
+  target_type?: string | null;
+  target_ref?: string | null;
+  target_display?: string | null;
+  target_metadata?: Record<string, unknown> | null;
+  target_descriptor?: string | null;
+  minimum_role_rank_required?: number | null;
+  resolved_by?: string | null;
   /**
    * Backend-supplied human-readable bullet points. For PR-related tools the
    * last entry typically contains the GitHub PR URL so reviewers can jump to
@@ -268,8 +282,12 @@ export interface RoomSummary {
   id?: string;
   room_id?: string;
 
-  repo_name: string;
+  name?: string | null;
+  description?: string | null;
+  room_type?: string | null;
+  repo_name?: string | null;
   owner_username?: string;
+  role_rank?: number | null;
 
   role?: string;
   is_active?: boolean;
@@ -285,8 +303,12 @@ export interface RoomDetails extends RoomSummary {
 }
 
 export interface RoomMember {
+  id?: string;
+  user_id?: string;
   username: string;
   role?: string;
+  role_rank?: number | null;
+  email?: string | null;
   joined_at?: string;
 
   [key: string]: any;
@@ -303,6 +325,61 @@ export interface RoomInvite {
   expires_at?: string | null;
   created_at?: string;
   [key: string]: any;
+}
+
+export interface RoomRolesResponse {
+  room_id: string;
+  roles: Record<string, string>;
+}
+
+export interface RoomToolGroup {
+  key: string;
+  label: string;
+  tools: string[];
+}
+
+export interface RoomToolConnector {
+  connector_key: string;
+  display_name: string;
+  description?: string | null;
+  configured: boolean;
+  private_credentials_configured: boolean;
+  can_configure_connector: boolean;
+  tool_groups: RoomToolGroup[];
+}
+
+export interface RoomToolMatrixResponse {
+  room_id: string;
+  role_rank?: number | null;
+  connectors: RoomToolConnector[];
+}
+
+export interface RoomConnectorConfig {
+  room_id: string;
+  connector_key: string;
+  display_name?: string | null;
+  public_config?: Record<string, unknown> | null;
+  configured?: boolean;
+  is_enabled?: boolean;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface RoomConnectorPolicyRule {
+  policy_key: string;
+  display_name?: string | null;
+  description?: string | null;
+  effect?: "ALLOW" | "DENY" | "REQUIRE_APPROVAL" | string | null;
+  minimum_role_rank_required?: number | null;
+  is_enabled?: boolean;
+  config?: Record<string, unknown> | null;
+}
+
+export interface RoomConnectorPoliciesResponse {
+  room_id: string;
+  connector_key: string;
+  can_manage: boolean;
+  policies: RoomConnectorPolicyRule[];
 }
 
 export interface ApiTokenPrefix {

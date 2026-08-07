@@ -27,7 +27,7 @@ import {
   matchesActionDateFilters,
 } from '@/lib/dashboardDateRange';
 import { useDashboardData } from '@/lib/dashboardDataContext';
-import { MCPApproval, SessionAction } from '@/lib/types';
+import { MCPApproval, RoomSummary, SessionAction } from '@/lib/types';
 import {
   formatExecutionTimeMs,
   normalizeApprovalStatus,
@@ -43,7 +43,7 @@ import { RelativeTime } from '@/components/ui/RelativeTime';
 import { Button } from '@/components/ui/Button';
 import { CodeChip } from '@/components/ui/CodeChip';
 import { ConnectorMark } from '@/components/ui/ConnectorMark';
-import { connectorForTool } from '@/lib/runConnector';
+import { connectorForAction, connectorForTool, deriveTarget, formatRunTargetLabel } from '@/lib/runConnector';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import GithubPatStatus from '@/components/ui/GithubPatStatus';
 import { useToast } from '@/components/ui/Toast';
@@ -86,7 +86,7 @@ export default function DashboardHomePage() {
     [dateRange],
   );
   const [approvals, setApprovals] = useState<MCPApproval[]>([]);
-  const [policyString, setPolicyString] = useState<string | null>(null);
+  const [rooms, setRooms] = useState<RoomSummary[]>([]);
   const [auxLoading, setAuxLoading] = useState(true);
   const [auxError, setAuxError] = useState<string | null>(null);
   const [actioningIds, setActioningIds] = useState<Set<string>>(new Set());
@@ -99,16 +99,16 @@ export default function DashboardHomePage() {
     if (!user) return;
     if (!options?.soft) setAuxLoading(true);
     try {
-      const [approvalsData, policyData] = await Promise.all([
+      const [approvalsData, roomsData] = await Promise.all([
         api.getMcpApprovals().catch(() => []),
-        api.getUserPolicy().catch(() => null),
+        api.getMyRooms().catch(() => []),
       ]);
       setApprovals(
         approvalsData.filter((approval) =>
           matchesActionDateFilters(approval.created_at, dateFilters),
         ),
       );
-      setPolicyString(policyData);
+      setRooms(roomsData);
       setAuxError(null);
     } catch (err) {
       setAuxError(err instanceof Error ? err.message : 'Could not connect to backend');
@@ -142,20 +142,16 @@ export default function DashboardHomePage() {
       (a) => approvalBucket(a) === 'pending',
     ).length;
 
-    const policiesActive = policyString
-      ? (policyString.match(/1/g)?.length ?? 0)
-      : 10;
-
     return {
       sessionsInRange: new Set(
         sessionActions.map((r) => r.session_id).filter(Boolean),
       ).size,
       pendingApprovals,
-      policiesActive,
+      governedRooms: rooms.length,
       blockedInRange: metrics.denies,
       rewritesInRange: metrics.rewrites,
     };
-  }, [sessionActions, approvals, policyString, metrics.denies, metrics.rewrites]);
+  }, [sessionActions, approvals, rooms.length, metrics.denies, metrics.rewrites]);
 
   const pendingItems = useMemo(
     () =>
@@ -294,7 +290,9 @@ export default function DashboardHomePage() {
             <ColoredCount value={stats.blockedInRange} color="var(--error)" />{' '}
             blocked {stats.blockedInRange === 1 ? 'run' : 'runs'}, and{' '}
             <ColoredCount value={stats.sessionsInRange} color="var(--success)" />{' '}
-            {stats.sessionsInRange === 1 ? 'session' : 'sessions'} represented.
+            {stats.sessionsInRange === 1 ? 'session' : 'sessions'} across{' '}
+            <ColoredCount value={stats.governedRooms} color="var(--feature)" />{' '}
+            {stats.governedRooms === 1 ? 'room' : 'rooms'}.
           </motion.p>
         </motion.header>
 
@@ -443,7 +441,7 @@ export default function DashboardHomePage() {
               value={stats.pendingApprovals}
               color={stats.pendingApprovals > 0 ? 'var(--primary-base)' : undefined}
             />
-            <StatCell label="Policies active" value={stats.policiesActive} />
+            <StatCell label="Governed rooms" value={stats.governedRooms} />
             <StatCell
               label="Blocked in range"
               value={stats.blockedInRange}
@@ -599,15 +597,25 @@ export default function DashboardHomePage() {
         description={
           pendingDeny ? (
             <>
-              The agent will be blocked from running{' '}
-              <span className="font-mono text-[12.5px] text-[var(--neutral-strong-950)]">
-                {pendingDeny.tool_name}
-              </span>{' '}
-              on{' '}
-              <span className="font-mono text-[12.5px] text-[var(--neutral-strong-950)]">
-                {pendingDeny.arguments?.repo ?? 'this repository'}
-              </span>
-              . The denial appears in the audit log and can't be undone.
+              {(() => {
+                const denyTarget = formatRunTargetLabel(
+                  deriveTarget(pendingDeny),
+                  'the selected target',
+                );
+                return (
+                  <>
+                    The agent will be blocked from running{' '}
+                    <span className="font-mono text-[12.5px] text-[var(--neutral-strong-950)]">
+                      {pendingDeny.tool_name}
+                    </span>{' '}
+                    on{' '}
+                    <span className="font-mono text-[12.5px] text-[var(--neutral-strong-950)]">
+                      {denyTarget}
+                    </span>
+                    . The denial appears in the audit log and can&apos;t be undone.
+                  </>
+                );
+              })()}
             </>
           ) : null
         }
@@ -714,16 +722,11 @@ function ApprovalRow({
 }) {
   const agentName =
     typeof approval.context?.user === 'string' ? approval.context.user : 'Agent';
-  const repo =
-    typeof approval.arguments?.repo === 'string' ? approval.arguments.repo : null;
-  const branch =
-    typeof approval.arguments?.branch === 'string'
-      ? approval.arguments.branch
-      : null;
   const summary =
     typeof approval.action_summary === 'string'
       ? approval.action_summary
       : `Requested tool: ${approval.tool_name}`;
+  const target = deriveTarget(approval);
 
   return (
     <motion.li
@@ -757,13 +760,13 @@ function ApprovalRow({
 
       <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
         <ConnectorMark
-          id={connectorForTool(approval.tool_name)}
+          id={connectorForAction(approval)}
           size="xs"
           className="cursor-default"
         />
         <CodeChip>{approval.tool_name}</CodeChip>
-        {branch && <CodeChip>{branch}</CodeChip>}
-        {repo && <CodeChip>{repo}</CodeChip>}
+        {target.primary && <CodeChip>{target.primary}</CodeChip>}
+        {target.secondary && <CodeChip>{target.secondary}</CodeChip>}
       </div>
 
       <div className="mt-3 flex items-center justify-end gap-1.5">
@@ -785,23 +788,6 @@ function ApprovalRow({
         </Button>
       </div>
     </motion.li>
-  );
-}
-
-function ChipLabel_DEPRECATED({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex items-center gap-1.5">
-      <span className="text-[10px] font-semibold uppercase tracking-[0.05em] text-[var(--neutral-soft-400)]">
-        {label}
-      </span>
-      {children}
-    </div>
   );
 }
 

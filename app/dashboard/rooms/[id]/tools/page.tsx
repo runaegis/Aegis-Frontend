@@ -1,596 +1,154 @@
 'use client';
 
-/**
- * Tools tab — per-role tool policy matrix, redesigned.
- *
- * The old version dumped 20+ tools across 4 groups into one giant
- * matrix with allow/deny button pairs and ambiguous save semantics.
- * Hard to scan, even harder to start from scratch.
- *
- * The redesign anchors on three ideas:
- *
- *   1. Templates first. Most teams want one of three things:
- *      Read-only / Safe write / Full access. We expose them as
- *      cards at the top — one click prefills the policy for the
- *      active role and the user can tweak from there.
- *
- *   2. One toggle per tool. Switches (not button pairs) match the
- *      AlignUI vocabulary we use for every other boolean control.
- *
- *   3. Explicit Save. Security config should never auto-save —
- *      reviewers need a deliberate commit moment. A "N unsaved
- *      changes · Save" counter floats at the bottom of the page
- *      until the user commits.
- *
- * Backend contract is unchanged: `api.getRoomTools(roomId, role)`
- * fetches a `Record<string, boolean>`, `api.updateRoomTools(...)`
- * writes a `Record<string, boolean>`. Templates are pure frontend
- * — they just pre-fill the in-memory state, the eventual save call
- * is identical to manually toggling each tool.
- */
-
+import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
-import { ChevronDown, Lock, RotateCcw, Save, Shield } from 'lucide-react';
+import { ArrowUpRight, Lock, RotateCcw, Save, Shield } from 'lucide-react';
 import { api } from '@/lib/api';
+import { markSetupStepDone } from '@/components/ui/SetupChecklist';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
-import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
-import { markSetupStepDone } from '@/components/ui/SetupChecklist';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { Switch } from '@/components/ui/Switch';
 import { useToast } from '@/components/ui/Toast';
-import { useRoom } from '@/lib/roomContext';
-import { cn } from '@/lib/utils';
 import { fadeUp, staggerContainer } from '@/lib/motion';
+import { useRoom } from '@/lib/roomContext';
+import type { RoomRolesResponse, RoomToolConnector } from '@/lib/types';
 
-const jiraTool = (name: string) => `jira_${name}`;
-const terraformTool = (name: string) => `terraform_${name}`;
-
-// Jira reads are safe to include in the lower-risk baseline: search,
-// project/board discovery, issue inspection, service desk lookups, and
-// form/attachment fetches.
-const JIRA_READ_TOOLS = [
-  jiraTool('batch_get_changelogs'),
-  jiraTool('download_attachments'),
-  jiraTool('get_agile_boards'),
-  jiraTool('get_all_projects'),
-  jiraTool('get_board_issues'),
-  jiraTool('get_field_options'),
-  jiraTool('get_issue'),
-  jiraTool('get_issue_dates'),
-  jiraTool('get_issue_development_info'),
-  jiraTool('get_issue_images'),
-  jiraTool('get_issue_proforma_forms'),
-  jiraTool('get_issue_sla'),
-  jiraTool('get_issue_watchers'),
-  jiraTool('get_issues_development_info'),
-  jiraTool('get_link_types'),
-  jiraTool('get_proforma_form_details'),
-  jiraTool('get_project_components'),
-  jiraTool('get_project_issues'),
-  jiraTool('get_project_versions'),
-  jiraTool('get_queue_issues'),
-  jiraTool('get_service_desk_for_project'),
-  jiraTool('get_service_desk_queues'),
-  jiraTool('get_sprint_issues'),
-  jiraTool('get_sprints_from_board'),
-  jiraTool('get_transitions'),
-  jiraTool('get_user_profile'),
-  jiraTool('get_worklog'),
-  jiraTool('search'),
-  jiraTool('search_fields'),
-];
-
-// Safe-write Jira actions focus on day-to-day collaboration and issue
-// workflow updates. We deliberately leave out destructive or high-blast
-// operations like delete, bulk create, sprint creation, and version admin.
-const JIRA_SAFE_WRITE_TOOLS = [
-  jiraTool('add_comment'),
-  jiraTool('add_issues_to_sprint'),
-  jiraTool('add_watcher'),
-  jiraTool('add_worklog'),
-  jiraTool('create_issue'),
-  jiraTool('create_issue_link'),
-  jiraTool('create_remote_issue_link'),
-  jiraTool('edit_comment'),
-  jiraTool('link_to_epic'),
-  jiraTool('remove_issue_link'),
-  jiraTool('remove_watcher'),
-  jiraTool('transition_issue'),
-  jiraTool('update_issue'),
-  jiraTool('update_proforma_form_answers'),
-];
-
-// Terraform reads cover org, workspace, run, plan/apply, registry, and
-// governance inspection without mutating infrastructure or workspace config.
-const TERRAFORM_READ_TOOLS = [
-  terraformTool('get_apply_details'),
-  terraformTool('get_apply_logs'),
-  terraformTool('get_latest_module_version'),
-  terraformTool('get_latest_provider_version'),
-  terraformTool('get_module_details'),
-  terraformTool('get_plan_details'),
-  terraformTool('get_plan_json_output'),
-  terraformTool('get_plan_logs'),
-  terraformTool('get_policy_details'),
-  terraformTool('get_private_module_details'),
-  terraformTool('get_private_provider_details'),
-  terraformTool('get_provider_capabilities'),
-  terraformTool('get_provider_details'),
-  terraformTool('get_run_details'),
-  terraformTool('get_sentinel_mock'),
-  terraformTool('get_stack_details'),
-  terraformTool('get_token_permissions'),
-  terraformTool('get_workspace_details'),
-  terraformTool('list_runs'),
-  terraformTool('list_stacks'),
-  terraformTool('list_terraform_orgs'),
-  terraformTool('list_terraform_projects'),
-  terraformTool('list_variable_sets'),
-  terraformTool('list_workspace_policy_sets'),
-  terraformTool('list_workspace_variables'),
-  terraformTool('list_workspaces'),
-  terraformTool('read_workspace_tags'),
-  terraformTool('search_modules'),
-  terraformTool('search_policies'),
-  terraformTool('search_private_modules'),
-  terraformTool('search_private_providers'),
-  terraformTool('search_providers'),
-];
-
-// Safe-write Terraform actions stay narrowly scoped to an existing
-// workspace's metadata and variables. We leave out run creation, workspace
-// creation, deletes, multi-workspace attachments, and workspace config
-// mutations because those have much larger blast radius.
-const TERRAFORM_SAFE_WRITE_TOOLS = [
-  terraformTool('create_workspace_tags'),
-  terraformTool('create_workspace_variable'),
-  terraformTool('update_workspace_variable'),
-];
-
-// Tool registry — same shape as the old page; lifted into a const
-// so we don't redeclare on every render. Order within groups matters
-// for UI scan rhythm: most-common first.
-const TOOL_GROUPS: Record<string, string[]> = {
-  'Branch tools': [
-    'create_branch',
-    'list_branches',
-  ],
-  'File tools': [
-    'create_or_update_file',
-    'delete_file',
-    'get_file_contents',
-    'push_files',
-  ],
-  'Pull request tools': [
-    'add_comment_to_pending_review',
-    'add_reply_to_pull_request_comment',
-    'create_pull_request',
-    'create_pull_request_with_copilot',
-    'list_pull_requests',
-    'merge_pull_request',
-    'pull_request_read',
-    'pull_request_review_write',
-    'request_copilot_review',
-    'update_pull_request',
-    'update_pull_request_branch',
-  ],
-  'Issue tools': [
-    'add_issue_comment',
-    'assign_copilot_to_issue',
-    'issue_read',
-    'issue_write',
-    'list_issue_types',
-    'list_issues',
-    'sub_issue_write',
-  ],
-  'Repository tools': [
-    'create_repository',
-    'fork_repository',
-    'list_repository_collaborators',
-    'search_repositories',
-  ],
-  'Commit, release, and tag tools': [
-    'get_commit',
-    'get_latest_release',
-    'get_release_by_tag',
-    'get_tag',
-    'list_commits',
-    'list_releases',
-    'list_tags',
-    'search_commits',
-  ],
-  'Label tools': [
-    'get_label',
-  ],
-  'User, team, and tool metadata': [
-    'get_copilot_job_status',
-    'get_me',
-    'get_team_members',
-    'get_teams',
-    'get_tool_details',
-    'set_agent_details',
-  ],
-  'Search tools': [
-    'search_code',
-    'search_issues',
-    'search_pull_requests',
-    'search_users',
-  ],
-  'Security and workflow secret tools': [
-    'create_workflow_secret',
-    'delete_workflow_secret',
-    'run_secret_scanning',
-    'update_workflow_secret',
-  ],
-  'Workflow tools': [
-    'workflow_dispatch',
-  ],
-  'Postgres tools': [
-    'execute_sql',
-    'list_tables',
-    'list_schemas',
-  ],
-  'Terraform org, workspace, and stack reads': [
-    terraformTool('list_terraform_orgs'),
-    terraformTool('list_terraform_projects'),
-    terraformTool('list_workspaces'),
-    terraformTool('get_workspace_details'),
-    terraformTool('read_workspace_tags'),
-    terraformTool('list_stacks'),
-    terraformTool('get_stack_details'),
-    terraformTool('get_token_permissions'),
-  ],
-  'Terraform run, plan, and apply tools': [
-    terraformTool('list_runs'),
-    terraformTool('get_run_details'),
-    terraformTool('create_run'),
-    terraformTool('get_plan_details'),
-    terraformTool('get_plan_json_output'),
-    terraformTool('get_plan_logs'),
-    terraformTool('get_apply_details'),
-    terraformTool('get_apply_logs'),
-    terraformTool('get_sentinel_mock'),
-  ],
-  'Terraform workspace configuration tools': [
-    terraformTool('create_workspace'),
-    terraformTool('create_no_code_workspace'),
-    terraformTool('update_workspace'),
-    terraformTool('create_workspace_tags'),
-    terraformTool('list_workspace_variables'),
-    terraformTool('create_workspace_variable'),
-    terraformTool('update_workspace_variable'),
-  ],
-  'Terraform variable set tools': [
-    terraformTool('list_variable_sets'),
-    terraformTool('create_variable_set'),
-    terraformTool('create_variable_in_variable_set'),
-    terraformTool('delete_variable_in_variable_set'),
-    terraformTool('attach_variable_set_to_workspaces'),
-    terraformTool('detach_variable_set_from_workspaces'),
-  ],
-  'Terraform policy and governance tools': [
-    terraformTool('list_workspace_policy_sets'),
-    terraformTool('attach_policy_set_to_workspaces'),
-    terraformTool('search_policies'),
-    terraformTool('get_policy_details'),
-  ],
-  'Terraform registry, module, and provider tools': [
-    terraformTool('search_modules'),
-    terraformTool('get_latest_module_version'),
-    terraformTool('get_module_details'),
-    terraformTool('search_private_modules'),
-    terraformTool('get_private_module_details'),
-    terraformTool('search_providers'),
-    terraformTool('get_latest_provider_version'),
-    terraformTool('get_provider_details'),
-    terraformTool('get_provider_capabilities'),
-    terraformTool('search_private_providers'),
-    terraformTool('get_private_provider_details'),
-  ],
-  'Jira read and search tools': [
-    jiraTool('search'),
-    jiraTool('search_fields'),
-    jiraTool('get_issue'),
-    jiraTool('get_issue_dates'),
-    jiraTool('get_issue_development_info'),
-    jiraTool('get_issues_development_info'),
-    jiraTool('batch_get_changelogs'),
-    jiraTool('get_issue_watchers'),
-    jiraTool('get_worklog'),
-    jiraTool('get_transitions'),
-    jiraTool('get_user_profile'),
-  ],
-  'Jira issue write tools': [
-    jiraTool('create_issue'),
-    jiraTool('batch_create_issues'),
-    jiraTool('update_issue'),
-    jiraTool('transition_issue'),
-    jiraTool('add_comment'),
-    jiraTool('edit_comment'),
-    jiraTool('add_watcher'),
-    jiraTool('remove_watcher'),
-    jiraTool('add_worklog'),
-    jiraTool('delete_issue'),
-  ],
-  'Jira issue link tools': [
-    jiraTool('get_link_types'),
-    jiraTool('create_issue_link'),
-    jiraTool('create_remote_issue_link'),
-    jiraTool('link_to_epic'),
-    jiraTool('remove_issue_link'),
-  ],
-  'Jira sprint and planning tools': [
-    jiraTool('get_agile_boards'),
-    jiraTool('get_board_issues'),
-    jiraTool('get_sprints_from_board'),
-    jiraTool('get_sprint_issues'),
-    jiraTool('add_issues_to_sprint'),
-    jiraTool('create_sprint'),
-    jiraTool('update_sprint'),
-  ],
-  'Jira project and version tools': [
-    jiraTool('get_all_projects'),
-    jiraTool('get_project_components'),
-    jiraTool('get_project_issues'),
-    jiraTool('get_project_versions'),
-    jiraTool('create_version'),
-    jiraTool('batch_create_versions'),
-  ],
-  'Jira service desk and form tools': [
-    jiraTool('get_service_desk_for_project'),
-    jiraTool('get_service_desk_queues'),
-    jiraTool('get_queue_issues'),
-    jiraTool('get_field_options'),
-    jiraTool('get_issue_sla'),
-    jiraTool('get_issue_images'),
-    jiraTool('download_attachments'),
-    jiraTool('get_issue_proforma_forms'),
-    jiraTool('get_proforma_form_details'),
-    jiraTool('update_proforma_form_answers'),
-  ],
-};
-
-const ALL_TOOLS = Array.from(new Set(Object.values(TOOL_GROUPS).flat()));
-
-const DEVELOPER_DEFAULTS = new Set([
-  'list_branches',
-  'get_file_contents',
-  'add_comment_to_pending_review',
-  'add_reply_to_pull_request_comment',
-  'create_pull_request',
-  'list_pull_requests',
-  'pull_request_read',
-  'pull_request_review_write',
-  'update_pull_request',
-  'add_issue_comment',
-  'issue_read',
-  'issue_write',
-  'list_issue_types',
-  'list_issues',
-  'sub_issue_write',
-  'list_repository_collaborators',
-  'search_repositories',
-  'get_commit',
-  'get_latest_release',
-  'get_release_by_tag',
-  'get_tag',
-  'list_commits',
-  'list_releases',
-  'list_tags',
-  'search_commits',
-  'get_label',
-  'get_copilot_job_status',
-  'get_me',
-  'get_tool_details',
-  'search_code',
-  'search_issues',
-  'search_pull_requests',
-  'search_users',
-  'list_tables',
-  'list_schemas',
-  ...TERRAFORM_READ_TOOLS,
-  ...JIRA_READ_TOOLS,
-]);
-
-const ADMIN_DEFAULTS = new Set([
-  ...DEVELOPER_DEFAULTS,
-  'create_branch',
-  'create_or_update_file',
-  'delete_file',
-  'push_files',
-  'create_pull_request_with_copilot',
-  'merge_pull_request',
-  'request_copilot_review',
-  'update_pull_request_branch',
-  'assign_copilot_to_issue',
-  'create_repository',
-  'fork_repository',
-  'get_team_members',
-  'get_teams',
-  'set_agent_details',
-  'run_secret_scanning',
-  'workflow_dispatch',
-  ...TERRAFORM_SAFE_WRITE_TOOLS,
-  ...JIRA_SAFE_WRITE_TOOLS,
-]);
-
-const ROLE_LEVELS: Record<string, number> = {
-  DEVELOPER: 1,
-  ADMIN: 2,
-  OWNER: 3,
-};
-
-// Templates — sensible starting points for the most common policy
-// shapes. Each maps tool → boolean; missing tools default to false.
-const TEMPLATES: Record<
-  'read-only' | 'safe-write' | 'full',
-  {
-    title: string;
-    description: string;
-    tools: Record<string, boolean>;
-  }
-> = {
-  'read-only': {
-    title: 'Read-only',
-    description: 'Lower-risk baseline across GitHub, Jira, Terraform, and Postgres.',
-    tools: Object.fromEntries(
-      ALL_TOOLS.map((t) => [
-        t,
-        DEVELOPER_DEFAULTS.has(t),
-      ]),
-    ),
-  },
-  'safe-write': {
-    title: 'Safe write',
-    description: 'Extends the baseline with PRs, Jira workflow updates, and scoped Terraform metadata edits.',
-    tools: Object.fromEntries(
-      ALL_TOOLS.map((t) => [t, ADMIN_DEFAULTS.has(t)]),
-    ),
-  },
-  full: {
-    title: 'Full access',
-    description: 'Every tool enabled, including destructive and bulk Jira actions.',
-    tools: Object.fromEntries(ALL_TOOLS.map((t) => [t, true])),
-  },
-};
+function sortRoleEntries(roles: RoomRolesResponse['roles']) {
+  return Object.entries(roles).sort((a, b) => Number(a[0]) - Number(b[0]));
+}
 
 export default function RoomToolsPage() {
-  const { roomId, role: myRole, loading: roomLoading } = useRoom();
+  const { roomId, role, loading: roomLoading } = useRoom();
   const toast = useToast();
   const reduce = useReducedMotion();
 
-  // Roles the current user can VIEW. OWNER sees everything; ADMIN
-  // can see ADMIN + DEVELOPER; DEVELOPER only their own role.
-  const visibleRoles = useMemo(() => {
-    if (myRole === 'OWNER') return ['OWNER', 'ADMIN', 'DEVELOPER'];
-    if (myRole === 'ADMIN') return ['ADMIN', 'DEVELOPER'];
-    return ['DEVELOPER'];
-  }, [myRole]);
-
-  const [viewingRole, setViewingRole] = useState<string>('DEVELOPER');
+  const [roles, setRoles] = useState<RoomRolesResponse['roles']>({});
+  const [connectors, setConnectors] = useState<RoomToolConnector[]>([]);
+  const [activeConnectorKey, setActiveConnectorKey] = useState('');
+  const [viewingRank, setViewingRank] = useState(1);
   const [serverTools, setServerTools] = useState<Record<string, boolean>>({});
   const [draftTools, setDraftTools] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
+  const [loadingTools, setLoadingTools] = useState(false);
   const [saving, setSaving] = useState(false);
-  // Pending role-switch — when the user clicks a different role tab
-  // while there are unsaved changes, we stash the destination here
-  // and surface a confirm dialog. Null when nothing pending.
-  const [pendingRole, setPendingRole] = useState<string | null>(null);
-  // Track which group accordions are expanded. Default: only first
-  // group expanded so the page doesn't open as a wall of switches.
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
-    const initial: Record<string, boolean> = {};
-    const groups = Object.keys(TOOL_GROUPS);
-    groups.forEach((g, i) => {
-      initial[g] = i === 0;
-    });
-    return initial;
-  });
 
-  // Permission to edit the viewed role — must outrank or equal.
-  const canEdit = useMemo(
-    () => ROLE_LEVELS[myRole] >= ROLE_LEVELS[viewingRole],
-    [myRole, viewingRole],
-  );
+  const canEdit = role === 'OWNER';
 
-  // Fetch tools whenever the viewing role changes.
-  const loadTools = useCallback(async () => {
+  const loadMatrix = useCallback(async () => {
     if (!roomId) return;
     setLoading(true);
     try {
-      const fetched = await api.getRoomTools(roomId, viewingRole);
-      setServerTools(fetched);
-      setDraftTools(fetched);
+      const [matrix, roleResponse] = await Promise.all([
+        api.getRoomTools(roomId),
+        api.getRoomRoles(roomId),
+      ]);
+      setConnectors(matrix.connectors);
+      setRoles(roleResponse.roles);
+      setViewingRank(matrix.role_rank ?? 1);
+      setActiveConnectorKey((current) => {
+        if (current && matrix.connectors.some((connector) => connector.connector_key === current)) {
+          return current;
+        }
+        return (
+          matrix.connectors.find((connector) => connector.tool_groups.length > 0)?.connector_key ??
+          matrix.connectors[0]?.connector_key ??
+          ''
+        );
+      });
     } catch (err) {
-      toast.error("Couldn't load tool policies", {
+      toast.error("Couldn't load room tools", {
         description: err instanceof Error ? err.message : 'Try again.',
       });
     } finally {
       setLoading(false);
     }
-  }, [roomId, viewingRole, toast]);
+  }, [roomId, toast]);
 
   useEffect(() => {
-    void loadTools();
-  }, [loadTools]);
+    void loadMatrix();
+  }, [loadMatrix]);
 
-  // Diff between draft and server — drives the "N unsaved changes"
-  // counter + the Save button's enabled state.
+  const activeConnector = useMemo(
+    () => connectors.find((connector) => connector.connector_key === activeConnectorKey) ?? null,
+    [activeConnectorKey, connectors],
+  );
+
+  const loadConnectorTools = useCallback(async () => {
+    if (!roomId || !activeConnector || activeConnector.tool_groups.length === 0) {
+      setServerTools({});
+      setDraftTools({});
+      return;
+    }
+    setLoadingTools(true);
+    try {
+      const response = await api.getRoomConnectorRankTools(
+        roomId,
+        activeConnector.connector_key,
+        viewingRank,
+      );
+      setServerTools(response);
+      setDraftTools(response);
+    } catch (err) {
+      toast.error("Couldn't load connector allowlist", {
+        description: err instanceof Error ? err.message : 'Try again.',
+      });
+      setServerTools({});
+      setDraftTools({});
+    } finally {
+      setLoadingTools(false);
+    }
+  }, [activeConnector, roomId, toast, viewingRank]);
+
+  useEffect(() => {
+    void loadConnectorTools();
+  }, [loadConnectorTools]);
+
   const dirtyKeys = useMemo(() => {
-    return ALL_TOOLS.filter((t) => !!draftTools[t] !== !!serverTools[t]);
+    return Object.keys({ ...serverTools, ...draftTools }).filter(
+      (tool) => Boolean(serverTools[tool]) !== Boolean(draftTools[tool]),
+    );
   }, [draftTools, serverTools]);
   const dirty = dirtyKeys.length > 0;
 
-  // beforeunload guard — security config that disappears silently is
-  // an incident the user blames on us. Browsers ignore custom strings
-  // now (chrome 119+), but setting returnValue still triggers the
-  // generic "leave site?" prompt.
-  useEffect(() => {
-    if (!dirty) return;
-    const onBeforeUnload = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      e.returnValue = '';
-    };
-    window.addEventListener('beforeunload', onBeforeUnload);
-    return () => window.removeEventListener('beforeunload', onBeforeUnload);
-  }, [dirty]);
+  const ready = Boolean(activeConnector?.configured) && Boolean(activeConnector?.private_credentials_configured);
 
-  // Role-switch entry point — call this from the role pill buttons.
-  // If dirty, show confirm dialog. Otherwise switch immediately.
-  const requestRoleSwitch = (nextRole: string) => {
-    if (nextRole === viewingRole) return;
+  const changeConnector = (connectorKey: string) => {
     if (dirty) {
-      setPendingRole(nextRole);
+      toast.error('Save or reset your changes first');
       return;
     }
-    setViewingRole(nextRole);
+    setActiveConnectorKey(connectorKey);
   };
 
-  const discardAndSwitch = () => {
-    if (!pendingRole) return;
-    setDraftTools(serverTools);
-    setViewingRole(pendingRole);
-    setPendingRole(null);
-  };
-
-  const enabledCount = ALL_TOOLS.filter((t) => !!draftTools[t]).length;
-
-  const toggleTool = (tool: string, next: boolean) => {
-    setDraftTools((prev) => ({ ...prev, [tool]: next }));
-  };
-
-  const applyTemplate = (key: keyof typeof TEMPLATES) => {
-    // Merge the template values over a fresh-allows-false baseline
-    // so previously-allowed tools that aren't in the template are
-    // explicitly turned off (rather than left in their current state).
-    const base: Record<string, boolean> = {};
-    ALL_TOOLS.forEach((t) => {
-      base[t] = false;
-    });
-    setDraftTools({ ...base, ...TEMPLATES[key].tools });
+  const changeRank = (rank: number) => {
+    if (dirty) {
+      toast.error('Save or reset your changes first');
+      return;
+    }
+    setViewingRank(rank);
   };
 
   const resetDraft = () => setDraftTools(serverTools);
 
   const save = async () => {
-    if (!canEdit || !dirty) return;
+    if (!activeConnector || !canEdit || !dirty) return;
     setSaving(true);
     try {
-      await api.updateRoomTools(roomId, viewingRole, draftTools);
-      setServerTools(draftTools);
-      // Mark the setup-checklist Tools step as done. Has no effect
-      // for users whose checklist is already dismissed — purely
-      // additive signal for new-room onboarding.
+      const next = await api.updateRoomConnectorRankTools(
+        roomId,
+        activeConnector.connector_key,
+        viewingRank,
+        draftTools,
+      );
+      setServerTools(next);
+      setDraftTools(next);
       markSetupStepDone(roomId, 'tools');
-      toast.success('Tool policies updated', {
-        description: `${dirtyKeys.length} change${
-          dirtyKeys.length === 1 ? '' : 's'
-        } saved for ${viewingRole}.`,
-      });
+      toast.success('Tool allowlist updated');
+      await loadMatrix();
     } catch (err) {
-      toast.error('Save failed', {
+      toast.error('Could not update allowlist', {
         description: err instanceof Error ? err.message : 'Try again.',
       });
     } finally {
@@ -598,242 +156,195 @@ export default function RoomToolsPage() {
     }
   };
 
-  if (roomLoading) {
+  if (roomLoading || loading) {
     return (
       <div className="mx-auto w-full max-w-[1320px] 2xl:max-w-[1480px] px-4 pt-4 pb-6 sm:px-6 sm:pt-6 sm:pb-7 lg:px-8 lg:pt-8 lg:pb-8">
-        <Skeleton className="h-[120px] w-full rounded-[12px]" />
+        <Skeleton className="h-[280px] w-full rounded-[12px]" />
       </div>
     );
   }
 
   return (
-    <div className="mx-auto w-full max-w-[1320px] 2xl:max-w-[1480px] px-4 py-6 pb-24 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
+    <div className="mx-auto w-full max-w-[1320px] 2xl:max-w-[1480px] px-4 pt-4 pb-24 sm:px-6 sm:pt-6 sm:pb-7 lg:px-8 lg:pt-8 lg:pb-8">
       <motion.div
         variants={staggerContainer(0.06)}
         initial={reduce ? false : 'hidden'}
         animate="show"
         className="space-y-6"
       >
-        {/* Section header + role switcher */}
-        <motion.div variants={fadeUp} className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h2 className="text-[18px] font-semibold tracking-[-0.015em] text-[var(--neutral-strong-950)]">
-              Tool policies
-            </h2>
-            <p className="mt-1 text-[12.5px] leading-[1.5] text-[var(--neutral-sub-600)]">
-              Pick which agent tools each role can use in this room.
-              {' '}
-              <span className="font-semibold text-[var(--neutral-strong-950)]">
-                {enabledCount}
-              </span>
-              {' '}of {ALL_TOOLS.length} tools enabled for {viewingRole}.
-            </p>
-          </div>
-          {/* Role switcher — segmented pill. Only renders visible
-              roles based on the current user's permission level. */}
-          <div className="inline-flex items-center gap-1 rounded-[8px] border border-[var(--stroke-soft-200)] bg-[var(--neutral-weak-50)] p-0.5 shadow-[var(--shadow-regular-xs)]">
-            {visibleRoles.map((r) => {
-              const active = r === viewingRole;
-              return (
-                <button
-                  key={r}
-                  type="button"
-                  onClick={() => requestRoleSwitch(r)}
-                  className={cn(
-                    'inline-flex h-7 items-center rounded-[6px] px-2.5 text-[11.5px] font-semibold tracking-[-0.005em]',
-                    'transition-colors duration-200 ease-[cubic-bezier(0.2,0.8,0.2,1)]',
-                    active
-                      ? 'bg-white text-[var(--neutral-strong-950)] shadow-[var(--shadow-regular-xs)]'
-                      : 'text-[var(--neutral-sub-600)] hover:text-[var(--neutral-strong-950)]',
-                  )}
-                >
-                  {r}
-                </button>
-              );
-            })}
-          </div>
-        </motion.div>
-
-        {/* Read-only state — viewer outranked by the role they're viewing */}
-        {!canEdit && (
-          <motion.div
-            variants={fadeUp}
-            className="flex items-center gap-2 rounded-[10px] border border-[var(--stroke-soft-200)] bg-[var(--neutral-weak-50)] px-3 py-2 text-[12px] text-[var(--neutral-sub-600)]"
-          >
-            <Lock className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-            <span>
-              You&apos;re viewing the {viewingRole} policy in read-only mode.
-              Only ADMIN and OWNER roles can edit it.
-            </span>
-          </motion.div>
-        )}
-
-        {/* Template cards */}
-        <motion.div variants={fadeUp}>
-          <p className="mb-2 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[var(--neutral-soft-400)]">
-            Start from a template
+        <motion.div variants={fadeUp} className="space-y-2">
+          <h2 className="text-[18px] font-semibold tracking-[-0.015em] text-[var(--neutral-strong-950)]">
+            Tool allowlists
+          </h2>
+          <p className="text-[12.5px] leading-[1.5] text-[var(--neutral-sub-600)]">
+            Pick which tools each room role can use, connector by connector.
           </p>
-          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
-            <TemplateCard
-              icon={<Shield className="h-4 w-4" strokeWidth={2} />}
-              title={TEMPLATES['read-only'].title}
-              description={TEMPLATES['read-only'].description}
-              count={Object.values(TEMPLATES['read-only'].tools).filter(Boolean).length}
-              total={ALL_TOOLS.length}
-              disabled={!canEdit}
-              onClick={() => applyTemplate('read-only')}
-            />
-            <TemplateCard
-              icon={<Shield className="h-4 w-4" strokeWidth={2} />}
-              title={TEMPLATES['safe-write'].title}
-              description={TEMPLATES['safe-write'].description}
-              count={Object.values(TEMPLATES['safe-write'].tools).filter(Boolean).length}
-              total={ALL_TOOLS.length}
-              disabled={!canEdit}
-              onClick={() => applyTemplate('safe-write')}
-              recommended
-            />
-            <TemplateCard
-              icon={<Shield className="h-4 w-4" strokeWidth={2} />}
-              title={TEMPLATES['full'].title}
-              description={TEMPLATES['full'].description}
-              count={Object.values(TEMPLATES['full'].tools).filter(Boolean).length}
-              total={ALL_TOOLS.length}
-              disabled={!canEdit}
-              onClick={() => applyTemplate('full')}
-            />
-          </div>
         </motion.div>
 
-        {/* Tool groups — each is collapsible. Per-tool switches. */}
-        <motion.div variants={fadeUp} className="space-y-3">
-          {Object.entries(TOOL_GROUPS).map(([group, toolList]) => {
-            const open = !!openGroups[group];
-            const enabled = toolList.filter((t) => !!draftTools[t]).length;
+        <motion.div variants={fadeUp} className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+          {connectors.map((connector) => {
+            const active = connector.connector_key === activeConnectorKey;
             return (
-              <div
-                key={group}
-                className="overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]"
+              <button
+                key={connector.connector_key}
+                type="button"
+                onClick={() => changeConnector(connector.connector_key)}
+                className={`rounded-[12px] border p-4 text-left shadow-[0_1px_2px_rgba(23,23,23,0.04)] transition-colors ${
+                  active
+                    ? 'border-[var(--primary-base)] bg-[var(--primary-alpha-10)]/40'
+                    : 'border-[var(--stroke-soft-200)] bg-white hover:border-[var(--stroke-sub-300)]'
+                }`}
               >
-                <button
-                  type="button"
-                  onClick={() =>
-                    setOpenGroups((prev) => ({ ...prev, [group]: !open }))
-                  }
-                  className="flex w-full items-center justify-between gap-3 border-b border-[var(--stroke-soft-200)] px-5 py-3.5 text-left transition-colors hover:bg-[var(--neutral-weak-50)]"
-                  style={open ? undefined : { borderBottomWidth: 0 }}
-                >
-                  <div className="flex items-center gap-2.5">
-                    <ChevronDown
-                      className={cn(
-                        'h-3.5 w-3.5 shrink-0 text-[var(--neutral-soft-400)] transition-transform',
-                        open ? 'rotate-0' : '-rotate-90',
-                      )}
-                      strokeWidth={2}
-                      aria-hidden
-                    />
-                    <h3 className="text-[13px] font-semibold tracking-[-0.005em] text-[var(--neutral-strong-950)]">
-                      {group}
-                    </h3>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[14px] font-semibold tracking-[-0.01em] text-[var(--neutral-strong-950)]">
+                      {connector.display_name}
+                    </p>
+                    <p className="mt-1 text-[11.5px] leading-[1.5] text-[var(--neutral-sub-600)]">
+                      {connector.description}
+                    </p>
                   </div>
-                  <Badge tone={enabled > 0 ? 'primary' : 'neutral'} className="text-[10.5px]">
-                    {enabled} / {toolList.length}
+                  <Badge tone={connector.tool_groups.length > 0 ? 'success' : 'neutral'}>
+                    {connector.tool_groups.length > 0 ? 'Ready' : 'Waiting'}
                   </Badge>
-                </button>
-                {open && (
-                  <ul className="divide-y divide-[var(--stroke-soft-200)]">
-                    {toolList.map((tool) => {
-                      const allowed = !!draftTools[tool];
-                      const wasAllowed = !!serverTools[tool];
-                      const isChanged = allowed !== wasAllowed;
-                      return (
-                        <li
-                          key={tool}
-                          className="flex items-center justify-between gap-3 px-5 py-2.5"
-                        >
-                          <div className="flex min-w-0 items-center gap-2">
-                            <code className="truncate text-[12px] text-[var(--neutral-strong-950)] [font-family:var(--font-geist-mono),ui-monospace,monospace]">
-                              {tool}
-                            </code>
-                            {isChanged && (
-                              <span
-                                className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--primary-base)]"
-                                aria-label="Unsaved change"
-                                title="Unsaved change"
-                              />
-                            )}
-                          </div>
-                          <Switch
-                            checked={allowed}
-                            onChange={(v) => toggleTool(tool, v)}
-                            disabled={!canEdit || saving || loading}
-                            aria-label={`${
-                              allowed ? 'Disable' : 'Enable'
-                            } ${tool}`}
-                          />
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
-              </div>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Badge tone={connector.configured ? 'success' : 'warning'} leadingDot>
+                    {connector.configured ? 'Shared config ready' : 'Shared config missing'}
+                  </Badge>
+                  <Badge tone={connector.private_credentials_configured ? 'info' : 'neutral'} leadingDot>
+                    {connector.private_credentials_configured ? 'Private creds ready' : 'Private creds missing'}
+                  </Badge>
+                </div>
+              </button>
             );
           })}
         </motion.div>
+
+        {activeConnector && (
+          <motion.section
+            variants={fadeUp}
+            className="overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]"
+          >
+            <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[var(--stroke-soft-200)] px-5 py-4">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <Shield className="h-4 w-4 text-[var(--primary-base)]" strokeWidth={2} />
+                  <h3 className="text-[14px] font-semibold tracking-[-0.01em] text-[var(--neutral-strong-950)]">
+                    {activeConnector.display_name}
+                  </h3>
+                </div>
+                <p className="mt-1 text-[11.5px] leading-[1.5] text-[var(--neutral-sub-600)]">
+                  {ready
+                    ? 'This connector is ready. Tune the room allowlist per role below.'
+                    : 'Tool groups appear only after the room connector and your private credentials are both configured.'}
+                </p>
+              </div>
+              <div className="inline-flex items-center gap-1 rounded-[8px] border border-[var(--stroke-soft-200)] bg-[var(--neutral-weak-50)] p-0.5">
+                {sortRoleEntries(roles).map(([rank, label]) => {
+                  const numericRank = Number(rank);
+                  const active = numericRank === viewingRank;
+                  return (
+                    <button
+                      key={rank}
+                      type="button"
+                      onClick={() => changeRank(numericRank)}
+                      className={`rounded-[6px] px-2.5 py-1.5 text-[11.5px] font-semibold transition-colors ${
+                        active
+                          ? 'bg-white text-[var(--neutral-strong-950)] shadow-[var(--shadow-regular-xs)]'
+                          : 'text-[var(--neutral-sub-600)] hover:text-[var(--neutral-strong-950)]'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {!canEdit && (
+              <div className="border-b border-[var(--stroke-soft-200)] bg-[var(--neutral-weak-50)] px-5 py-3">
+                <div className="flex items-center gap-2 text-[12px] text-[var(--neutral-sub-600)]">
+                  <Lock className="h-3.5 w-3.5" strokeWidth={2} />
+                  Owners edit connector allowlists. Everyone else can inspect them.
+                </div>
+              </div>
+            )}
+
+            {!ready ? (
+              <div className="space-y-3 px-5 py-5">
+                <p className="text-[12px] leading-[1.55] text-[var(--neutral-sub-600)]">
+                  Finish connector setup in the room Connectors tab, then come back here to shape the allowlist for each role.
+                </p>
+                <Link href={`/dashboard/rooms/${roomId}/connectors`}>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    trailingIcon={<ArrowUpRight className="h-3.5 w-3.5" strokeWidth={2.25} />}
+                  >
+                    Open connectors setup
+                  </Button>
+                </Link>
+              </div>
+            ) : loadingTools ? (
+              <div className="space-y-3 p-5">
+                {[0, 1].map((index) => (
+                  <Skeleton key={index} className="h-[88px] w-full rounded-[10px]" />
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-4 px-5 py-5">
+                {activeConnector.tool_groups.map((group) => (
+                  <div
+                    key={group.key}
+                    className="overflow-hidden rounded-[10px] border border-[var(--stroke-soft-200)]"
+                  >
+                    <div className="flex items-center justify-between gap-3 border-b border-[var(--stroke-soft-200)] bg-[var(--neutral-weak-50)] px-4 py-3">
+                      <p className="text-[12.5px] font-semibold text-[var(--neutral-strong-950)]">
+                        {group.label}
+                      </p>
+                      <Badge tone="info">
+                        {group.tools.filter((tool) => draftTools[tool]).length} / {group.tools.length}
+                      </Badge>
+                    </div>
+                    <ul className="divide-y divide-[var(--stroke-soft-200)]">
+                      {group.tools.map((tool) => (
+                        <li
+                          key={tool}
+                          className="flex items-center justify-between gap-3 px-4 py-3"
+                        >
+                          <code className="min-w-0 truncate text-[12px] text-[var(--neutral-strong-950)] [font-family:var(--font-geist-mono),ui-monospace,monospace]">
+                            {tool}
+                          </code>
+                          <Switch
+                            checked={Boolean(draftTools[tool])}
+                            disabled={!canEdit || saving}
+                            onChange={(checked) =>
+                              setDraftTools((current) => ({ ...current, [tool]: checked }))
+                            }
+                          />
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            )}
+          </motion.section>
+        )}
       </motion.div>
 
-      {/* Unsaved-changes guard — fires when the user clicks a
-          different role pill while there are local edits. Prior
-          behavior was a silent reset on role switch, which is
-          exactly the kind of data-loss our audience (security teams)
-          will never forgive us for. Two paths: "Discard" rolls
-          back, "Stay" cancels. */}
-      <ConfirmDialog
-        open={pendingRole !== null}
-        onOpenChange={(open) => {
-          if (!open) setPendingRole(null);
-        }}
-        title="Discard unsaved changes?"
-        description={
-          <>
-            You have{' '}
-            <span className="font-semibold text-[var(--neutral-strong-950)]">
-              {dirtyKeys.length}
-            </span>{' '}
-            unsaved policy{' '}
-            {dirtyKeys.length === 1 ? 'change' : 'changes'} for{' '}
-            <span className="font-semibold text-[var(--neutral-strong-950)]">
-              {viewingRole}
-            </span>
-            . Switching to{' '}
-            <span className="font-semibold text-[var(--neutral-strong-950)]">
-              {pendingRole}
-            </span>{' '}
-            will discard them.
-          </>
-        }
-        confirmLabel="Discard & switch"
-        cancelLabel="Stay"
-        variant="danger"
-        onConfirm={discardAndSwitch}
-      />
-
-      {/* Floating save bar — pinned to bottom-center, appears when
-          there are unsaved changes. Same shape as BulkActionBar so
-          the visual language stays consistent. */}
-      {dirty && canEdit && (
+      {dirty && canEdit && ready && (
         <motion.div
           initial={reduce ? { opacity: 0 } : { opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
-          exit={reduce ? { opacity: 0 } : { opacity: 0, y: 12 }}
           transition={{ duration: 0.22, ease: [0.2, 0.8, 0.2, 1] }}
-          className="fixed bottom-6 left-1/2 z-30 -translate-x-1/2 pointer-events-none"
+          className="pointer-events-none fixed bottom-6 left-1/2 z-30 -translate-x-1/2"
         >
           <div className="pointer-events-auto flex items-center gap-2 rounded-[12px] border border-[var(--stroke-soft-200)] bg-white px-3 py-2 shadow-[0_12px_32px_rgba(23,23,23,0.12),0_2px_8px_rgba(23,23,23,0.04)]">
             <span className="inline-flex h-6 items-center rounded-[6px] bg-[var(--primary-alpha-10)] px-2 text-[11.5px] font-semibold text-[var(--primary-base)]">
               {dirtyKeys.length} unsaved
             </span>
-            <span className="h-5 w-px shrink-0 bg-[var(--stroke-soft-200)]" aria-hidden />
             <Button
               size="sm"
               variant="secondary"
@@ -848,9 +359,7 @@ export default function RoomToolsPage() {
               variant="primary"
               onClick={save}
               disabled={saving}
-              leadingIcon={
-                saving ? null : <Save className="h-3 w-3" strokeWidth={2.25} />
-              }
+              leadingIcon={<Save className="h-3 w-3" strokeWidth={2.25} />}
             >
               {saving ? 'Saving…' : 'Save'}
             </Button>
@@ -858,70 +367,5 @@ export default function RoomToolsPage() {
         </motion.div>
       )}
     </div>
-  );
-}
-
-// ─── Template card ──────────────────────────────────────────────────
-function TemplateCard({
-  icon,
-  title,
-  description,
-  count,
-  total,
-  recommended,
-  disabled,
-  onClick,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  description: string;
-  count: number;
-  total: number;
-  recommended?: boolean;
-  disabled?: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={cn(
-        'group flex flex-col items-start gap-2 rounded-[12px] border bg-white p-4 text-left',
-        'transition-all duration-200 ease-[cubic-bezier(0.2,0.8,0.2,1)]',
-        'shadow-[0_1px_2px_rgba(23,23,23,0.04)]',
-        'disabled:cursor-not-allowed disabled:opacity-60',
-        'border-[var(--stroke-soft-200)] hover:border-[var(--stroke-sub-300)] hover:shadow-[0_4px_12px_rgba(23,23,23,0.06)]',
-      )}
-    >
-      <div className="flex w-full items-center justify-between gap-2">
-        <span
-          className={cn(
-            'flex h-7 w-7 items-center justify-center rounded-[7px]',
-            recommended
-              ? 'bg-[var(--primary-alpha-10)] text-[var(--primary-base)]'
-              : 'bg-[var(--neutral-weak-50)] text-[var(--neutral-sub-600)]',
-          )}
-        >
-          {icon}
-        </span>
-        {recommended && (
-          <span className="rounded-[4px] bg-[var(--primary-base)]/12 px-1.5 py-px text-[9.5px] font-bold uppercase tracking-[0.08em] text-[var(--primary-base)]">
-            Recommended
-          </span>
-        )}
-      </div>
-      <div className="min-w-0">
-        <p className="text-[13px] font-semibold tracking-[-0.005em] text-[var(--neutral-strong-950)]">
-          {title}
-        </p>
-        <p className="mt-1 text-[11.5px] leading-[1.45] text-[var(--neutral-sub-600)]">
-          {description}
-        </p>
-        <p className="mt-2 text-[10.5px] font-medium uppercase tracking-[0.08em] text-[var(--neutral-soft-400)]">
-          {count} of {total} tools
-        </p>
-      </div>
-    </button>
   );
 }

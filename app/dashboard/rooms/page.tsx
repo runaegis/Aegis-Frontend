@@ -26,23 +26,20 @@
  * demand.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { motion, useReducedMotion } from 'motion/react';
 import {
   ChevronRight,
   DoorOpen,
-  Lock,
   Plus,
-  Search,
   Shield,
-  Unlock,
   Users,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useAutoRefresh, useUser } from '@/lib/hooks';
-import type { Repo, RoomSummary } from '@/lib/types';
+import type { RoomSummary } from '@/lib/types';
 import Topbar from '@/components/layout/Topbar';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -52,11 +49,11 @@ import { GenerativeAvatar } from '@/components/ui/GenerativeAvatar';
 import { Input } from '@/components/ui/Input';
 import { RelativeTime } from '@/components/ui/RelativeTime';
 import { RoomsSkeleton } from '@/components/ui/PageSkeletons';
-import { Skeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
 import {
   cn,
   getRoomCreatedAt,
+  getRoomDisplayName,
   getRoomRoleBadgeTone,
   getRoomSlug,
 } from '@/lib/utils';
@@ -64,6 +61,10 @@ import { fadeUp, fadeUpSm, staggerContainer } from '@/lib/motion';
 
 const getRoomId = (room: RoomSummary): string =>
   String(room.id || room.room_id || '');
+
+function getRoomTypeLabel(roomType?: string | null): string {
+  return roomType === 'personal' ? 'Personal' : 'Shared';
+}
 
 export default function RoomsIndexPage() {
   const { user, isLoading: userLoading } = useUser();
@@ -83,16 +84,9 @@ export default function RoomsIndexPage() {
   const [joinCode, setJoinCode] = useState('');
   const [submittingCreate, setSubmittingCreate] = useState(false);
   const [submittingJoin, setSubmittingJoin] = useState(false);
-
-  // Repo picker state — populated the first time the Create form
-  // opens. Free-text input was a footgun (typos → broken rooms);
-  // a real picker constrained to the user's GitHub repos eliminates
-  // the class of error.
-  const [repos, setRepos] = useState<Repo[]>([]);
-  const [reposLoading, setReposLoading] = useState(false);
-  const [reposError, setReposError] = useState<string | null>(null);
-  const [repoQuery, setRepoQuery] = useState('');
-  const [selectedRepo, setSelectedRepo] = useState<string>('');
+  const [roomName, setRoomName] = useState('');
+  const [roomDescription, setRoomDescription] = useState('');
+  const [roomType, setRoomType] = useState<'shared' | 'personal'>('shared');
 
   const fetchRooms = useCallback(async () => {
     if (userLoading) return;
@@ -119,55 +113,23 @@ export default function RoomsIndexPage() {
 
   const { lastUpdated } = useAutoRefresh(fetchRooms, 30000);
 
-  // Fetch repos lazily — only when the user actually opens the
-  // Create form. Avoids a needless GitHub API hit for every Rooms
-  // page visit.
-  const fetchRepos = useCallback(async () => {
-    if (!user) return;
-    setReposLoading(true);
-    setReposError(null);
-    try {
-      const response = await api.getRepos();
-      setRepos(response?.repos || []);
-    } catch (err) {
-      setReposError(err instanceof Error ? err.message : 'Could not load repos.');
-    } finally {
-      setReposLoading(false);
-    }
-  }, [user]);
-
-  useEffect(() => {
-    if (showCreate && repos.length === 0 && !reposLoading && !reposError) {
-      void fetchRepos();
-    }
-  }, [showCreate, repos.length, reposLoading, reposError, fetchRepos]);
-
-  // Filter repos: exclude ones already used by existing rooms (a
-  // single repo can only back one room), apply the search query.
-  const usedRepoNames = useMemo(
-    () => new Set(rooms.map((r) => r.repo_name).filter(Boolean)),
-    [rooms],
-  );
-  const filteredRepos = useMemo(() => {
-    const q = repoQuery.trim().toLowerCase();
-    return repos
-      .filter((r) => !usedRepoNames.has(r.name))
-      .filter((r) => !q || r.name.toLowerCase().includes(q))
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, [repos, repoQuery, usedRepoNames]);
-
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedRepo.trim()) return;
+    if (!roomName.trim()) return;
     setSubmittingCreate(true);
     try {
-      const created = await api.createRoom(selectedRepo.trim());
+      const created = await api.createRoom({
+        name: roomName.trim(),
+        description: roomDescription.trim() || undefined,
+        room_type: roomType,
+      });
       const id = getRoomId(created);
       toast.success('Room created', {
-        description: 'Configure tools and connect an agent to get started.',
+        description: 'Configure connectors, tools, and membership to get started.',
       });
-      setSelectedRepo('');
-      setRepoQuery('');
+      setRoomName('');
+      setRoomDescription('');
+      setRoomType('shared');
       setShowCreate(false);
       // Land on Overview, not Connect. Two paths arrive here:
       //   • Individual IC (bottoms-up) — wants to wire up their own
@@ -212,7 +174,7 @@ export default function RoomsIndexPage() {
   if (userLoading || (loading && rooms.length === 0)) {
     return (
       <>
-        <Topbar title="Rooms" subtitle="Per-repo agent permissions" />
+        <Topbar title="Rooms" subtitle="Governed agent spaces" />
         <div className="mx-auto max-w-[1320px] 2xl:max-w-[1480px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
           <RoomsSkeleton />
         </div>
@@ -224,7 +186,7 @@ export default function RoomsIndexPage() {
     <>
       <Topbar
         title="Rooms"
-        subtitle="Per-repo agent permissions"
+        subtitle="Governed agent spaces"
         lastUpdated={lastUpdated}
         onRefresh={fetchRooms}
       />
@@ -250,9 +212,8 @@ export default function RoomsIndexPage() {
               Rooms
             </h1>
             <p className="mt-2 max-w-[640px] text-[13.5px] leading-[1.55] text-[var(--neutral-sub-600)]">
-              Scope what AI agents can do per repository. Pick a repo, set
-              tool policies for your team, connect an agent. Branch
-              protection for the AI era.
+              Create connector-neutral spaces for agent governance. Add members,
+              configure tools, and connect workflows without requiring a linked repo first.
             </p>
           </motion.header>
 
@@ -286,169 +247,91 @@ export default function RoomsIndexPage() {
             </motion.div>
           )}
 
-          {/* Inline Create form — repo-picker, not free-text. The
-              prior free-text input was a footgun: a typo produced a
-              broken room with no path to fix. A picker constrained
-              to repos the user has actually connected eliminates
-              the class of error AND teaches the user that rooms are
-              1:1 with repos. */}
+          {/* Inline Create form — rooms are now generic, so the
+              creation step starts from room identity, not a GitHub
+              repository binding. Repo-scoped configuration can be
+              added later inside the room. */}
           {showCreate && (
             <motion.form
               onSubmit={handleCreate}
               variants={fadeUp}
-              className="rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]"
+              className="rounded-[12px] border border-[var(--stroke-soft-200)] bg-white p-4 shadow-[0_1px_2px_rgba(23,23,23,0.04)]"
             >
-              <div className="border-b border-[var(--stroke-soft-200)] px-4 py-3.5">
+              <div>
                 <p className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[var(--neutral-soft-400)]">
                   Create a room
                 </p>
                 <p className="mt-1 text-[12px] text-[var(--neutral-sub-600)]">
-                  Pick a repository. Aegis will scope agents to its
-                  branch and members.
+                  Start with a room name. You can connect repos and other shared resources after the room exists.
                 </p>
               </div>
-
-              {/* Search input — the picker is searchable because the
-                  median user will have dozens of repos. */}
-              <div className="border-b border-[var(--stroke-soft-200)] px-4 py-3">
-                <Input
-                  value={repoQuery}
-                  onChange={(e) => setRepoQuery(e.target.value)}
-                  placeholder="Search your repositories…"
-                  leadingIcon={
-                    <Search
-                      className="h-3.5 w-3.5 text-[var(--neutral-soft-400)]"
-                      strokeWidth={2}
-                    />
-                  }
-                  autoFocus
-                />
-              </div>
-
-              {/* Repo list — fixed height, scrollable. Each row
-                  shows the repo name + visibility + a generative
-                  avatar so the user can tell repos apart at a
-                  glance. */}
-              <div className="max-h-[280px] overflow-y-auto">
-                {reposLoading ? (
-                  <div className="space-y-1 p-3">
-                    {Array.from({ length: 4 }).map((_, i) => (
-                      <Skeleton key={i} className="h-12 w-full rounded-[8px]" />
-                    ))}
-                  </div>
-                ) : reposError ? (
-                  <div className="px-4 py-6">
-                    <ErrorBanner
-                      message={reposError}
-                      onDismiss={() => setReposError(null)}
-                      onRetry={fetchRepos}
-                    />
-                  </div>
-                ) : filteredRepos.length === 0 ? (
-                  <div className="px-4 py-8 text-center">
-                    <p className="text-[12.5px] text-[var(--neutral-sub-600)]">
-                      {repoQuery
-                        ? 'No repositories match that search.'
-                        : repos.length === 0
-                          ? 'No repositories connected yet.'
-                          : 'Every repository already has a room.'}
-                    </p>
-                    {!repoQuery && repos.length === 0 && (
-                      <Link
-                        href="/dashboard/settings"
-                        className="mt-2 inline-block text-[12px] font-semibold text-[var(--primary-base)] hover:underline"
-                      >
-                        Connect GitHub repos →
-                      </Link>
-                    )}
-                  </div>
-                ) : (
-                  <ul role="radiogroup" aria-label="Choose a repository">
-                    {filteredRepos.map((repo) => {
-                      const isSelected = selectedRepo === repo.name;
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <label className="block sm:col-span-2">
+                  <span className="mb-1.5 block text-[11.5px] font-medium text-[var(--neutral-sub-600)]">
+                    Room name
+                  </span>
+                  <Input
+                    value={roomName}
+                    onChange={(e) => setRoomName(e.target.value)}
+                    placeholder="Platform engineering"
+                    autoFocus
+                  />
+                </label>
+                <label className="block sm:col-span-2">
+                  <span className="mb-1.5 block text-[11.5px] font-medium text-[var(--neutral-sub-600)]">
+                    Description
+                  </span>
+                  <Input
+                    value={roomDescription}
+                    onChange={(e) => setRoomDescription(e.target.value)}
+                    placeholder="Optional context for this room"
+                  />
+                </label>
+                <div className="sm:col-span-2">
+                  <span className="mb-1.5 block text-[11.5px] font-medium text-[var(--neutral-sub-600)]">
+                    Room type
+                  </span>
+                  <div className="inline-flex rounded-[10px] border border-[var(--stroke-soft-200)] bg-[var(--white-0)] p-1">
+                    {(['shared', 'personal'] as const).map((option) => {
+                      const active = roomType === option;
                       return (
-                        <li key={repo.repo_id}>
-                          <button
-                            type="button"
-                            role="radio"
-                            aria-checked={isSelected}
-                            onClick={() => setSelectedRepo(repo.name)}
-                            className={cn(
-                              'flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors',
-                              isSelected
-                                ? 'bg-[var(--primary-alpha-10)]'
-                                : 'hover:bg-[var(--neutral-weak-50)]',
-                            )}
-                          >
-                            <GenerativeAvatar
-                              seed={repo.name}
-                              variant="user"
-                              size={32}
-                              radius={8}
-                            />
-                            <div className="min-w-0 flex-1">
-                              <p
-                                className={cn(
-                                  'truncate font-mono text-[12.5px]',
-                                  isSelected
-                                    ? 'text-[var(--primary-base)]'
-                                    : 'text-[var(--neutral-strong-950)]',
-                                )}
-                              >
-                                {repo.name}
-                              </p>
-                              <p className="mt-0.5 flex items-center gap-1 text-[11px] text-[var(--neutral-soft-400)]">
-                                {repo.is_private ? (
-                                  <>
-                                    <Lock className="h-3 w-3" strokeWidth={2} />
-                                    Private
-                                  </>
-                                ) : (
-                                  <>
-                                    <Unlock
-                                      className="h-3 w-3"
-                                      strokeWidth={2}
-                                    />
-                                    Public
-                                  </>
-                                )}
-                              </p>
-                            </div>
-                            <div
-                              className={cn(
-                                'flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 transition-colors',
-                                isSelected
-                                  ? 'border-[var(--primary-base)] bg-[var(--primary-base)]'
-                                  : 'border-[var(--stroke-sub-300)]',
-                              )}
-                              aria-hidden
-                            >
-                              {isSelected && (
-                                <span className="block h-1.5 w-1.5 rounded-full bg-white" />
-                              )}
-                            </div>
-                          </button>
-                        </li>
+                        <button
+                          key={option}
+                          type="button"
+                          onClick={() => setRoomType(option)}
+                          className={cn(
+                            active
+                              ? 'h-8 rounded-[8px] bg-[var(--information-lighter)] px-3 text-[12px] font-medium text-[var(--info-dark)]'
+                              : 'h-8 rounded-[8px] px-3 text-[12px] font-medium text-[var(--neutral-sub-600)] transition-colors hover:bg-[var(--neutral-weak-50)] hover:text-[var(--neutral-strong-950)]',
+                          )}
+                        >
+                          {getRoomTypeLabel(option)}
+                        </button>
                       );
                     })}
-                  </ul>
-                )}
+                  </div>
+                </div>
+                <div className="rounded-[10px] border border-[var(--stroke-soft-200)] bg-[var(--neutral-weak-50)] px-3.5 py-3 sm:col-span-2">
+                  <p className="text-[11.5px] text-[var(--neutral-sub-600)]">
+                    GitHub is optional now. Create the room first, then configure connectors, tools, and any shared repo context inside the room.
+                  </p>
+                </div>
               </div>
 
               {/* Footer — actions live here so the user always sees
-                  them without scrolling. Selected repo echoed on the
-                  left so the user confirms before pressing Create. */}
-              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--stroke-soft-200)] px-4 py-3">
+                  them without scrolling. The left side echoes the
+                  room identity so the user confirms before create. */}
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-[var(--stroke-soft-200)] pt-3">
                 <p className="min-w-0 truncate text-[11.5px] text-[var(--neutral-soft-400)]">
-                  {selectedRepo ? (
+                  {roomName.trim() ? (
                     <>
-                      Selected{' '}
-                      <span className="font-mono text-[var(--neutral-strong-950)]">
-                        {selectedRepo}
+                      Creating{' '}
+                      <span className="text-[var(--neutral-strong-950)]">
+                        {roomName.trim()}
                       </span>
                     </>
                   ) : (
-                    'Select a repository to continue.'
+                    'Enter a room name to continue.'
                   )}
                 </p>
                 <div className="flex gap-1.5">
@@ -457,8 +340,9 @@ export default function RoomsIndexPage() {
                     variant="secondary"
                     onClick={() => {
                       setShowCreate(false);
-                      setSelectedRepo('');
-                      setRepoQuery('');
+                      setRoomName('');
+                      setRoomDescription('');
+                      setRoomType('shared');
                     }}
                     disabled={submittingCreate}
                   >
@@ -467,7 +351,7 @@ export default function RoomsIndexPage() {
                   <Button
                     type="submit"
                     variant="primary"
-                    disabled={submittingCreate || !selectedRepo}
+                    disabled={submittingCreate || !roomName.trim()}
                   >
                     {submittingCreate ? 'Creating…' : 'Create room'}
                   </Button>
@@ -536,7 +420,7 @@ export default function RoomsIndexPage() {
               <EmptyState
                 icon={<DoorOpen className="h-5 w-5" />}
                 title="Set up your first room"
-                description="Rooms scope what AI agents can do on each of your repos. Pick a repo, choose tool policies for your team, connect an agent."
+                description="Rooms group members, connectors, and policies for governed agent work. Create one first, then wire in the systems that room needs."
                 action={
                   <div className="flex flex-wrap items-center justify-center gap-2">
                     <Button
@@ -549,7 +433,7 @@ export default function RoomsIndexPage() {
                         <Plus className="h-3.5 w-3.5" strokeWidth={2.25} />
                       }
                     >
-                      Create from a repo
+                      Create a room
                     </Button>
                     <Button
                       variant="secondary"
@@ -580,7 +464,7 @@ export default function RoomsIndexPage() {
                 <FeatureNote
                   icon={<Plus className="h-3.5 w-3.5" strokeWidth={2} />}
                   title="MCP endpoint"
-                  body="Every room ships with an MCP URL — point Cursor or Claude Code at it to enforce the policy."
+                  body="Every room ships with an MCP URL. Point Cursor or Claude Code at it to enforce the room policy."
                 />
               </div>
             </motion.div>
@@ -593,8 +477,12 @@ export default function RoomsIndexPage() {
             >
               {rooms.map((room) => {
                 const id = getRoomId(room);
-                const slug = getRoomSlug(room.repo_name, id);
+                const displayName = getRoomDisplayName(room);
+                const slug = getRoomSlug(displayName, id);
                 const createdAt = getRoomCreatedAt(room);
+                const linkedRepo =
+                  room.repo_name && room.repo_name !== displayName ? room.repo_name : null;
+                const description = room.description?.trim() || null;
                 return (
                   <motion.li
                     key={id}
@@ -610,23 +498,37 @@ export default function RoomsIndexPage() {
                       className="flex items-center gap-4 px-5 py-4 transition-colors hover:bg-[var(--primary-lighter)]/50"
                     >
                       {/* Generative avatar — deterministic from the
-                          repo name, so users learn to recognize each
+                          room name, so users learn to recognize each
                           room by its color signature. Falls back to
-                          the room id if the repo name is missing. */}
+                          the room id if the backend has not returned
+                          the human label yet. */}
                       <GenerativeAvatar
-                        seed={room.repo_name || id}
+                        seed={displayName || id}
                         variant="user"
                         size={40}
                         radius={10}
                       />
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-[14px] font-semibold tracking-[-0.005em] text-[var(--neutral-strong-950)]">
-                          {room.repo_name || id}
+                          {displayName}
                         </p>
+                        {description ? (
+                          <p className="mt-0.5 truncate text-[11.5px] text-[var(--neutral-sub-600)]">
+                            {description}
+                          </p>
+                        ) : null}
                         <p className="mt-0.5 truncate text-[11.5px] text-[var(--neutral-soft-400)]">
                           <span className="text-[var(--neutral-sub-600)]">
                             {slug}
                           </span>
+                          {linkedRepo && (
+                            <>
+                              {' · repo '}
+                              <span className="font-mono text-[var(--neutral-sub-600)]">
+                                {linkedRepo}
+                              </span>
+                            </>
+                          )}
                           {createdAt && (
                             <>
                               {' · created '}
@@ -638,15 +540,22 @@ export default function RoomsIndexPage() {
                           )}
                         </p>
                       </div>
-                      {room.role && (
-                        <Badge
-                          tone={getRoomRoleBadgeTone(room.role)}
-                          uppercase
-                          className="text-[10.5px]"
-                        >
-                          {room.role}
-                        </Badge>
-                      )}
+                      <div className="flex shrink-0 items-center gap-2">
+                        {room.room_type ? (
+                          <Badge tone="neutral" uppercase className="text-[10.5px]">
+                            {getRoomTypeLabel(room.room_type)}
+                          </Badge>
+                        ) : null}
+                        {room.role && (
+                          <Badge
+                            tone={getRoomRoleBadgeTone(room.role)}
+                            uppercase
+                            className="text-[10.5px]"
+                          >
+                            {room.role}
+                          </Badge>
+                        )}
+                      </div>
                       <ChevronRight
                         className="h-4 w-4 shrink-0 text-[var(--neutral-soft-400)] transition-transform group-hover:translate-x-0.5 group-hover:text-[var(--neutral-strong-950)]"
                         strokeWidth={2}

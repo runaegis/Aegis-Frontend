@@ -39,6 +39,7 @@ import { api } from '@/lib/api';
 import { useAutoRefresh, useUser } from '@/lib/hooks';
 import { DUR, EASE, fadeUp, staggerContainer } from '@/lib/motion';
 import type {
+  PaginatedResponse,
   TokenAnalyticsResponse,
   TokenMeterResponse,
   TokenUsageChartItem,
@@ -99,6 +100,14 @@ const PIE_COLORS = [
   'var(--warning)',
   'var(--neutral-sub-300)',
 ];
+const TOKEN_ROWS_PAGE_SIZE = 20;
+const EMPTY_TOKEN_ROWS: PaginatedResponse<TokenMeterResponse> = {
+  items: [],
+  total: 0,
+  page: 1,
+  page_size: TOKEN_ROWS_PAGE_SIZE,
+  pages: 0,
+};
 
 const emptyAnalytics: TokenAnalyticsResponse = {
   user_id: '',
@@ -119,39 +128,6 @@ const emptyAnalytics: TokenAnalyticsResponse = {
 function toNumber(value: unknown): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function formatDateKeyIST(date: Date): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: TZ_IST,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(date);
-}
-
-function todayKeyIST(): string {
-  return formatDateKeyIST(new Date());
-}
-
-function minDateKeyInclusiveRangeIST(todayKey: string, span: number): string {
-  const [year, month, day] = todayKey.split('-').map(Number);
-  const date = new Date(Date.UTC(year, month - 1, day));
-  date.setUTCDate(date.getUTCDate() - (span - 1));
-  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`;
-}
-
-function rowMatchesUsageRange(row: TokenMeterResponse, range: UsageRange, todayKey: string): boolean {
-  if (range === 'all') return true;
-  const source = row.timestamp ?? row.created_at;
-  if (!source) return false;
-  const parsed = parseApiUtcTimestamp(source);
-  if (Number.isNaN(parsed.getTime())) return false;
-  const rowKey = formatDateKeyIST(parsed);
-  if (range === 'today') return rowKey === todayKey;
-  const span = range === '7d' ? 7 : range === '90d' ? 90 : 30;
-  const minKey = minDateKeyInclusiveRangeIST(todayKey, span);
-  return rowKey >= minKey && rowKey <= todayKey;
 }
 
 function displayCategoryName(name: string): string {
@@ -334,6 +310,8 @@ export default function TokenSpenditurePage() {
   const { user, isLoading: userLoading } = useUser();
   const reduceMotion = useReducedMotion();
   const [rows, setRows] = useState<TokenMeterResponse[]>([]);
+  const [rowsMeta, setRowsMeta] = useState<PaginatedResponse<TokenMeterResponse>>(EMPTY_TOKEN_ROWS);
+  const [rowsPage, setRowsPage] = useState(1);
   const [analytics, setAnalytics] = useState<TokenAnalyticsResponse>(emptyAnalytics);
   const [tokenSessions, setTokenSessions] = useState<TokenUsageSessionItem[]>([]);
   const [usageRange, setUsageRange] = useState<UsageRange>('today');
@@ -344,6 +322,7 @@ export default function TokenSpenditurePage() {
     if (!user?.id) {
       if (!userLoading) {
         setRows([]);
+        setRowsMeta(EMPTY_TOKEN_ROWS);
         setAnalytics(emptyAnalytics);
         setTokenSessions([]);
         setLoading(false);
@@ -354,7 +333,7 @@ export default function TokenSpenditurePage() {
     setLoading(true);
     try {
       const [tokenRows, tokenAnalytics, sessions] = await Promise.all([
-        api.getUserTokenUsageAll(user.id),
+        api.getUserTokenUsage(user.id, rowsPage, TOKEN_ROWS_PAGE_SIZE),
         api.getTokenUsageAnalytics(user.id, {
           date_range: usageRange,
           allocation: 'both',
@@ -365,7 +344,16 @@ export default function TokenSpenditurePage() {
         }),
       ]);
 
-      setRows(Array.isArray(tokenRows) ? tokenRows : []);
+      const sortedRows = Array.isArray(tokenRows.items)
+        ? [...tokenRows.items].sort((left, right) => {
+            const leftTime = parseApiUtcTimestamp(left.timestamp ?? left.created_at ?? '').getTime();
+            const rightTime = parseApiUtcTimestamp(right.timestamp ?? right.created_at ?? '').getTime();
+            return rightTime - leftTime;
+          })
+        : [];
+
+      setRows(sortedRows);
+      setRowsMeta(tokenRows);
       setAnalytics(tokenAnalytics);
       setTokenSessions(Array.isArray(sessions) ? sessions : []);
       setError(null);
@@ -374,7 +362,7 @@ export default function TokenSpenditurePage() {
     } finally {
       setLoading(false);
     }
-  }, [usageRange, user?.id, userLoading]);
+  }, [rowsPage, usageRange, user?.id, userLoading]);
 
   useEffect(() => {
     if (user?.id) {
@@ -383,65 +371,23 @@ export default function TokenSpenditurePage() {
     }
     if (!userLoading) {
       setRows([]);
+      setRowsMeta(EMPTY_TOKEN_ROWS);
       setAnalytics(emptyAnalytics);
       setTokenSessions([]);
       setLoading(false);
     }
   }, [fetchData, user?.id, userLoading]);
 
+  useEffect(() => {
+    setRowsPage(1);
+  }, [usageRange]);
+
   const { lastUpdated } = useAutoRefresh(fetchData, 30000);
-
-  const displayRows = useMemo(() => {
-    const todayKey = todayKeyIST();
-    return rows.filter((row) => rowMatchesUsageRange(row, usageRange, todayKey));
-  }, [rows, usageRange]);
-
-  const fallbackSummary = useMemo(() => {
-    const input = displayRows.reduce((total, row) => total + toNumber(row.input_token), 0);
-    const output = displayRows.reduce((total, row) => total + toNumber(row.output_token), 0);
-    return {
-      input_tokens: input,
-      output_tokens: output,
-      total_tokens: input + output,
-      tool_call_count: displayRows.length,
-    };
-  }, [displayRows]);
-
-  const summary = useMemo(() => {
-    const reported = analytics.summary;
-    return {
-      input_tokens:
-        reported.input_tokens > 0 || fallbackSummary.input_tokens === 0
-          ? reported.input_tokens
-          : fallbackSummary.input_tokens,
-      output_tokens:
-        reported.output_tokens > 0 || fallbackSummary.output_tokens === 0
-          ? reported.output_tokens
-          : fallbackSummary.output_tokens,
-      total_tokens:
-        reported.total_tokens > 0 || fallbackSummary.total_tokens === 0
-          ? reported.total_tokens
-          : fallbackSummary.total_tokens,
-      tool_call_count:
-        reported.tool_call_count > 0 || fallbackSummary.tool_call_count === 0
-          ? reported.tool_call_count
-          : fallbackSummary.tool_call_count,
-    };
-  }, [analytics.summary, fallbackSummary]);
-
-  const recentRows = useMemo(() => {
-    return [...displayRows]
-      .sort((left, right) => {
-        const leftTime = parseApiUtcTimestamp(left.timestamp ?? left.created_at ?? '').getTime();
-        const rightTime = parseApiUtcTimestamp(right.timestamp ?? right.created_at ?? '').getTime();
-        return rightTime - leftTime;
-      })
-      .slice(0, 12);
-  }, [displayRows]);
+  const summary = analytics.summary;
 
   const sessionRows = useMemo(
-    () => buildSessionChartRows(tokenSessions, displayRows),
-    [displayRows, tokenSessions],
+    () => buildSessionChartRows(tokenSessions, rows),
+    [rows, tokenSessions],
   );
 
   const sessionLabels = useMemo(() => {
@@ -463,13 +409,12 @@ export default function TokenSpenditurePage() {
   const averagePerSession = tokenSessions.length
     ? Math.round(summary.total_tokens / tokenSessions.length)
     : 0;
-  const latestRecord = recentRows[0] ?? null;
+  const latestRecord = rows[0] ?? null;
   const noData =
     summary.total_tokens === 0 &&
     sessionRows.length === 0 &&
     categoryData.length === 0 &&
-    toolData.length === 0 &&
-    recentRows.length === 0;
+    toolData.length === 0;
 
   if (userLoading || loading) {
     return (
@@ -600,7 +545,7 @@ export default function TokenSpenditurePage() {
               <MetricCard
                 label="Tool calls"
                 value={summary.tool_call_count}
-                meta={`${displayRows.length.toLocaleString()} raw records loaded`}
+                meta={`${rowsMeta.total.toLocaleString()} raw rows available`}
               />
             </motion.section>
 
@@ -697,7 +642,7 @@ export default function TokenSpenditurePage() {
                 </CardBody>
                 <CardFooter className="text-[11.5px] text-[var(--neutral-soft-400)]">
                   <span>Refreshes every 30 seconds.</span>
-                  <span>{displayRows.length.toLocaleString()} token meter rows in scope</span>
+                  <span>{rowsMeta.total.toLocaleString()} paginated token meter rows</span>
                 </CardFooter>
               </Card>
             </motion.section>
@@ -735,10 +680,12 @@ export default function TokenSpenditurePage() {
                     Recent token meter records
                   </h2>
                   <p className="mt-1 text-[12px] text-[var(--neutral-soft-400)]">
-                    Showing the latest 12 raw rows from the selected window.
+                    Showing paginated raw rows from the token meter endpoint.
                   </p>
                 </div>
-                <Badge tone="neutral">{recentRows.length.toLocaleString()} rows</Badge>
+                <Badge tone="neutral">
+                  Page {rowsMeta.page} of {Math.max(rowsMeta.pages, 1)}
+                </Badge>
               </div>
 
               <Table scrollX>
@@ -753,7 +700,7 @@ export default function TokenSpenditurePage() {
                   </tr>
                 </THead>
                 <TBody>
-                  {recentRows.map((row) => {
+                  {rows.map((row) => {
                     const input = toNumber(row.input_token);
                     const output = toNumber(row.output_token);
                     const timestamp = row.timestamp ?? row.created_at;
@@ -782,6 +729,44 @@ export default function TokenSpenditurePage() {
                   })}
                 </TBody>
               </Table>
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-[12px] border border-[var(--stroke-soft-200)] bg-white px-4 py-3 shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
+                <p className="text-xs text-[var(--neutral-soft-400)]">
+                  Showing{' '}
+                  <span className="font-medium text-[var(--neutral-strong-950)]">
+                    {rowsMeta.total === 0 ? 0 : (rowsMeta.page - 1) * rowsMeta.page_size + 1}
+                    {' '}to{' '}
+                    {Math.min(rowsMeta.page * rowsMeta.page_size, rowsMeta.total)}
+                  </span>{' '}
+                  of{' '}
+                  <span className="font-medium text-[var(--neutral-strong-950)]">
+                    {rowsMeta.total.toLocaleString()}
+                  </span>{' '}
+                  raw rows
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={rowsPage <= 1}
+                    onClick={() => setRowsPage((current) => Math.max(1, current - 1))}
+                  >
+                    Previous
+                  </Button>
+                  <span className="text-[12px] text-[var(--neutral-soft-400)]">
+                    Page {rowsMeta.page} of {Math.max(rowsMeta.pages, 1)}
+                  </span>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={rowsMeta.pages <= 1 || rowsPage >= rowsMeta.pages}
+                    onClick={() =>
+                      setRowsPage((current) => Math.min(Math.max(rowsMeta.pages, 1), current + 1))
+                    }
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
             </motion.section>
           </>
         )}

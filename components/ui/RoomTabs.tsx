@@ -20,11 +20,12 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   Activity,
+  Boxes,
   History,
   KeyRound,
   Plug,
-  Settings as SettingsIcon,
   Shield,
+  Settings as SettingsIcon,
   Users,
   type LucideIcon,
 } from 'lucide-react';
@@ -48,7 +49,9 @@ interface TabDef {
 const TABS: TabDef[] = [
   { segment: '',          label: 'Overview', icon: Activity },
   { segment: 'activity',  label: 'Activity', icon: History },
+  { segment: 'roles',     label: 'Roles',    icon: Shield },
   { segment: 'tools',     label: 'Tools',    icon: Shield },
+  { segment: 'connectors',label: 'Connectors', icon: Boxes },
   { segment: 'members',   label: 'Members',  icon: Users },
   { segment: 'api',       label: 'API',      icon: KeyRound },
   { segment: 'connect',   label: 'Connect',  icon: Plug },

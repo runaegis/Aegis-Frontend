@@ -32,9 +32,8 @@ import { RelativeTime } from '@/components/ui/RelativeTime';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { ToolLogo } from '@/components/ui/ToolLogo';
 import { useToast } from '@/components/ui/Toast';
-import { useUser } from '@/lib/hooks';
 import { useRoom } from '@/lib/roomContext';
-import type { SessionAction } from '@/lib/types';
+import type { RoomSessionAction } from '@/lib/types';
 import { cn, parseApiUtcTimestamp } from '@/lib/utils';
 import { fadeUp, staggerContainer } from '@/lib/motion';
 
@@ -88,8 +87,7 @@ Only fall back to terminal or \`gh\` when no Aegis tool covers the task or the u
 Several GitHub integrations are exclusive to Aegis in this room. Terminal and \`gh\` bypass room policy, may be denied for your role, and will not show up in the audit trail.`;
 
 export default function RoomConnectPage() {
-  const { roomId, room, loading: roomLoading } = useRoom();
-  const { user } = useUser();
+  const { roomId, loading: roomLoading } = useRoom();
   const toast = useToast();
   const reduce = useReducedMotion();
 
@@ -103,7 +101,7 @@ export default function RoomConnectPage() {
   // repo. Null until the first fetch succeeds. We record the mount
   // time so we can highlight runs that landed AFTER the user
   // arrived on this tab (those are the "first connection" wins).
-  const [latestRun, setLatestRun] = useState<SessionAction | null>(null);
+  const [latestRun, setLatestRun] = useState<RoomSessionAction | null>(null);
   const [checking, setChecking] = useState(false);
   const mountTimeRef = useRef<number>(Date.now());
 
@@ -126,24 +124,18 @@ export default function RoomConnectPage() {
     void loadIntegrationUrl();
   }, [loadIntegrationUrl]);
 
-  // Verification fetcher — pulls the latest runs and finds the most
-  // recent one whose target_repo matches THIS room's repo. The
-  // backend doesn't expose a per-room runs endpoint, so we filter
-  // client-side. Cheap (the same call powers the Overview tab) and
-  // gives us a real "did it connect?" signal without new endpoints.
   const checkConnection = useCallback(async () => {
-    if (!user?.id || !room?.repo_name) return;
+    if (!roomId) return;
     setChecking(true);
     try {
-      const runs = await api.getRuns(user.id);
-      const match = runs.find((r) => r.target_repo === room.repo_name) ?? null;
-      setLatestRun(match);
+      const runs = await api.getSessionsByRoomId(roomId, 1, 1);
+      setLatestRun(runs.items[0] ?? null);
     } catch {
       /* swallow — failure is silent, manual button still works */
     } finally {
       setChecking(false);
     }
-  }, [user?.id, room?.repo_name]);
+  }, [roomId]);
 
   // Initial check + 1-minute poll while the tab is active. Manual
   // refresh is available here, so the background verification can be

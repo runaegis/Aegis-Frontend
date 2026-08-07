@@ -35,6 +35,25 @@ export function getRoomCreatedAt(room: {
   return roomCreated || created || undefined;
 }
 
+export function getRoomDisplayName(room: {
+  name?: string | null;
+  repo_name?: string | null;
+  room_id?: string | null;
+  id?: string | null;
+} | null | undefined): string {
+  const name = typeof room?.name === 'string' ? room.name.trim() : '';
+  if (name) return name;
+
+  const repo = typeof room?.repo_name === 'string' ? room.repo_name.trim() : '';
+  if (repo) return repo;
+
+  const roomId = typeof room?.room_id === 'string' ? room.room_id.trim() : '';
+  if (roomId) return roomId;
+
+  const id = typeof room?.id === 'string' ? room.id.trim() : '';
+  return id || 'Room';
+}
+
 export function formatRelativeTime(timestamp: string): string {
   const parsed = parseApiUtcTimestamp(timestamp);
   const then = parsed.getTime();
@@ -489,7 +508,7 @@ export type RoomRoleBadgeTone = 'primary' | 'warning' | 'info' | 'neutral';
 export function getRoomRoleBadgeTone(role?: string | null): RoomRoleBadgeTone {
   const r = role?.toUpperCase().trim();
   if (r === 'OWNER') return 'primary';
-  if (r === 'ADMIN') return 'warning';
+  if (r === 'ADMIN' || r === 'TECH LEAD' || r === 'TECH_LEAD') return 'warning';
   if (r === 'DEVELOPER') return 'info';
   return 'neutral';
 }

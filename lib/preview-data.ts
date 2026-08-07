@@ -19,9 +19,12 @@ import type {
   PaginatedResponse,
   PrivateConnectorCredentialStatus,
   Repo,
+  RoomConnectorConfig,
+  RoomConnectorPoliciesResponse,
   RoomDetails,
   RoomInvite,
   RoomMember,
+  RoomRolesResponse,
   RoomSessionAction,
   RoomSummary,
   Session,
@@ -838,28 +841,90 @@ function buildPreviewTokenUsageSessions(
 
 // Rooms
 const PREVIEW_ROOMS: RoomSummary[] = [
-  { id: 'room_dash',  room_id: 'room_dash',  repo_name: 'aegis/dashboard',  owner_username: 'preview-user', created_at: new Date(NOW - 12 * ONE_DAY).toISOString() },
-  { id: 'room_mcp',   room_id: 'room_mcp',   repo_name: 'aegis/mcp-server', owner_username: 'preview-user', created_at: new Date(NOW - 30 * ONE_DAY).toISOString() },
-  { id: 'room_api',   room_id: 'room_api',   repo_name: 'runaegis/api',     owner_username: 'preview-user', created_at: new Date(NOW -  5 * ONE_DAY).toISOString() },
+  {
+    id: 'room_dash',
+    room_id: 'room_dash',
+    name: 'Dashboard Control Plane',
+    description: 'Frontend control room for dashboard rollout and governance tuning.',
+    room_type: 'shared',
+    repo_name: 'aegis/dashboard',
+    owner_username: 'demo',
+    role: 'OWNER',
+    role_rank: 1,
+    created_at: new Date(NOW - 12 * ONE_DAY).toISOString(),
+  },
+  {
+    id: 'room_mcp',
+    room_id: 'room_mcp',
+    name: 'MCP Platform',
+    description: 'Shared room for MCP server integrations and infra rollout.',
+    room_type: 'shared',
+    repo_name: 'aegis/mcp-server',
+    owner_username: 'demo',
+    role: 'OWNER',
+    role_rank: 1,
+    created_at: new Date(NOW - 30 * ONE_DAY).toISOString(),
+  },
+  {
+    id: 'room_api',
+    room_id: 'room_api',
+    name: 'API Reliability',
+    description: 'Ops-heavy room for the production API and data services.',
+    room_type: 'shared',
+    repo_name: 'runaegis/api',
+    owner_username: 'demo',
+    role: 'OWNER',
+    role_rank: 1,
+    created_at: new Date(NOW - 5 * ONE_DAY).toISOString(),
+  },
 ];
 
 const PREVIEW_ROOM_DETAILS: Record<string, RoomDetails> = Object.fromEntries(
   PREVIEW_ROOMS.map((r) => [r.room_id!, { ...r }]),
 );
 
+const PREVIEW_ROOM_ROLES: Record<string, RoomRolesResponse> = {
+  room_dash: {
+    room_id: 'room_dash',
+    roles: {
+      '1': 'Owner',
+      '2': 'Tech Lead',
+      '3': 'Developer',
+      '4': 'Reviewer',
+      '5': 'Viewer',
+    },
+  },
+  room_mcp: {
+    room_id: 'room_mcp',
+    roles: {
+      '1': 'Owner',
+      '2': 'Admin',
+      '3': 'Developer',
+    },
+  },
+  room_api: {
+    room_id: 'room_api',
+    roles: {
+      '1': 'Owner',
+      '2': 'Tech Lead',
+      '3': 'Developer',
+    },
+  },
+};
+
 const PREVIEW_MEMBERS: Record<string, RoomMember[]> = {
   room_dash: [
-    { id: 'm1', user_id: 'preview-user', username: 'demo',  role: 'OWNER',     joined_at: new Date(NOW - 12 * ONE_DAY).toISOString() },
-    { id: 'm2', user_id: 'u_kai',        username: 'kai',      role: 'DEVELOPER', joined_at: new Date(NOW - 10 * ONE_DAY).toISOString() },
-    { id: 'm3', user_id: 'u_sora',       username: 'sora',     role: 'REVIEWER',  joined_at: new Date(NOW -  9 * ONE_DAY).toISOString() },
-    { id: 'm4', user_id: 'u_lin',        username: 'lin',      role: 'VIEWER',    joined_at: new Date(NOW -  6 * ONE_DAY).toISOString() },
+    { id: 'm1', user_id: 'preview-user', username: 'demo', role: 'OWNER', role_rank: 1, joined_at: new Date(NOW - 12 * ONE_DAY).toISOString() },
+    { id: 'm2', user_id: 'u_kai', username: 'kai', role: 'DEVELOPER', role_rank: 3, joined_at: new Date(NOW - 10 * ONE_DAY).toISOString() },
+    { id: 'm3', user_id: 'u_sora', username: 'sora', role: 'REVIEWER', role_rank: 4, joined_at: new Date(NOW - 9 * ONE_DAY).toISOString() },
+    { id: 'm4', user_id: 'u_lin', username: 'lin', role: 'VIEWER', role_rank: 5, joined_at: new Date(NOW - 6 * ONE_DAY).toISOString() },
   ],
   room_mcp: [
-    { id: 'm5', user_id: 'preview-user', username: 'demo',  role: 'OWNER',     joined_at: new Date(NOW - 30 * ONE_DAY).toISOString() },
-    { id: 'm6', user_id: 'u_amir',       username: 'amir',     role: 'DEVELOPER', joined_at: new Date(NOW - 28 * ONE_DAY).toISOString() },
+    { id: 'm5', user_id: 'preview-user', username: 'demo', role: 'OWNER', role_rank: 1, joined_at: new Date(NOW - 30 * ONE_DAY).toISOString() },
+    { id: 'm6', user_id: 'u_amir', username: 'amir', role: 'DEVELOPER', role_rank: 3, joined_at: new Date(NOW - 28 * ONE_DAY).toISOString() },
   ],
   room_api: [
-    { id: 'm7', user_id: 'preview-user', username: 'demo',  role: 'OWNER',     joined_at: new Date(NOW - 5 * ONE_DAY).toISOString() },
+    { id: 'm7', user_id: 'preview-user', username: 'demo', role: 'OWNER', role_rank: 1, joined_at: new Date(NOW - 5 * ONE_DAY).toISOString() },
   ],
 };
 
@@ -1017,7 +1082,7 @@ const PREVIEW_ROOM_ACTIONS: Record<string, RoomSessionAction[]> = (() => {
   };
   for (const room of PREVIEW_ROOMS) {
     const id = room.room_id!;
-    const repo = room.repo_name;
+    const repo = room.repo_name ?? room.name ?? id;
     const members = PREVIEW_MEMBERS[id] ?? [];
     const count = VOLUMES[id] ?? 12;
     const actions = Array.from({ length: count }, (_, i) =>
@@ -1032,12 +1097,579 @@ const PREVIEW_ROOM_ACTIONS: Record<string, RoomSessionAction[]> = (() => {
   return out;
 })();
 
-// Default tool policy per role — mostly true, a few false to add nuance.
-const PREVIEW_ROOM_TOOLS: Record<string, Record<string, boolean>> = {
-  DEVELOPER: Object.fromEntries(TOOLS.map((t) => [t, !t.includes('search_issues')])),
-  REVIEWER:  Object.fromEntries(TOOLS.map((t) => [t, !['push_files', 'create_or_update_file', 'create_branch'].includes(t)])),
-  VIEWER:    Object.fromEntries(TOOLS.map((t) => [t, t.startsWith('get_') || t.startsWith('list_') || t.startsWith('search_')])),
-  OWNER:     Object.fromEntries(TOOLS.map((t) => [t, true])),
+const PREVIEW_CONNECTOR_CATALOG: ConnectorCatalogItem[] = [
+  {
+    connector_key: 'github',
+    display_name: 'GitHub',
+    description: 'Connect a room to a shared repository and branch policy surface.',
+    private_config_schema: {
+      type: 'object',
+      required: ['github_pat'],
+      properties: {
+        github_pat: {
+          type: 'string',
+          title: 'GitHub PAT',
+          description: 'Personal access token with repository access.',
+        },
+      },
+    },
+    public_config_schema: {
+      type: 'object',
+      required: ['repo'],
+      properties: {
+        repo: {
+          type: 'string',
+          title: 'Repository',
+          description: 'GitHub repository full name, for example aegis/dashboard.',
+        },
+        default_branch: {
+          type: 'string',
+          title: 'Default branch',
+          description: 'Branch Aegis should treat as the protected default.',
+        },
+      },
+    },
+    policy_catalog: {
+      protected_branch: {
+        display_name: 'Protected branch',
+        description: 'Blocks direct writes to a protected branch.',
+      },
+      freeze_window: {
+        display_name: 'Freeze window',
+        description: 'Gates risky actions during a change freeze.',
+      },
+      secret_detection: {
+        display_name: 'Secret detection',
+        description: 'Scans outbound content for secrets before execution.',
+      },
+    },
+    is_active: true,
+  },
+  {
+    connector_key: 'postgres',
+    display_name: 'PostgreSQL',
+    description: 'Connect a shared database target for query and migration governance.',
+    private_config_schema: {
+      type: 'object',
+      required: ['connection_string'],
+      properties: {
+        connection_string: {
+          type: 'string',
+          title: 'Connection string',
+          description: 'Personal PostgreSQL connection URL.',
+        },
+      },
+    },
+    public_config_schema: {
+      type: 'object',
+      required: ['database'],
+      properties: {
+        database: {
+          type: 'string',
+          title: 'Database',
+          description: 'Primary database name for this room.',
+        },
+        schema_allowlist: {
+          type: 'string',
+          title: 'Schema allowlist',
+          description: 'Comma-separated schemas the room may access.',
+        },
+      },
+    },
+    policy_catalog: {
+      destructive_sql: {
+        display_name: 'Destructive SQL',
+        description: 'Guards DROP, TRUNCATE, and similar statements.',
+      },
+      migration_gate: {
+        display_name: 'Migration gate',
+        description: 'Requires review for schema-changing statements.',
+      },
+    },
+    is_active: true,
+  },
+  {
+    connector_key: 'mongodb',
+    display_name: 'MongoDB',
+    description: 'Connect a shared MongoDB database and collection scope.',
+    private_config_schema: {
+      type: 'object',
+      required: ['connection_string'],
+      properties: {
+        connection_string: {
+          type: 'string',
+          title: 'Connection string',
+          description: 'Personal MongoDB connection URI.',
+        },
+      },
+    },
+    public_config_schema: {
+      type: 'object',
+      required: ['database'],
+      properties: {
+        database: {
+          type: 'string',
+          title: 'Database',
+          description: 'Primary database name for this room.',
+        },
+        collection_allowlist: {
+          type: 'string',
+          title: 'Collection allowlist',
+          description: 'Comma-separated collections the room may access.',
+        },
+      },
+    },
+    policy_catalog: {
+      destructive_write: {
+        display_name: 'Destructive write',
+        description: 'Gates bulk or destructive MongoDB mutations.',
+      },
+    },
+    is_active: true,
+  },
+  {
+    connector_key: 'linear',
+    display_name: 'Linear',
+    description: 'Connect a shared Linear team or project scope.',
+    private_config_schema: {
+      type: 'object',
+      required: ['api_key'],
+      properties: {
+        api_key: {
+          type: 'string',
+          title: 'API key',
+          description: 'Personal Linear API key.',
+        },
+      },
+    },
+    public_config_schema: {
+      type: 'object',
+      required: ['team_key'],
+      properties: {
+        team_key: {
+          type: 'string',
+          title: 'Team key',
+          description: 'Linear team key, for example ENG.',
+        },
+        project_key: {
+          type: 'string',
+          title: 'Project key',
+          description: 'Optional Linear project key.',
+        },
+      },
+    },
+    policy_catalog: {
+      scope_guard: {
+        display_name: 'Scope guard',
+        description: 'Ensures updates stay inside the allowed team or project.',
+      },
+    },
+    is_active: true,
+  },
+  {
+    connector_key: 'jira',
+    display_name: 'Jira',
+    description: 'Connect a shared Jira project scope for issue and workflow updates.',
+    private_config_schema: {
+      type: 'object',
+      required: ['url', 'username', 'api_token'],
+      properties: {
+        url: {
+          type: 'string',
+          title: 'Jira URL',
+          description: 'Your Jira site URL.',
+        },
+        username: {
+          type: 'string',
+          title: 'Jira username',
+          description: 'Jira account email or username.',
+        },
+        api_token: {
+          type: 'string',
+          title: 'Jira API token',
+          description: 'Stored as a secret and used for Jira API access.',
+        },
+      },
+    },
+    public_config_schema: {
+      type: 'object',
+      required: ['project_key'],
+      properties: {
+        project_key: {
+          type: 'string',
+          title: 'Project key',
+          description: 'Jira project key, for example OPS.',
+        },
+      },
+    },
+    policy_catalog: {
+      project_scope: {
+        display_name: 'Project scope',
+        description: 'Restricts changes to approved Jira projects.',
+      },
+    },
+    is_active: true,
+  },
+  {
+    connector_key: 'terraform',
+    display_name: 'Terraform',
+    description: 'Connect a shared Terraform organization or workspace scope.',
+    private_config_schema: {
+      type: 'object',
+      required: ['url', 'api_token'],
+      properties: {
+        url: {
+          type: 'string',
+          title: 'Terraform URL',
+          description: 'Terraform Cloud or Terraform Enterprise base URL.',
+        },
+        api_token: {
+          type: 'string',
+          title: 'Terraform API token',
+          description: 'Stored as a secret and used for Terraform API access.',
+        },
+      },
+    },
+    public_config_schema: {
+      type: 'object',
+      required: ['organization'],
+      properties: {
+        organization: {
+          type: 'string',
+          title: 'Organization',
+          description: 'Terraform organization slug.',
+        },
+        workspace: {
+          type: 'string',
+          title: 'Workspace',
+          description: 'Optional default Terraform workspace.',
+        },
+      },
+    },
+    policy_catalog: {
+      apply_requires_approval: {
+        display_name: 'Apply requires approval',
+        description: 'Requires review before applies can run.',
+      },
+      destroy_guard: {
+        display_name: 'Destroy guard',
+        description: 'Denies destructive Terraform actions by default.',
+      },
+    },
+    is_active: true,
+  },
+];
+
+const PREVIEW_TOOL_GROUPS_BY_CONNECTOR: Record<string, Array<{ key: string; label: string; tools: string[] }>> = {
+  github: [
+    {
+      key: 'pr_tools',
+      label: 'Pull request tools',
+      tools: ['create_pull_request', 'list_pull_requests', 'pull_request_read', 'merge_pull_request'],
+    },
+    {
+      key: 'file_change_tools',
+      label: 'File change tools',
+      tools: ['get_file_contents', 'create_or_update_file', 'push_files', 'create_branch'],
+    },
+    {
+      key: 'issue_tools',
+      label: 'Issue tools',
+      tools: ['issue_read', 'issue_write', 'list_issues', 'add_issue_comment'],
+    },
+  ],
+  postgres: [
+    {
+      key: 'sql_tools',
+      label: 'SQL tools',
+      tools: ['list_schemas', 'list_tables', 'execute_sql'],
+    },
+  ],
+  mongodb: [
+    {
+      key: 'document_tools',
+      label: 'Document tools',
+      tools: ['mongo_find', 'mongo_aggregate', 'mongo_update_many'],
+    },
+  ],
+  linear: [
+    {
+      key: 'issue_tools',
+      label: 'Issue tools',
+      tools: ['linear_search_issues', 'linear_get_issue', 'linear_create_issue', 'linear_update_issue'],
+    },
+  ],
+  jira: [
+    {
+      key: 'issue_tools',
+      label: 'Issue tools',
+      tools: ['jira_search', 'jira_get_issue', 'jira_create_issue', 'jira_update_issue', 'jira_transition_issue'],
+    },
+  ],
+  terraform: [
+    {
+      key: 'workspace_tools',
+      label: 'Workspace tools',
+      tools: ['terraform_list_workspaces', 'terraform_get_workspace_details', 'terraform_create_run'],
+    },
+    {
+      key: 'plan_apply_tools',
+      label: 'Plan and apply tools',
+      tools: ['terraform_get_plan_details', 'terraform_get_apply_details', 'terraform_apply', 'terraform_destroy'],
+    },
+  ],
+};
+
+function buildConnectorToolPolicy(
+  connectorKey: string,
+): Record<number, Record<string, boolean>> {
+  const groups = PREVIEW_TOOL_GROUPS_BY_CONNECTOR[connectorKey] ?? [];
+  const tools = groups.flatMap((group) => group.tools);
+  const readOnly = Object.fromEntries(
+    tools.map((tool) => [
+      tool,
+      /(get_|list_|search|read)/.test(tool),
+    ]),
+  );
+  const standard = Object.fromEntries(
+    tools.map((tool) => [
+      tool,
+      !/(merge|destroy|apply|update_many|execute_sql|push_files)/.test(tool),
+    ]),
+  );
+  const admin = Object.fromEntries(
+    tools.map((tool) => [
+      tool,
+      !/(destroy)/.test(tool),
+    ]),
+  );
+  const owner = Object.fromEntries(tools.map((tool) => [tool, true]));
+
+  return {
+    1: owner,
+    2: admin,
+    3: standard,
+    4: readOnly,
+    5: readOnly,
+  };
+}
+
+const PREVIEW_ROOM_CONNECTOR_TOOL_POLICIES: Record<
+  string,
+  Record<string, Record<number, Record<string, boolean>>>
+> = {
+  room_dash: {
+    github: buildConnectorToolPolicy('github'),
+    linear: buildConnectorToolPolicy('linear'),
+  },
+  room_mcp: {
+    github: buildConnectorToolPolicy('github'),
+    terraform: buildConnectorToolPolicy('terraform'),
+  },
+  room_api: {
+    github: buildConnectorToolPolicy('github'),
+    postgres: buildConnectorToolPolicy('postgres'),
+    mongodb: buildConnectorToolPolicy('mongodb'),
+  },
+};
+
+const PREVIEW_ROOM_CONNECTOR_CONFIGS: Record<string, RoomConnectorConfig[]> = {
+  room_dash: [
+    {
+      room_id: 'room_dash',
+      connector_key: 'github',
+      display_name: 'GitHub',
+      configured: true,
+      is_enabled: true,
+      public_config: {
+        repo: 'aegis/dashboard',
+        default_branch: 'main',
+      },
+      created_at: new Date(NOW - 11 * ONE_DAY).toISOString(),
+      updated_at: new Date(NOW - 2 * ONE_DAY).toISOString(),
+    },
+    {
+      room_id: 'room_dash',
+      connector_key: 'linear',
+      display_name: 'Linear',
+      configured: true,
+      is_enabled: true,
+      public_config: {
+        team_key: 'ENG',
+        project_key: 'DASH',
+      },
+      created_at: new Date(NOW - 9 * ONE_DAY).toISOString(),
+      updated_at: new Date(NOW - 4 * ONE_DAY).toISOString(),
+    },
+  ],
+  room_mcp: [
+    {
+      room_id: 'room_mcp',
+      connector_key: 'github',
+      display_name: 'GitHub',
+      configured: true,
+      is_enabled: true,
+      public_config: {
+        repo: 'aegis/mcp-server',
+        default_branch: 'main',
+      },
+      created_at: new Date(NOW - 29 * ONE_DAY).toISOString(),
+      updated_at: new Date(NOW - 7 * ONE_DAY).toISOString(),
+    },
+    {
+      room_id: 'room_mcp',
+      connector_key: 'terraform',
+      display_name: 'Terraform',
+      configured: true,
+      is_enabled: true,
+      public_config: {
+        organization: 'aegis-core',
+        workspace: 'mcp-platform',
+      },
+      created_at: new Date(NOW - 26 * ONE_DAY).toISOString(),
+      updated_at: new Date(NOW - 8 * ONE_DAY).toISOString(),
+    },
+  ],
+  room_api: [
+    {
+      room_id: 'room_api',
+      connector_key: 'github',
+      display_name: 'GitHub',
+      configured: true,
+      is_enabled: true,
+      public_config: {
+        repo: 'runaegis/api',
+        default_branch: 'main',
+      },
+      created_at: new Date(NOW - 5 * ONE_DAY).toISOString(),
+      updated_at: new Date(NOW - 2 * ONE_DAY).toISOString(),
+    },
+    {
+      room_id: 'room_api',
+      connector_key: 'postgres',
+      display_name: 'PostgreSQL',
+      configured: true,
+      is_enabled: true,
+      public_config: {
+        database: 'aegis_prod',
+        schema_allowlist: 'public, audit',
+      },
+      created_at: new Date(NOW - 4 * ONE_DAY).toISOString(),
+      updated_at: new Date(NOW - 1 * ONE_DAY).toISOString(),
+    },
+    {
+      room_id: 'room_api',
+      connector_key: 'mongodb',
+      display_name: 'MongoDB',
+      configured: true,
+      is_enabled: true,
+      public_config: {
+        database: 'events',
+        collection_allowlist: 'replays, traces',
+      },
+      created_at: new Date(NOW - 3 * ONE_DAY).toISOString(),
+      updated_at: new Date(NOW - 1 * ONE_DAY).toISOString(),
+    },
+  ],
+};
+
+const PREVIEW_ROOM_CONNECTOR_POLICIES: Record<
+  string,
+  Record<string, RoomConnectorPoliciesResponse>
+> = {
+  room_dash: {
+    github: {
+      room_id: 'room_dash',
+      connector_key: 'github',
+      can_manage: true,
+      policies: [
+        {
+          policy_key: 'protected_branch',
+          display_name: 'Protected branch',
+          description: 'Direct writes to protected branches are rerouted or blocked.',
+          effect: 'DENY',
+          is_enabled: true,
+        },
+        {
+          policy_key: 'freeze_window',
+          display_name: 'Freeze window',
+          description: 'Writes during a freeze require human sign-off.',
+          effect: 'REQUIRE_APPROVAL',
+          minimum_role_rank_required: 2,
+          is_enabled: true,
+        },
+        {
+          policy_key: 'secret_detection',
+          display_name: 'Secret detection',
+          description: 'Outbound secrets are blocked before execution.',
+          effect: 'DENY',
+          is_enabled: true,
+        },
+      ],
+    },
+    linear: {
+      room_id: 'room_dash',
+      connector_key: 'linear',
+      can_manage: true,
+      policies: [
+        {
+          policy_key: 'scope_guard',
+          display_name: 'Scope guard',
+          description: 'Writes stay inside the allowed team and project.',
+          effect: 'DENY',
+          is_enabled: true,
+        },
+      ],
+    },
+  },
+  room_mcp: {
+    terraform: {
+      room_id: 'room_mcp',
+      connector_key: 'terraform',
+      can_manage: true,
+      policies: [
+        {
+          policy_key: 'apply_requires_approval',
+          display_name: 'Apply requires approval',
+          description: 'Applies pause for review before they execute.',
+          effect: 'REQUIRE_APPROVAL',
+          minimum_role_rank_required: 1,
+          is_enabled: true,
+        },
+        {
+          policy_key: 'destroy_guard',
+          display_name: 'Destroy guard',
+          description: 'Destroy operations are blocked by default.',
+          effect: 'DENY',
+          is_enabled: true,
+        },
+      ],
+    },
+  },
+  room_api: {
+    postgres: {
+      room_id: 'room_api',
+      connector_key: 'postgres',
+      can_manage: true,
+      policies: [
+        {
+          policy_key: 'destructive_sql',
+          display_name: 'Destructive SQL',
+          description: 'DROP and TRUNCATE are denied.',
+          effect: 'DENY',
+          is_enabled: true,
+        },
+        {
+          policy_key: 'migration_gate',
+          display_name: 'Migration gate',
+          description: 'Schema changes require review.',
+          effect: 'REQUIRE_APPROVAL',
+          minimum_role_rank_required: 1,
+          is_enabled: true,
+        },
+      ],
+    },
+  },
 };
 
 // Freeze windows
@@ -1082,6 +1714,46 @@ const PREVIEW_PRIVATE_CONNECTOR_STATUS: Record<string, PrivateConnectorCredentia
     revoked_at: null,
   },
 };
+
+function getPreviewRoleRankForUser(roomId: string, userId = 'preview-user'): number {
+  const member = (PREVIEW_MEMBERS[roomId] ?? []).find((item) => item.user_id === userId);
+  return member?.role_rank ?? 1;
+}
+
+function getPreviewRoomToolMatrix(roomId: string) {
+  const roleRank = getPreviewRoleRankForUser(roomId);
+  const visibleRoles = PREVIEW_ROOM_ROLES[roomId]?.roles ?? { '1': 'Owner', '2': 'Admin', '3': 'Developer' };
+  void visibleRoles;
+  const configuredByConnector = Object.fromEntries(
+    (PREVIEW_ROOM_CONNECTOR_CONFIGS[roomId] ?? []).map((config) => [config.connector_key, config]),
+  );
+
+  return {
+    room_id: roomId,
+    role_rank: roleRank,
+    connectors: PREVIEW_CONNECTOR_CATALOG
+      .filter((connector) => {
+        if (roleRank <= 2) return true;
+        return Boolean(configuredByConnector[connector.connector_key]?.configured);
+      })
+      .map((connector) => {
+        const configured = Boolean(configuredByConnector[connector.connector_key]?.configured);
+        const privateConfigured = Boolean(PREVIEW_PRIVATE_CONNECTOR_STATUS[connector.connector_key]?.configured);
+        return {
+          connector_key: connector.connector_key,
+          display_name: connector.display_name,
+          description: connector.description ?? null,
+          configured,
+          private_credentials_configured: privateConfigured,
+          can_configure_connector: roleRank <= 2,
+          tool_groups:
+            configured && privateConfigured
+              ? PREVIEW_TOOL_GROUPS_BY_CONNECTOR[connector.connector_key] ?? []
+              : [],
+        };
+      }),
+  };
+}
 
 const PREVIEW_USER_PROMPTS: UserPrompt[] = [
   {
@@ -1315,13 +1987,18 @@ export function installPreviewApi() {
   };
   api.getRecentActionCount = async () => [{ count: RUNS.slice(0, 3).length }];
 
-  api.getUserTokenUsage = async () => ({
-    items: TOKEN_METER,
-    total: TOKEN_METER.length,
-    page: 1,
-    page_size: TOKEN_METER.length,
-    pages: 1,
-  });
+  api.getUserTokenUsage = async (_userId, page = 1, page_size = 20) => {
+    const safePage = Math.max(1, page);
+    const safePageSize = Math.max(1, page_size);
+    const start = (safePage - 1) * safePageSize;
+    return {
+      items: TOKEN_METER.slice(start, start + safePageSize),
+      total: TOKEN_METER.length,
+      page: safePage,
+      page_size: safePageSize,
+      pages: Math.max(1, Math.ceil(TOKEN_METER.length / safePageSize)),
+    };
+  };
 
   api.getUserTokenUsageAll = async () => [...TOKEN_METER];
 
@@ -1341,13 +2018,53 @@ export function installPreviewApi() {
   api.setPermission = async () => ({ success: true });
   api.setPermissions = async () => ({ success: true });
 
-  api.getUserPolicy = async () => '111111110111'; // 11 of 12 armed (secret_detection off); new connector policies armed
-  api.upsertUserPolicy = async () => undefined;
-
   api.getMyRooms = async () => PREVIEW_ROOMS;
   api.getRoomDetails = async (roomId: string) =>
     PREVIEW_ROOM_DETAILS[roomId] ?? PREVIEW_ROOMS[0];
   api.getRoomMembers = async (roomId: string) => PREVIEW_MEMBERS[roomId] ?? [];
+  api.getRoomRoles = async (roomId: string) =>
+    PREVIEW_ROOM_ROLES[roomId] ?? {
+      room_id: roomId,
+      roles: { '1': 'Owner', '2': 'Admin', '3': 'Developer' },
+    };
+  api.updateRoomRoles = async (roomId: string, roles) => {
+    PREVIEW_ROOM_ROLES[roomId] = { room_id: roomId, roles: { ...roles } };
+    return PREVIEW_ROOM_ROLES[roomId];
+  };
+  api.updateRoomMemberRank = async (roomId: string, userId: string, roleRank: number) => {
+    const roleLabel = PREVIEW_ROOM_ROLES[roomId]?.roles?.[String(roleRank)] ?? `Rank ${roleRank}`;
+    const member = (PREVIEW_MEMBERS[roomId] ?? []).find((item) => item.user_id === userId);
+    if (!member) throw new Error('Member not found');
+    member.role_rank = roleRank;
+    member.role = roleLabel;
+    return member;
+  };
+  api.removeRoomMember = async (roomId: string, userId: string) => {
+    const members = PREVIEW_MEMBERS[roomId] ?? [];
+    const idx = members.findIndex((item) => item.user_id === userId);
+    if (idx >= 0) members.splice(idx, 1);
+    return { success: true };
+  };
+  api.transferRoomOwnership = async (roomId: string, newOwnerId: string) => {
+    const members = PREVIEW_MEMBERS[roomId] ?? [];
+    const currentOwner = members.find((item) => item.role_rank === 1);
+    const nextOwner = members.find((item) => item.user_id === newOwnerId);
+    if (!nextOwner) throw new Error('Member not found');
+    if (currentOwner) {
+      currentOwner.role_rank = 2;
+      currentOwner.role = PREVIEW_ROOM_ROLES[roomId]?.roles?.['2'] ?? 'Admin';
+    }
+    nextOwner.role_rank = 1;
+    nextOwner.role = 'Owner';
+    if (PREVIEW_ROOM_DETAILS[roomId]) {
+      PREVIEW_ROOM_DETAILS[roomId].owner_username = nextOwner.username;
+    }
+    const summary = PREVIEW_ROOMS.find((room) => room.room_id === roomId);
+    if (summary) {
+      summary.owner_username = nextOwner.username;
+    }
+    return { success: true };
+  };
   api.getRoomInvites = async (roomId: string) => PREVIEW_INVITES[roomId] ?? [];
   // Activity tab inside a room. Returns paginated `RoomSessionAction[]`
   // pinned to that room — same shape as the real endpoint
@@ -1365,9 +2082,82 @@ export function installPreviewApi() {
     const items = all.slice(start, start + pageSize);
     return { items, total, page: safePage, page_size: pageSize, pages };
   };
-  api.getRoomTools = async (_roomId: string, role: string) =>
-    PREVIEW_ROOM_TOOLS[role] ?? PREVIEW_ROOM_TOOLS.DEVELOPER;
-  api.updateRoomTools = async () => ({ success: true });
+  api.getRoomTools = async (roomId: string) => getPreviewRoomToolMatrix(roomId);
+  api.getRoomConnectorRankTools = async (roomId: string, connectorKey: string, roleRank: number) =>
+    PREVIEW_ROOM_CONNECTOR_TOOL_POLICIES[roomId]?.[connectorKey]?.[roleRank] ??
+    buildConnectorToolPolicy(connectorKey)[roleRank] ??
+    {};
+  api.updateRoomConnectorRankTools = async (
+    roomId: string,
+    connectorKey: string,
+    roleRank: number,
+    tools: Record<string, boolean>,
+  ) => {
+    if (!PREVIEW_ROOM_CONNECTOR_TOOL_POLICIES[roomId]) {
+      PREVIEW_ROOM_CONNECTOR_TOOL_POLICIES[roomId] = {};
+    }
+    if (!PREVIEW_ROOM_CONNECTOR_TOOL_POLICIES[roomId][connectorKey]) {
+      PREVIEW_ROOM_CONNECTOR_TOOL_POLICIES[roomId][connectorKey] = buildConnectorToolPolicy(connectorKey);
+    }
+    PREVIEW_ROOM_CONNECTOR_TOOL_POLICIES[roomId][connectorKey][roleRank] = { ...tools };
+    return PREVIEW_ROOM_CONNECTOR_TOOL_POLICIES[roomId][connectorKey][roleRank];
+  };
+  api.getRoomConnectorConfigs = async (roomId: string) =>
+    PREVIEW_ROOM_CONNECTOR_CONFIGS[roomId] ?? [];
+  api.saveRoomConnectorConfig = async (roomId: string, connectorKey: string, publicConfig: Record<string, unknown>) => {
+    const existing = PREVIEW_ROOM_CONNECTOR_CONFIGS[roomId] ?? (PREVIEW_ROOM_CONNECTOR_CONFIGS[roomId] = []);
+    const idx = existing.findIndex((item) => item.connector_key === connectorKey);
+    const catalog = PREVIEW_CONNECTOR_CATALOG.find((item) => item.connector_key === connectorKey);
+    const next: RoomConnectorConfig = {
+      room_id: roomId,
+      connector_key: connectorKey,
+      display_name: catalog?.display_name ?? connectorKey,
+      configured: true,
+      is_enabled: true,
+      public_config: { ...publicConfig },
+      created_at: idx >= 0 ? existing[idx].created_at : new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    if (idx >= 0) existing[idx] = next;
+    else existing.push(next);
+    return next;
+  };
+  api.disableRoomConnector = async (roomId: string, connectorKey: string) => {
+    const existing = PREVIEW_ROOM_CONNECTOR_CONFIGS[roomId] ?? [];
+    const idx = existing.findIndex((item) => item.connector_key === connectorKey);
+    if (idx >= 0) existing.splice(idx, 1);
+    return { success: true };
+  };
+  api.getRoomConnectorPolicies = async (roomId: string, connectorKey: string) =>
+    PREVIEW_ROOM_CONNECTOR_POLICIES[roomId]?.[connectorKey] ?? {
+      room_id: roomId,
+      connector_key: connectorKey,
+      can_manage: true,
+      policies: [],
+    };
+  api.updateRoomConnectorPolicies = async (roomId: string, connectorKey: string, policies) => {
+    const current = PREVIEW_ROOM_CONNECTOR_POLICIES[roomId]?.[connectorKey] ?? {
+      room_id: roomId,
+      connector_key: connectorKey,
+      can_manage: true,
+      policies: [],
+    };
+    const byKey = Object.fromEntries(current.policies.map((policy) => [policy.policy_key, policy]));
+    for (const [policyKey, patch] of Object.entries(policies)) {
+      byKey[policyKey] = {
+        ...(byKey[policyKey] ?? { policy_key: policyKey }),
+        ...patch,
+      };
+    }
+    if (!PREVIEW_ROOM_CONNECTOR_POLICIES[roomId]) {
+      PREVIEW_ROOM_CONNECTOR_POLICIES[roomId] = {};
+    }
+    PREVIEW_ROOM_CONNECTOR_POLICIES[roomId][connectorKey] = {
+      ...current,
+      policies: Object.values(byKey),
+    };
+    return PREVIEW_ROOM_CONNECTOR_POLICIES[roomId][connectorKey];
+  };
   // Room MCP integration URL — rendered into the copyable Integration
   // field on the rooms page. Without this mock the Promise.all on
   // /dashboard/rooms rejects and the whole detail panel goes empty.
@@ -1392,30 +2182,43 @@ export function installPreviewApi() {
   //     immediately without a refetch race
   // Net effect: creating a new room surfaces all OWNER-only affordances
   // (Generate invite, etc.) the same way the seeded demo rooms do.
-  api.createRoom = async (repoId: string) => {
+  api.createRoom = async (payload: Parameters<typeof api.createRoom>[0]) => {
     const newId = `room_${Date.now()}`;
     const createdAt = new Date().toISOString();
+    const trimmedName = payload.name.trim();
     const newRoom: RoomSummary = {
       id: newId,
       room_id: newId,
-      repo_name: repoId,
+      name: trimmedName,
+      description: payload.description?.trim() || null,
+      room_type: payload.room_type ?? 'shared',
+      repo_name: payload.repo_name?.trim() || null,
       owner_username: 'demo',
       role: 'OWNER',
+      role_rank: 1,
       created_at: createdAt,
     };
     PREVIEW_ROOMS.push(newRoom);
     PREVIEW_ROOM_DETAILS[newId] = { ...newRoom };
+    PREVIEW_ROOM_ROLES[newId] = {
+      room_id: newId,
+      roles: { '1': 'Owner', '2': 'Admin', '3': 'Developer' },
+    };
     PREVIEW_MEMBERS[newId] = [
       {
         id: `m_${Date.now()}`,
         user_id: 'preview-user',
         username: 'demo',
         role: 'OWNER',
+        role_rank: 1,
         joined_at: createdAt,
       },
     ];
     PREVIEW_INVITES[newId] = [];
     PREVIEW_ROOM_ACTIONS[newId] = [];
+    PREVIEW_ROOM_CONNECTOR_CONFIGS[newId] = [];
+    PREVIEW_ROOM_CONNECTOR_TOOL_POLICIES[newId] = {};
+    PREVIEW_ROOM_CONNECTOR_POLICIES[newId] = {};
     return newRoom;
   };
   // Create an invite AND persist it into PREVIEW_INVITES so a refetch
@@ -1437,6 +2240,25 @@ export function installPreviewApi() {
     return newInvite;
   };
   api.joinRoom = async () => ({ success: true });
+  api.leaveRoom = async (roomId: string) => {
+    const members = PREVIEW_MEMBERS[roomId] ?? [];
+    const idx = members.findIndex((member) => member.user_id === 'preview-user');
+    if (idx >= 0) members.splice(idx, 1);
+    return { success: true };
+  };
+  api.deleteRoom = async (roomId: string) => {
+    const roomIdx = PREVIEW_ROOMS.findIndex((room) => room.room_id === roomId);
+    if (roomIdx >= 0) PREVIEW_ROOMS.splice(roomIdx, 1);
+    delete PREVIEW_ROOM_DETAILS[roomId];
+    delete PREVIEW_MEMBERS[roomId];
+    delete PREVIEW_INVITES[roomId];
+    delete PREVIEW_ROOM_ACTIONS[roomId];
+    delete PREVIEW_ROOM_ROLES[roomId];
+    delete PREVIEW_ROOM_CONNECTOR_CONFIGS[roomId];
+    delete PREVIEW_ROOM_CONNECTOR_POLICIES[roomId];
+    delete PREVIEW_ROOM_CONNECTOR_TOOL_POLICIES[roomId];
+    return { success: true };
+  };
 
   api.getFreezeWindows = async () => PREVIEW_FREEZE_WINDOWS;
   api.createFreezeWindow = async (payload: any) => {
@@ -1551,137 +2373,7 @@ export function installPreviewApi() {
     return { onboarding_status: !onOnboarding };
   };
   api.updateOnboardingStatus = async (status) => ({ onboarding_status: status });
-  api.getConnectorCatalog = async () => [
-    {
-      connector_key: 'github',
-      display_name: 'GitHub',
-      description: 'Connect a personal access token for source control workflows.',
-      private_config_schema: {
-        type: 'object',
-        required: ['github_pat'],
-        properties: {
-          github_pat: {
-            type: 'string',
-            title: 'GitHub PAT',
-            description: 'Classic personal access token with repo access.',
-          },
-        },
-      },
-      public_config_schema: {},
-      policy_catalog: {},
-      is_active: true,
-    },
-    {
-      connector_key: 'postgres',
-      display_name: 'PostgreSQL',
-      description: 'Connect a personal database URL for query and migration workflows.',
-      private_config_schema: {
-        type: 'object',
-        required: ['connection_string'],
-        properties: {
-          connection_string: {
-            type: 'string',
-            title: 'Connection string',
-            description: 'Personal PostgreSQL connection URL.',
-          },
-        },
-      },
-      public_config_schema: {},
-      policy_catalog: {},
-      is_active: true,
-    },
-    {
-      connector_key: 'mongodb',
-      display_name: 'MongoDB',
-      description: 'Connect a personal MongoDB URI for document workflows.',
-      private_config_schema: {
-        type: 'object',
-        required: ['connection_string'],
-        properties: {
-          connection_string: {
-            type: 'string',
-            title: 'Connection string',
-            description: 'Personal MongoDB connection URI.',
-          },
-        },
-      },
-      public_config_schema: {},
-      policy_catalog: {},
-      is_active: true,
-    },
-    {
-      connector_key: 'linear',
-      display_name: 'Linear',
-      description: 'Connect a personal API key for planning context.',
-      private_config_schema: {
-        type: 'object',
-        required: ['api_key'],
-        properties: {
-          api_key: {
-            type: 'string',
-            title: 'API key',
-            description: 'Personal Linear API key.',
-          },
-        },
-      },
-      public_config_schema: {},
-      policy_catalog: {},
-      is_active: true,
-    },
-    {
-      connector_key: 'jira',
-      display_name: 'Jira',
-      description: 'Connect Jira URL, username, and API token for issue workflows.',
-      private_config_schema: {
-        type: 'object',
-        required: ['url', 'username', 'api_token'],
-        properties: {
-          url: {
-            type: 'string',
-            title: 'Jira URL',
-            description: 'Your Jira base URL. Example: https://your-company.atlassian.net',
-          },
-          username: {
-            type: 'string',
-            title: 'Jira username',
-            description: 'Usually the email address tied to your Jira account.',
-          },
-          api_token: {
-            type: 'string',
-            title: 'Jira API token',
-            description: 'Stored as a secret and used for Jira API access.',
-          },
-        },
-      },
-      public_config_schema: {},
-      policy_catalog: {},
-      is_active: true,
-    },
-    {
-      connector_key: 'terraform',
-      display_name: 'Terraform',
-      description: 'Connect Terraform URL and API token for plan and apply workflows.',
-      private_config_schema: {
-        type: 'object',
-        required: ['url', 'api_token'],
-        properties: {
-          url: {
-            type: 'string',
-            title: 'Terraform URL',
-            description: 'Terraform base URL. Example: https://app.terraform.io',
-          },
-          api_token: {
-            type: 'string',
-            title: 'Terraform API token',
-            description: 'Stored as a secret and used for Terraform API access.',
-          },
-        },
-      },
-      public_config_schema: {},
-      policy_catalog: {},
-      is_active: true,
-    },
-  ];
+  api.getConnectorCatalog = async () => PREVIEW_CONNECTOR_CATALOG;
   api.getPrivateConnectorCredentials = async () => Object.values(PREVIEW_PRIVATE_CONNECTOR_STATUS);
   api.savePrivateConnectorCredentials = async (connectorKey, credentials) => {
     const now = new Date().toISOString();

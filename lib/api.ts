@@ -28,6 +28,13 @@ import {
   ConnectorCatalogItem,
   PrivateConnectorCredentialStatus,
   OnboardingStatusResponse,
+  RoomRolesResponse,
+  RoomToolConnector,
+  RoomToolGroup,
+  RoomToolMatrixResponse,
+  RoomConnectorConfig,
+  RoomConnectorPoliciesResponse,
+  RoomConnectorPolicyRule,
 } from "./types";
 import {
   matchesActionDateFilters,
@@ -80,6 +87,13 @@ type TokenUsageSessionFilters = {
   start_date?: string;
   end_date?: string;
   limit?: number;
+};
+
+type CreateRoomPayload = {
+  name: string;
+  description?: string;
+  room_type?: "personal" | "shared";
+  repo_name?: string;
 };
 
 export type WorkspaceAgentStatus = "active" | "removed";
@@ -855,43 +869,6 @@ function aggregateSessions(actions: SessionAction[]): Session[] {
   );
 }
 
-function computeMetricsFromActions(actions: SessionAction[]): Metrics {
-  return {
-    total: actions.length,
-    allows: actions.filter((row) => normalizeDecision(row.decision) === "ALLOW").length,
-    denies: actions.filter((row) => normalizeDecision(row.decision) === "DENY").length,
-    rewrites: actions.filter((row) => normalizeDecision(row.decision) === "REWRITE").length,
-    approvals: actions.filter((row) =>
-      normalizeDecision(row.decision) === "REQUIRE_APPROVAL",
-    ).length,
-  };
-}
-
-function aggregateSessionActions(
-  actions: SessionAction[],
-): AggregatedSessionAction[] {
-  return aggregateSessions(actions).map((session) => {
-    const sessionRuns = actions
-      .filter((row) => row.session_id === session.session_id)
-      .sort(
-        (a, b) =>
-          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
-      );
-    const executionTimes = sessionRuns.map((row) => row.execution_time ?? 0);
-
-    return {
-      session_id: session.session_id,
-      user_id: session.user_id,
-      action_count: sessionRuns.length,
-      started_at: session.started_at,
-      ended_at: session.last_action_at,
-      total_execution_time: executionTimes.reduce((sum, value) => sum + value, 0),
-      tools_used: Array.from(new Set(sessionRuns.map((row) => row.tool_name))),
-      sessions: sessionRuns,
-    };
-  });
-}
-
 /** Token meter pagination rejects large page_size (422). Use modest pages and merge client-side. */
 async function fetchUserTokenMeterPage(
   userId: string,
@@ -1073,6 +1050,222 @@ function normalizePrivateCredentialStatus(
     created_at: typeof raw.created_at === "string" ? raw.created_at : null,
     updated_at: typeof raw.updated_at === "string" ? raw.updated_at : null,
     revoked_at: typeof raw.revoked_at === "string" ? raw.revoked_at : null,
+  };
+}
+
+function normalizeRoomRolesResponse(payload: unknown): RoomRolesResponse {
+  const raw =
+    payload && typeof payload === "object"
+      ? (parseRow(payload) as Record<string, unknown>)
+      : {};
+  const rolesRaw =
+    raw.roles && typeof raw.roles === "object"
+      ? (raw.roles as Record<string, unknown>)
+      : {};
+
+  const roles: Record<string, string> = Object.fromEntries(
+    Object.entries(rolesRaw)
+      .filter((entry): entry is [string, string] => typeof entry[1] === "string")
+      .map(([rank, label]) => [String(rank), label]),
+  );
+
+  return {
+    room_id: typeof raw.room_id === "string" ? raw.room_id : "",
+    roles,
+  };
+}
+
+function normalizeRoomToolGroups(value: unknown): RoomToolGroup[] {
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => {
+        if (!entry || typeof entry !== "object") return null;
+        const raw = entry as Record<string, unknown>;
+        const tools = Array.isArray(raw.tools)
+          ? raw.tools.filter((tool): tool is string => typeof tool === "string")
+          : [];
+        const key =
+          typeof raw.key === "string"
+            ? raw.key
+            : typeof raw.group_key === "string"
+              ? raw.group_key
+              : typeof raw.label === "string"
+                ? raw.label.toLowerCase().replace(/\s+/g, "_")
+                : "";
+        const label =
+          typeof raw.label === "string"
+            ? raw.label
+            : typeof raw.display_name === "string"
+              ? raw.display_name
+              : key;
+
+        if (!key && !label && tools.length === 0) return null;
+
+        return {
+          key: key || label,
+          label: label || key,
+          tools,
+        } satisfies RoomToolGroup;
+      })
+      .filter((item): item is RoomToolGroup => item !== null);
+  }
+
+  if (value && typeof value === "object") {
+    return Object.entries(value as Record<string, unknown>).map(
+      ([groupKey, tools]) => ({
+        key: groupKey,
+        label: groupKey
+          .replace(/_/g, " ")
+          .replace(/\b\w/g, (char) => char.toUpperCase()),
+        tools: Array.isArray(tools)
+          ? tools.filter((tool): tool is string => typeof tool === "string")
+          : [],
+      }),
+    );
+  }
+
+  return [];
+}
+
+function normalizeRoomToolConnector(
+  row: unknown,
+): RoomToolConnector | null {
+  if (!row || typeof row !== "object") return null;
+
+  const raw = parseRow(row) as Record<string, unknown>;
+  const connectorKey =
+    typeof raw.connector_key === "string" ? raw.connector_key : "";
+  if (!connectorKey) return null;
+
+  return {
+    connector_key: connectorKey,
+    display_name:
+      typeof raw.display_name === "string"
+        ? raw.display_name
+        : connectorKey,
+    description:
+      typeof raw.description === "string" ? raw.description : null,
+    configured: raw.configured === true,
+    private_credentials_configured:
+      raw.private_credentials_configured === true,
+    can_configure_connector: raw.can_configure_connector === true,
+    tool_groups: normalizeRoomToolGroups(raw.tool_groups),
+  };
+}
+
+function normalizeRoomToolMatrixResponse(
+  payload: unknown,
+): RoomToolMatrixResponse {
+  const raw =
+    payload && typeof payload === "object"
+      ? (parseRow(payload) as Record<string, unknown>)
+      : {};
+
+  const connectors = unwrapArrayPayload(raw, ["connectors", "items", "data"])
+    .map(normalizeRoomToolConnector)
+    .filter((item): item is RoomToolConnector => item !== null);
+
+  return {
+    room_id: typeof raw.room_id === "string" ? raw.room_id : "",
+    role_rank:
+      typeof raw.role_rank === "number" ? raw.role_rank : null,
+    connectors,
+  };
+}
+
+function normalizeRoomConnectorConfig(
+  row: unknown,
+): RoomConnectorConfig | null {
+  if (!row || typeof row !== "object") return null;
+
+  const raw = parseRow(row) as Record<string, unknown>;
+  const connectorKey =
+    typeof raw.connector_key === "string" ? raw.connector_key : "";
+  if (!connectorKey) return null;
+
+  return {
+    room_id: typeof raw.room_id === "string" ? raw.room_id : "",
+    connector_key: connectorKey,
+    display_name:
+      typeof raw.display_name === "string" ? raw.display_name : null,
+    public_config:
+      raw.public_config && typeof raw.public_config === "object"
+        ? (raw.public_config as Record<string, unknown>)
+        : {},
+    configured:
+      typeof raw.configured === "boolean"
+        ? raw.configured
+        : raw.is_enabled === true,
+    is_enabled:
+      typeof raw.is_enabled === "boolean" ? raw.is_enabled : true,
+    created_at: typeof raw.created_at === "string" ? raw.created_at : null,
+    updated_at: typeof raw.updated_at === "string" ? raw.updated_at : null,
+  };
+}
+
+function normalizeRoomConnectorPolicyRule(
+  row: unknown,
+): RoomConnectorPolicyRule | null {
+  if (!row || typeof row !== "object") return null;
+
+  const raw = parseRow(row) as Record<string, unknown>;
+  const policyKey =
+    typeof raw.policy_key === "string"
+      ? raw.policy_key
+      : typeof raw.key === "string"
+        ? raw.key
+        : "";
+  if (!policyKey) return null;
+
+  return {
+    policy_key: policyKey,
+    display_name:
+      typeof raw.display_name === "string"
+        ? raw.display_name
+        : typeof raw.name === "string"
+          ? raw.name
+          : null,
+    description:
+      typeof raw.description === "string" ? raw.description : null,
+    effect:
+      typeof raw.effect === "string"
+        ? raw.effect
+        : typeof raw.action === "string"
+          ? raw.action
+          : null,
+    minimum_role_rank_required:
+      typeof raw.minimum_role_rank_required === "number"
+        ? raw.minimum_role_rank_required
+        : typeof raw.min_role_rank === "number"
+          ? raw.min_role_rank
+          : null,
+    is_enabled:
+      typeof raw.is_enabled === "boolean" ? raw.is_enabled : true,
+    config:
+      raw.config && typeof raw.config === "object"
+        ? (raw.config as Record<string, unknown>)
+        : {},
+  };
+}
+
+function normalizeRoomConnectorPoliciesResponse(
+  payload: unknown,
+): RoomConnectorPoliciesResponse {
+  const raw =
+    payload && typeof payload === "object"
+      ? (parseRow(payload) as Record<string, unknown>)
+      : {};
+
+  const policies = unwrapArrayPayload(raw, ["policies", "items", "data"])
+    .map(normalizeRoomConnectorPolicyRule)
+    .filter((item): item is RoomConnectorPolicyRule => item !== null);
+
+  return {
+    room_id: typeof raw.room_id === "string" ? raw.room_id : "",
+    connector_key:
+      typeof raw.connector_key === "string" ? raw.connector_key : "",
+    can_manage: raw.can_manage === true,
+    policies,
   };
 }
 
@@ -1273,17 +1466,6 @@ export const api = {
     page_size = 20,
     filters: ActionDateFilters = {},
   ): Promise<PaginatedResponse<SessionAction>> => {
-    if (hasActionDateFilters(filters)) {
-      const items = await getAllUserActions(userId, filters);
-      const start = (page - 1) * page_size;
-      return {
-        items: items.slice(start, start + page_size),
-        total: items.length,
-        page,
-        page_size,
-        pages: Math.max(1, Math.ceil(items.length / page_size)),
-      };
-    }
     const data = await getUserActions(userId, { page, page_size, filters });
     return {
       ...data,
@@ -1310,46 +1492,88 @@ export const api = {
   ): Promise<PaginatedResponse<AggregatedSessionAction>> => {
     if (!userId)
       return { items: [], total: 0, page: 1, page_size: 20, pages: 0 };
-    const items = aggregateSessionActions(await getAllUserActions(userId, filters));
-    const start = (page - 1) * page_size;
-    return {
-      items: items.slice(start, start + page_size),
-      total: items.length,
-      page,
-      page_size,
-      pages: Math.max(1, Math.ceil(items.length / page_size)),
-    };
+    return getAggregatedUserActions(userId, { page, page_size, filters });
   },
 
-  getRoomTools: (roomId: string, role: string) =>
-    apiFetch(`${API_BASE}/room/${roomId}/tools/${role}`, {
-      // credentials: 'include',
-    }).then((res) => res.json()),
+  getRoomTools: async (roomId: string): Promise<RoomToolMatrixResponse> => {
+    const res = await apiFetch(
+      `${API_BASE}/room/${encodeURIComponent(roomId)}/tools`,
+    );
+    if (!res.ok) {
+      throw new Error(
+        `Failed to load room tools: ${await readErrorMessage(res)}`,
+      );
+    }
+    return normalizeRoomToolMatrixResponse(await res.json());
+  },
 
-  updateRoomTools: (
+  getRoomConnectorRankTools: async (
     roomId: string,
-    role: string,
-    data: Record<string, boolean>,
-  ) =>
-    apiFetch(`${API_BASE}/room/${roomId}/tools/${role}`, {
-      method: "PATCH",
-      // credentials: 'include',
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ tools: data }), // ← IMPORTANT: Wrap in { tools: ... }
-    }).then(async (res) => {
-      const json = await res.json();
-      if (!res.ok) {
-        const message =
-          typeof json.detail === "string"
-            ? json.detail
-            : JSON.stringify(json.detail);
+    connectorKey: string,
+    roleRank: number,
+  ): Promise<Record<string, boolean>> => {
+    const res = await apiFetch(
+      `${API_BASE}/room/${encodeURIComponent(roomId)}/tools/${encodeURIComponent(connectorKey)}/ranks/${encodeURIComponent(String(roleRank))}`,
+    );
+    if (!res.ok) {
+      throw new Error(
+        `Failed to load connector tools: ${await readErrorMessage(res)}`,
+      );
+    }
 
-        throw new Error(message || `HTTP ${res.status}`);
-      }
-      return json;
-    }),
+    const payload = await res.json();
+    const raw =
+      payload && typeof payload === "object"
+        ? (payload as Record<string, unknown>)
+        : {};
+    const source =
+      raw.tools && typeof raw.tools === "object"
+        ? (raw.tools as Record<string, unknown>)
+        : raw;
+
+    return Object.fromEntries(
+      Object.entries(source).filter(
+        (entry): entry is [string, boolean] => typeof entry[1] === "boolean",
+      ),
+    );
+  },
+
+  updateRoomConnectorRankTools: async (
+    roomId: string,
+    connectorKey: string,
+    roleRank: number,
+    tools: Record<string, boolean>,
+  ): Promise<Record<string, boolean>> => {
+    const res = await apiFetch(
+      `${API_BASE}/room/${encodeURIComponent(roomId)}/tools/${encodeURIComponent(connectorKey)}/ranks/${encodeURIComponent(String(roleRank))}`,
+      {
+        method: "PATCH",
+        headers: getJsonHeaders(),
+        body: JSON.stringify({ tools }),
+      },
+    );
+    if (!res.ok) {
+      throw new Error(
+        `Failed to update connector tools: ${await readErrorMessage(res)}`,
+      );
+    }
+
+    const payload = await res.json();
+    const raw =
+      payload && typeof payload === "object"
+        ? (payload as Record<string, unknown>)
+        : {};
+    const source =
+      raw.tools && typeof raw.tools === "object"
+        ? (raw.tools as Record<string, unknown>)
+        : raw;
+
+    return Object.fromEntries(
+      Object.entries(source).filter(
+        (entry): entry is [string, boolean] => typeof entry[1] === "boolean",
+      ),
+    );
+  },
 
   getUserDetails: async (): Promise<User> => fetchAuthenticatedUserDetails(),
 
@@ -1384,9 +1608,6 @@ export const api = {
     userId: string,
     filters: ActionDateFilters = {},
   ): Promise<Metrics> => {
-    if (hasActionDateFilters(filters)) {
-      return computeMetricsFromActions(await getAllUserActions(userId, filters));
-    }
     const url = new URL(`${API_BASE}/metrics`);
     appendActionDateFilters(url, filters);
 
@@ -1788,40 +2009,6 @@ export const api = {
         })),
       }),
     }).then((r) => r.json()),
-  // POST /policy -> returns existing row or creates a new one with defaults
-  getUserPolicy: async (): Promise<string | null> => {
-    const res = await apiFetch(`${API_BASE}/policy`, {
-      method: "POST",
-    });
-
-    if (!res.ok) throw new Error(`Failed to fetch policy: ${res.statusText}`);
-
-    const data = await res.json();
-    const body = Array.isArray(data) ? data[0] : data;
-    if (!body?.success || body.rowcount === 0) return null;
-
-    const row = Array.isArray(body.rows) ? body.rows[0] : undefined;
-    if (!row) return null;
-
-    const parsed = parseRow(row, body.columns) as Record<string, unknown>;
-    return typeof parsed.policy_string === "string"
-      ? parsed.policy_string
-      : null;
-  },
-
-  upsertUserPolicy: async (policyString: string): Promise<void> => {
-    const params = new URLSearchParams({ policy_string: policyString });
-    const res = await apiFetch(`${API_BASE}/policy?${params.toString()}`, {
-      method: "PUT",
-    });
-
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(
-        `Failed to save policy: ${res.status} ${text || res.statusText}`,
-      );
-    }
-  },
 
   getMyRoomMembership(roomId: string): Promise<{ role: string } | null> {
     return apiFetch(`${API_BASE}/room/${encodeURIComponent(roomId)}/me`, {
@@ -1906,12 +2093,26 @@ export const api = {
 
     return res.json();
   },
-  createRoom: async (repoName: string): Promise<RoomDetails> => {
+  createRoom: async (payload: CreateRoomPayload): Promise<RoomDetails> => {
+    const body: Record<string, unknown> = {
+      name: payload.name.trim(),
+    };
+
+    if (typeof payload.description === "string" && payload.description.trim()) {
+      body.description = payload.description.trim();
+    }
+    if (payload.room_type === "personal" || payload.room_type === "shared") {
+      body.room_type = payload.room_type;
+    }
+    if (typeof payload.repo_name === "string" && payload.repo_name.trim()) {
+      body.repo_name = payload.repo_name.trim();
+    }
+
     const res = await apiFetch(`${API_BASE}/room/`, {
       method: "POST",
       // credentials: 'include',
       headers: getJsonHeaders(),
-      body: JSON.stringify({ repo_name: repoName }),
+      body: JSON.stringify(body),
     });
 
     if (!res.ok) {
@@ -1938,6 +2139,7 @@ export const api = {
       console.log(
         "[Aegis Rooms] created_at from DB",
         rooms.map((room: Record<string, unknown>, index: number) => ({
+          name: room.name,
           repo: room.repo_name,
           id: room.id ?? room.room_id,
           created_at_raw: room.created_at,
@@ -1982,6 +2184,105 @@ export const api = {
 
     const data = await res.json();
     return Array.isArray(data) ? data : [];
+  },
+
+  getRoomRoles: async (roomId: string): Promise<RoomRolesResponse> => {
+    const res = await apiFetch(
+      `${API_BASE}/room/${encodeURIComponent(roomId)}/roles`,
+    );
+    if (!res.ok) {
+      throw new Error(
+        `Failed to load room roles: ${await readErrorMessage(res)}`,
+      );
+    }
+    return normalizeRoomRolesResponse(await res.json());
+  },
+
+  updateRoomRoles: async (
+    roomId: string,
+    roles: Record<string, string>,
+  ): Promise<RoomRolesResponse> => {
+    const res = await apiFetch(
+      `${API_BASE}/room/${encodeURIComponent(roomId)}/roles`,
+      {
+        method: "PUT",
+        headers: getJsonHeaders(),
+        body: JSON.stringify({ roles }),
+      },
+    );
+    if (!res.ok) {
+      throw new Error(
+        `Failed to update room roles: ${await readErrorMessage(res)}`,
+      );
+    }
+    return normalizeRoomRolesResponse(await res.json());
+  },
+
+  updateRoomMemberRank: async (
+    roomId: string,
+    userId: string,
+    roleRank: number,
+  ): Promise<RoomMember> => {
+    const res = await apiFetch(
+      `${API_BASE}/room/${encodeURIComponent(roomId)}/members/${encodeURIComponent(userId)}/rank`,
+      {
+        method: "PATCH",
+        headers: getJsonHeaders(),
+        body: JSON.stringify({ role_rank: roleRank }),
+      },
+    );
+    if (!res.ok) {
+      throw new Error(
+        `Failed to update member role: ${await readErrorMessage(res)}`,
+      );
+    }
+    return parseRow(await res.json()) as RoomMember;
+  },
+
+  removeRoomMember: async (
+    roomId: string,
+    userId: string,
+  ): Promise<{ success?: boolean; detail?: string; message?: string }> => {
+    const res = await apiFetch(
+      `${API_BASE}/room/${encodeURIComponent(roomId)}/members/${encodeURIComponent(userId)}`,
+      {
+        method: "DELETE",
+      },
+    );
+    if (!res.ok) {
+      throw new Error(
+        `Failed to remove member: ${await readErrorMessage(res)}`,
+      );
+    }
+    try {
+      return await res.json();
+    } catch {
+      return { success: true };
+    }
+  },
+
+  transferRoomOwnership: async (
+    roomId: string,
+    newOwnerId: string,
+  ): Promise<{ success?: boolean; detail?: string; message?: string }> => {
+    const res = await apiFetch(
+      `${API_BASE}/room/${encodeURIComponent(roomId)}/transfer`,
+      {
+        method: "POST",
+        headers: getJsonHeaders(),
+        body: JSON.stringify({ new_owner_id: newOwnerId }),
+      },
+    );
+    if (!res.ok) {
+      throw new Error(
+        `Failed to transfer room ownership: ${await readErrorMessage(res)}`,
+      );
+    }
+    try {
+      return await res.json();
+    } catch {
+      return { success: true };
+    }
   },
 
   getRoomInvites: async (roomId: string): Promise<RoomInvite[]> => {
@@ -2058,6 +2359,154 @@ export const api = {
     }
 
     return res.json();
+  },
+
+  leaveRoom: async (
+    roomId: string,
+  ): Promise<{ success?: boolean; detail?: string; message?: string }> => {
+    const res = await apiFetch(
+      `${API_BASE}/room/${encodeURIComponent(roomId)}/leave`,
+      {
+        method: "POST",
+      },
+    );
+    if (!res.ok) {
+      throw new Error(`Failed to leave room: ${await readErrorMessage(res)}`);
+    }
+    try {
+      return await res.json();
+    } catch {
+      return { success: true };
+    }
+  },
+
+  deleteRoom: async (
+    roomId: string,
+  ): Promise<{ success?: boolean; detail?: string; message?: string }> => {
+    const res = await apiFetch(
+      `${API_BASE}/room/${encodeURIComponent(roomId)}`,
+      {
+        method: "DELETE",
+      },
+    );
+    if (!res.ok) {
+      throw new Error(`Failed to delete room: ${await readErrorMessage(res)}`);
+    }
+    try {
+      return await res.json();
+    } catch {
+      return { success: true };
+    }
+  },
+
+  getRoomConnectorConfigs: async (
+    roomId: string,
+  ): Promise<RoomConnectorConfig[]> => {
+    const res = await apiFetch(
+      `${API_BASE}/connectors/rooms/${encodeURIComponent(roomId)}`,
+    );
+    if (!res.ok) {
+      throw new Error(
+        `Failed to load room connectors: ${await readErrorMessage(res)}`,
+      );
+    }
+
+    const payload = await res.json();
+    return unwrapArrayPayload(payload, ["items", "connectors", "data"])
+      .map(normalizeRoomConnectorConfig)
+      .filter((item): item is RoomConnectorConfig => item !== null);
+  },
+
+  saveRoomConnectorConfig: async (
+    roomId: string,
+    connectorKey: string,
+    publicConfig: Record<string, unknown>,
+  ): Promise<RoomConnectorConfig> => {
+    const res = await apiFetch(
+      `${API_BASE}/connectors/rooms/${encodeURIComponent(roomId)}/${encodeURIComponent(connectorKey)}`,
+      {
+        method: "PUT",
+        headers: getJsonHeaders(),
+        body: JSON.stringify({ public_config: publicConfig }),
+      },
+    );
+    if (!res.ok) {
+      throw new Error(
+        `Failed to save room connector: ${await readErrorMessage(res)}`,
+      );
+    }
+
+    const parsed = normalizeRoomConnectorConfig(await res.json());
+    if (!parsed) {
+      throw new Error("Server returned an invalid room connector payload.");
+    }
+    return parsed;
+  },
+
+  disableRoomConnector: async (
+    roomId: string,
+    connectorKey: string,
+  ): Promise<{ success?: boolean; detail?: string; message?: string }> => {
+    const res = await apiFetch(
+      `${API_BASE}/connectors/rooms/${encodeURIComponent(roomId)}/${encodeURIComponent(connectorKey)}`,
+      {
+        method: "DELETE",
+      },
+    );
+    if (!res.ok) {
+      throw new Error(
+        `Failed to disable room connector: ${await readErrorMessage(res)}`,
+      );
+    }
+    try {
+      return await res.json();
+    } catch {
+      return { success: true };
+    }
+  },
+
+  getRoomConnectorPolicies: async (
+    roomId: string,
+    connectorKey: string,
+  ): Promise<RoomConnectorPoliciesResponse> => {
+    const res = await apiFetch(
+      `${API_BASE}/room/${encodeURIComponent(roomId)}/connectors/${encodeURIComponent(connectorKey)}/policies`,
+    );
+    if (!res.ok) {
+      throw new Error(
+        `Failed to load room connector policies: ${await readErrorMessage(res)}`,
+      );
+    }
+    return normalizeRoomConnectorPoliciesResponse(await res.json());
+  },
+
+  updateRoomConnectorPolicies: async (
+    roomId: string,
+    connectorKey: string,
+    policies: Record<
+      string,
+      {
+        effect?: string;
+        minimum_role_rank_required?: number;
+        is_enabled?: boolean;
+        config?: Record<string, unknown>;
+      }
+    >,
+  ): Promise<RoomConnectorPoliciesResponse> => {
+    const res = await apiFetch(
+      `${API_BASE}/room/${encodeURIComponent(roomId)}/connectors/${encodeURIComponent(connectorKey)}/policies`,
+      {
+        method: "PATCH",
+        headers: getJsonHeaders(),
+        body: JSON.stringify({ policies }),
+      },
+    );
+    if (!res.ok) {
+      throw new Error(
+        `Failed to update room connector policies: ${await readErrorMessage(res)}`,
+      );
+    }
+    return normalizeRoomConnectorPoliciesResponse(await res.json());
   },
 
   joinRoom: async (inviteCode: string): Promise<any> => {

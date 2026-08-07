@@ -33,7 +33,7 @@ import { Badge } from '@/components/ui/Badge';
 import { GenerativeAvatar } from '@/components/ui/GenerativeAvatar';
 import { Input } from '@/components/ui/Input';
 import { Skeleton } from '@/components/ui/Skeleton';
-import { cn, getRoomRoleBadgeTone } from '@/lib/utils';
+import { cn, getRoomDisplayName, getRoomRoleBadgeTone } from '@/lib/utils';
 
 // Emphasized-decel easing — matches UserMenu so the two popovers
 // feel like the same family of motion.
@@ -42,8 +42,8 @@ const EASE_EMPH: [number, number, number, number] = [0.2, 0.8, 0.2, 1];
 interface RoomSwitcherProps {
   /** ID of the currently active room — checkmarked in the list. */
   activeRoomId: string;
-  /** Repo name of the active room — shown on the trigger. */
-  activeRepoName?: string;
+  /** Display name of the active room — shown on the trigger. */
+  activeRoomName?: string;
   /** Role in the active room — shown as a badge next to the title. */
   role?: string;
 }
@@ -53,7 +53,7 @@ const getRoomId = (room: RoomSummary): string =>
 
 export function RoomSwitcher({
   activeRoomId,
-  activeRepoName,
+  activeRoomName,
   role,
 }: RoomSwitcherProps) {
   const router = useRouter();
@@ -114,12 +114,15 @@ export function RoomSwitcher({
     const q = query.trim().toLowerCase();
     if (!q) return rooms;
     return rooms.filter((r) =>
-      (r.repo_name || '').toLowerCase().includes(q),
+      [getRoomDisplayName(r), r.repo_name || '', r.description || '']
+        .join(' ')
+        .toLowerCase()
+        .includes(q),
     );
   }, [rooms, query]);
 
   const showSearch = rooms.length >= 6;
-  const displayName = activeRepoName || activeRoomId;
+  const displayName = activeRoomName || activeRoomId;
 
   return (
     <div className="relative">
@@ -139,7 +142,7 @@ export function RoomSwitcher({
         )}
       >
         <GenerativeAvatar
-          seed={activeRepoName || activeRoomId}
+          seed={displayName || activeRoomId}
           variant="user"
           size={36}
           radius={10}
@@ -246,9 +249,9 @@ export function RoomSwitcher({
                           ? 'bg-[var(--primary-alpha-10)]'
                           : 'hover:bg-[var(--neutral-weak-50)]',
                       )}
-                    >
+                      >
                       <GenerativeAvatar
-                        seed={room.repo_name || id}
+                        seed={getRoomDisplayName(room) || id}
                         variant="user"
                         size={28}
                         radius={7}
@@ -262,7 +265,7 @@ export function RoomSwitcher({
                               : 'text-[var(--neutral-strong-950)]',
                           )}
                         >
-                          {room.repo_name || id}
+                          {getRoomDisplayName(room)}
                         </p>
                         {room.role && (
                           <p className="mt-0.5 text-[10.5px] uppercase tracking-[0.06em] text-[var(--neutral-soft-400)]">

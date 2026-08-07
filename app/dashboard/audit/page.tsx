@@ -24,7 +24,7 @@ import {
 } from '@/lib/dashboardDateRange';
 import { useUser } from '@/lib/hooks';
 import { SessionAction } from '@/lib/types';
-import { formatFullTimestamp, truncate } from '@/lib/utils';
+import { formatFullTimestamp } from '@/lib/utils';
 import Topbar from '@/components/layout/Topbar';
 import { AgentMark } from '@/components/ui/AgentMark';
 import DecisionBadge, { decisionColor } from '@/components/ui/DecisionBadge';
@@ -37,7 +37,7 @@ import { Button } from '@/components/ui/Button';
 import { CodeChip } from '@/components/ui/CodeChip';
 import { CONNECTORS, ConnectorMark } from '@/components/ui/ConnectorMark';
 import { FilterChip } from '@/components/ui/FilterChip';
-import { connectorForTool, deriveTarget } from '@/lib/runConnector';
+import { connectorForAction, deriveTarget } from '@/lib/runConnector';
 import { useToast } from '@/components/ui/Toast';
 import {
   Table,
@@ -73,7 +73,8 @@ export default function AuditPage() {
   // the next step once the backend supports it.
   const [agentFilter, setAgentFilter] = useState<string[]>([]);
   const [decisionFilter, setDecisionFilter] = useState<string[]>([]);
-  const [repoFilter, setRepoFilter] = useState<string[]>([]);
+  const [connectorFilter, setConnectorFilter] = useState<string[]>([]);
+  const [targetFilter, setTargetFilter] = useState<string[]>([]);
   const [toolFilter, setToolFilter] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -88,10 +89,9 @@ export default function AuditPage() {
       ...dateFilters,
       agents: agentFilter,
       decisions: decisionFilter,
-      repositories: repoFilter,
       tools: toolFilter,
     }),
-    [dateFilters, agentFilter, decisionFilter, repoFilter, toolFilter],
+    [dateFilters, agentFilter, decisionFilter, toolFilter],
   );
 
   const fetchData = useCallback(async () => {
@@ -135,12 +135,16 @@ export default function AuditPage() {
   const filterOptions = useMemo(() => {
     const agents = new Set<string>();
     const decisions = new Set<string>();
-    const repos = new Set<string>();
+    const connectors = new Set<string>();
+    const targets = new Set<string>();
     const tools = new Set<string>();
     for (const ev of events) {
+      const connectorId = connectorForAction(ev);
+      const target = deriveTarget(ev);
       if (ev.agent_name) agents.add(ev.agent_name);
       if (ev.decision) decisions.add(ev.decision);
-      if (ev.target_repo) repos.add(ev.target_repo);
+      if (connectorId) connectors.add(connectorId);
+      if (target.primary) targets.add(target.primary);
       if (ev.tool_name) tools.add(ev.tool_name);
     }
     const sorted = (s: Set<string>) =>
@@ -150,23 +154,40 @@ export default function AuditPage() {
     return {
       agents: sorted(agents),
       decisions: sorted(decisions),
-      repos: sorted(repos),
+      connectors: sorted(connectors),
+      targets: sorted(targets),
       tools: sorted(tools),
     };
   }, [events]);
 
-  // Server handles date / agent / decision / repo / tool. Free-text stays
-  // client-side because the backend doesn't expose search yet.
+  // Server handles date / agent / decision / tool. Connector, target,
+  // and free-text refine the loaded page so the UI can stay connector-
+  // neutral without depending on backend filter rollout order.
   const filteredEvents = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     return events.filter((ev) => {
+      const connectorId = connectorForAction(ev);
+      const target = deriveTarget(ev);
+
+      if (connectorFilter.length > 0 && !connectorFilter.includes(connectorId)) {
+        return false;
+      }
+
+      if (targetFilter.length > 0) {
+        const targetPrimary = target.primary ?? '';
+        if (!targetPrimary || !targetFilter.includes(targetPrimary)) {
+          return false;
+        }
+      }
+
       if (q) {
         const hay = [
           ev.action_summary,
           ev.tool_name,
-          CONNECTORS[connectorForTool(ev.tool_name)].name,
-          ev.target_repo,
-          ev.target_branch,
+          CONNECTORS[connectorId].name,
+          target.kind,
+          target.primary,
+          target.secondary,
           ev.agent_name,
         ]
           .filter(Boolean)
@@ -176,21 +197,23 @@ export default function AuditPage() {
       }
       return true;
     });
-  }, [events, searchQuery]);
+  }, [connectorFilter, events, searchQuery, targetFilter]);
 
   // Tracks whether any non-date filter is active. Drives the
   // "Clear filters" affordance in the filter bar.
   const hasActiveFilters =
     agentFilter.length > 0 ||
     decisionFilter.length > 0 ||
-    repoFilter.length > 0 ||
+    connectorFilter.length > 0 ||
+    targetFilter.length > 0 ||
     toolFilter.length > 0 ||
     searchQuery.trim().length > 0;
 
   const clearAllFilters = () => {
     setAgentFilter([]);
     setDecisionFilter([]);
-    setRepoFilter([]);
+    setConnectorFilter([]);
+    setTargetFilter([]);
     setToolFilter([]);
     setSearchQuery('');
   };
@@ -204,7 +227,6 @@ export default function AuditPage() {
         endDate: dateFilters.endDate,
         agents: agentFilter,
         decisions: decisionFilter,
-        repositories: repoFilter,
         tools: toolFilter,
       });
       const url = URL.createObjectURL(blob);
@@ -238,7 +260,6 @@ export default function AuditPage() {
         endDate: dateFilters.endDate,
         agents: agentFilter,
         decisions: decisionFilter,
-        repositories: repoFilter,
         tools: toolFilter,
       });
       const url = URL.createObjectURL(blob);
@@ -347,10 +368,19 @@ export default function AuditPage() {
               onChange={setDecisionFilter}
             />
             <FilterChip
-              label="Repository"
-              options={filterOptions.repos}
-              value={repoFilter}
-              onChange={setRepoFilter}
+              label="Connector"
+              options={filterOptions.connectors.map((option) => ({
+                value: option.value,
+                label: CONNECTORS[option.value as keyof typeof CONNECTORS]?.name ?? option.value,
+              }))}
+              value={connectorFilter}
+              onChange={setConnectorFilter}
+            />
+            <FilterChip
+              label="Target"
+              options={filterOptions.targets}
+              value={targetFilter}
+              onChange={setTargetFilter}
             />
             <FilterChip
               label="Tool"
@@ -431,6 +461,9 @@ export default function AuditPage() {
               {eventsTotal.toLocaleString()} filtered events
             </div>
           )}
+          <div className="mt-2 text-[11px] text-[var(--neutral-soft-400)]">
+            Connector, target, and search filters refine the loaded page.
+          </div>
         </motion.div>
 
         {loading ? (
@@ -578,13 +611,14 @@ function AuditRow({
   // row "snaps back" with the divider re-appearing while the panel is
   // still collapsing — perceived as a layout shift.
   const [stillExpanded, setStillExpanded] = useState(isExpanded);
-  useEffect(() => {
-    if (isExpanded) setStillExpanded(true);
-  }, [isExpanded]);
+  const handleToggle = () => {
+    if (!isExpanded) setStillExpanded(true);
+    onToggle();
+  };
 
   return (
     <>
-      <TR clickable isExpanded={stillExpanded} onClick={onToggle}>
+      <TR clickable isExpanded={stillExpanded} onClick={handleToggle}>
         <TD className="whitespace-nowrap text-[11.5px] text-[var(--neutral-sub-600)]">
           {formatFullTimestamp(event.timestamp)}
         </TD>
@@ -607,7 +641,7 @@ function AuditRow({
         </TD>
         <TD>
           {(() => {
-            const cid = connectorForTool(event.tool_name);
+            const cid = connectorForAction(event);
             const tgt = deriveTarget(event);
             return (
               <div
