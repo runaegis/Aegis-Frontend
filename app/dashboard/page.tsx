@@ -241,7 +241,7 @@ export default function DashboardHomePage() {
         subtitle="Overview"
         lastUpdated={lastUpdated}
         onRefresh={handleRefresh}
-        unreadCount={stats.pendingApprovals}
+        pendingApprovalsCount={stats.pendingApprovals}
         showDateRange
         dateRangeValue={dateRange}
         onDateRangeChange={setDateRange}

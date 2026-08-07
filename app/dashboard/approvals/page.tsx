@@ -363,7 +363,7 @@ export default function ApprovalsPage() {
         subtitle="Actions requiring review"
         lastUpdated={lastUpdated}
         onRefresh={fetchData}
-        unreadCount={counts.pending}
+        pendingApprovalsCount={counts.pending}
       />
       {/* Floating freshness pill — appears below the topbar when
           auto-refresh detects new pending approvals the reviewer

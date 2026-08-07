@@ -8,8 +8,6 @@ import {
   ArrowUpRight,
   Bell,
   CheckCircle2,
-  ClipboardCopy,
-  Copy,
   CreditCard,
   Download,
   ExternalLink,
@@ -20,7 +18,6 @@ import {
   Lock,
   LogOut,
   Palette,
-  Plus,
   RefreshCw,
   Shield,
   Trash2,
@@ -28,19 +25,19 @@ import {
   User as UserIcon,
   Webhook,
   type LucideIcon,
-  Router,
 } from 'lucide-react';
 import Topbar from '@/components/layout/Topbar';
 import { api } from '@/lib/api';
 import { useUser } from '@/lib/hooks';
-import { Repo, SlackIntegrationStatus } from '@/lib/types';
-import { getInitials } from '@/lib/utils';
+import { NOTIFICATION_PREFERENCE_FIELDS } from '@/lib/notifications';
+import { NotificationPreferences, Repo, SlackIntegrationStatus } from '@/lib/types';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import ErrorBanner from '@/components/ui/ErrorBanner';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { ConnectorMark } from '@/components/ui/ConnectorMark';
 import { Input } from '@/components/ui/Input';
+import { Skeleton } from '@/components/ui/Skeleton';
 import { Switch } from '@/components/ui/Switch';
 import { useToast } from '@/components/ui/Toast';
 import { CodeChip } from '@/components/ui/CodeChip';
@@ -134,10 +131,12 @@ export default function SettingsPage() {
   const router = useRouter();
 
   // Section routing via URL hash so settings are deep-linkable
-  const [active, setActive] = useState<SectionId>('profile');
-  useEffect(() => {
+  const [active, setActive] = useState<SectionId>(() => {
+    if (typeof window === 'undefined') return 'profile';
     const hash = window.location.hash.replace('#', '') as SectionId;
-    if (FLAT_SECTIONS.some((s) => s.id === hash)) setActive(hash);
+    return FLAT_SECTIONS.some((s) => s.id === hash) ? hash : 'profile';
+  });
+  useEffect(() => {
     const onHash = () => {
       const h = window.location.hash.replace('#', '') as SectionId;
       if (FLAT_SECTIONS.some((s) => s.id === h)) setActive(h);
@@ -262,7 +261,13 @@ export default function SettingsPage() {
               <ProfileSection user={user} setUser={setUser} onError={handleSectionError} onSuccess={handleSectionSuccess} reduce={!!reduce} />
             )}
             {active === 'appearance' && <AppearanceSection reduce={!!reduce} />}
-            {active === 'notifications' && <NotificationsSection reduce={!!reduce} onSuccess={handleSectionSuccess} />}
+            {active === 'notifications' && (
+              <NotificationsSection
+                reduce={!!reduce}
+                onSuccess={handleSectionSuccess}
+                onError={handleSectionError}
+              />
+            )}
             {active === 'security' && <SecuritySection reduce={!!reduce} />}
             {active === 'github' && <GitHubSection user={user} reduce={!!reduce} />}
             {active === 'repositories' && (
@@ -397,6 +402,173 @@ function SlackConnectButton({ href }: { href: string }) {
   );
 }
 
+function NotificationPreferencesCard({
+  onSuccess,
+  onError,
+}: {
+  onSuccess: (message: string) => void;
+  onError: (message: string) => void;
+}) {
+  const [saved, setSaved] = useState<NotificationPreferences | null>(null);
+  const [draft, setDraft] = useState<NotificationPreferences | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadPreferences = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await api.getNotificationPreferences();
+      setSaved(data);
+      setDraft(data);
+      setError(null);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Could not load notification preferences.',
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadPreferences();
+  }, [loadPreferences]);
+
+  const dirty = saved !== null && draft !== null && (
+    saved.notify_allow !== draft.notify_allow ||
+    saved.notify_deny !== draft.notify_deny ||
+    saved.notify_approval !== draft.notify_approval ||
+    saved.notify_rewrite !== draft.notify_rewrite
+  );
+
+  const handleSave = useCallback(async () => {
+    if (!draft) return;
+    setSaving(true);
+    try {
+      const next = await api.updateNotificationPreferences({
+        notify_allow: draft.notify_allow,
+        notify_deny: draft.notify_deny,
+        notify_approval: draft.notify_approval,
+        notify_rewrite: draft.notify_rewrite,
+      });
+      setSaved(next);
+      setDraft(next);
+      setError(null);
+      onSuccess('Notification preferences saved');
+    } catch (err) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : 'Could not save notification preferences.';
+      setError(message);
+      onError(message);
+    } finally {
+      setSaving(false);
+    }
+  }, [draft, onError, onSuccess]);
+
+  return (
+    <SettingsCard
+      title="Notification preferences"
+      description="Choose which action decisions appear in the bell panel."
+    >
+      {error && !loading && (
+        <div className="mb-4">
+          <ErrorBanner
+            message={error}
+            onDismiss={() => setError(null)}
+            onRetry={() => {
+              void loadPreferences();
+            }}
+          />
+        </div>
+      )}
+
+      {loading ? (
+        <div className="space-y-3">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <div
+              key={index}
+              className="flex items-start justify-between gap-4 rounded-[10px] border border-[var(--stroke-soft-200)] px-3 py-3"
+            >
+              <div className="min-w-0 flex-1 space-y-2">
+                <div className="flex items-center gap-2">
+                  <Skeleton className="h-[19px] w-16 rounded-[6px]" />
+                  <Skeleton className="h-[13px] w-24" />
+                </div>
+                <Skeleton className="h-[12px] w-60" />
+              </div>
+              <Skeleton className="h-[18px] w-8 rounded-full" />
+            </div>
+          ))}
+          <div className="flex justify-end">
+            <Skeleton className="h-8 w-28 rounded-[8px]" />
+          </div>
+        </div>
+      ) : draft ? (
+        <>
+          <div className="divide-y divide-[var(--stroke-soft-200)]">
+            {NOTIFICATION_PREFERENCE_FIELDS.map((item) => (
+              <Row
+                key={item.key}
+                title={
+                  <div className="flex items-center gap-2">
+                    <Badge tone={item.tone} uppercase>
+                      {item.badgeLabel}
+                    </Badge>
+                    <span>{item.label}</span>
+                  </div>
+                }
+                description={item.description}
+                meta={
+                  item.key === 'notify_allow' ? (
+                    <p className="text-[11px] text-[var(--neutral-soft-400)]">
+                      Allow is off by default so the panel stays quieter.
+                    </p>
+                  ) : undefined
+                }
+                action={
+                  <Switch
+                    checked={draft[item.key]}
+                    onChange={(next) =>
+                      setDraft((prev) =>
+                        prev
+                          ? { ...prev, [item.key]: next }
+                          : prev,
+                      )
+                    }
+                    ariaLabel={`Toggle ${item.label} notifications`}
+                  />
+                }
+              />
+            ))}
+          </div>
+
+          <div className="mt-5 flex items-center justify-end">
+            <Button
+              variant="primary"
+              onClick={() => {
+                void handleSave();
+              }}
+              disabled={!dirty || saving}
+              leadingIcon={
+                saving ? (
+                  <RefreshCw className="h-3.5 w-3.5 animate-spin" strokeWidth={2} />
+                ) : undefined
+              }
+            >
+              Save preferences
+            </Button>
+          </div>
+        </>
+      ) : null}
+    </SettingsCard>
+  );
+}
+
 // ── Section: Appearance ─────────────────────────────────────────────────────
 // Canonical home for the theme switch. The same control surfaces in the
 // profile dropdown as a compact pill — both write to the same
@@ -434,15 +606,6 @@ function ProfileSection({
 }) {
   const [username, setUsername] = useState(user?.name || user?.username || '');
   const [email, setEmail] = useState(user?.email || '');
-  const [githubPat, setGithubPat] = useState('');
-  const [postgresConnectionString, setPostgresConnectionString] = useState('');
-  const [jiraUrl, setJiraUrl] = useState('');
-  const [jiraUsername, setJiraUsername] = useState('');
-  const [jiraApiToken, setJiraApiToken] = useState('');
-  const [mongodbConnectionString, setMongodbConnectionString] = useState('');
-  const [linearApiKey, setLinearApiKey] = useState('');
-  const [terraformApiToken, setTerraformApiToken] = useState('');
-  const [terraformUrl, setTerraformUrl] = useState('');
   const [saving, setSaving] = useState(false);
   // Avatar upload — useCustomAvatar() reads localStorage + listens
   // for changes, so the hero updates immediately after upload/remove
@@ -501,11 +664,6 @@ function ProfileSection({
       onError(err instanceof Error ? err.message : 'Failed to update profile');
     }
     setSaving(false);
-  };
-
-  const updateSecrets = async () => {
-    if (!user) return;
-    onError('Credential updates have moved to Connectors. This section will be migrated next.');
   };
 
   return (
@@ -590,119 +748,6 @@ function ProfileSection({
           </div>
         </SettingsCard>
       </motion.div>
-
-      <motion.div variants={fadeUp}>
-        <SettingsCard
-          title="Credentials"
-          description="Secrets Aegis uses to reach GitHub, Postgres, Jira, MongoDB, Linear, and Terraform."
-        >
-          <Field label="GitHub PAT" hint="Treat this like a password. Rotate it if exposed.">
-            <Input
-              type="password"
-              value={githubPat}
-              onChange={(e) => setGithubPat(e.target.value)}
-            />
-          </Field>
-          <Field
-            label="Postgres connection string"
-            hint="Stored as a secret. Example: postgresql://user:password@host:5432/dbname"
-          >
-            <Input
-              type="password"
-              value={postgresConnectionString}
-              onChange={(e) => setPostgresConnectionString(e.target.value)}
-            />
-          </Field>
-          <Field
-            label="Jira URL"
-            hint="Your Jira base URL. Example: https://your-company.atlassian.net"
-          >
-            <Input
-              value={jiraUrl}
-              onChange={(e) => setJiraUrl(e.target.value)}
-            />
-          </Field>
-          <Field
-            label="Jira username"
-            hint="Usually the email address tied to your Jira account."
-          >
-            <Input
-              value={jiraUsername}
-              onChange={(e) => setJiraUsername(e.target.value)}
-            />
-          </Field>
-          <Field
-            label="Jira API token"
-            hint="Stored as a secret and used for Jira API access."
-          >
-            <Input
-              type="password"
-              value={jiraApiToken}
-              onChange={(e) => setJiraApiToken(e.target.value)}
-            />
-          </Field>
-          <Field
-            label="MongoDB connection string"
-            hint="Stored as a secret. Example: mongodb+srv://user:password@cluster/dbname"
-          >
-            <Input
-              type="password"
-              value={mongodbConnectionString}
-              onChange={(e) => setMongodbConnectionString(e.target.value)}
-            />
-          </Field>
-          <Field
-            label="Linear API key"
-            hint="Stored as a secret and used for Linear API access."
-          >
-            <Input
-              type="password"
-              value={linearApiKey}
-              onChange={(e) => setLinearApiKey(e.target.value)}
-            />
-          </Field>
-          <Field
-            label="Terraform URL"
-            hint="Your Terraform base URL. Example: https://app.terraform.io"
-          >
-            <Input
-              value={terraformUrl}
-              onChange={(e) => setTerraformUrl(e.target.value)}
-            />
-          </Field>
-          <Field
-            label="Terraform API token"
-            hint="Stored as a secret and used for Terraform API access."
-          >
-            <Input
-              type="password"
-              value={terraformApiToken}
-              onChange={(e) => setTerraformApiToken(e.target.value)}
-            />
-          </Field>
-          <div className="flex items-center justify-between">
-            <a
-              href="https://github.com/settings/tokens"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-[12.5px] font-medium text-[var(--neutral-sub-600)] hover:text-[var(--neutral-strong-950)]"
-            >
-              Manage PATs on GitHub
-              <ExternalLink className="h-3 w-3" strokeWidth={2} />
-            </a>
-            <Button
-              variant="primary"
-              onClick={updateSecrets}
-              disabled={saving}
-              leadingIcon={
-                saving ? <RefreshCw className="h-3.5 w-3.5 animate-spin" strokeWidth={2} /> : undefined
-              }
-            >
-              Update credentials
-            </Button>
-          </div>
-        </SettingsCard>
-      </motion.div>
     </motion.div>
   );
 }
@@ -711,9 +756,11 @@ function ProfileSection({
 function NotificationsSection({
   reduce,
   onSuccess,
+  onError,
 }: {
   reduce: boolean;
-  onSuccess: (s: string) => void;
+  onSuccess: (message: string) => void;
+  onError: (message: string) => void;
 }) {
   const toast = useToast();
   const [emailEnabled, setEmailEnabled] = useState(true);
@@ -722,18 +769,6 @@ function NotificationsSection({
   const [slackLoading, setSlackLoading] = useState(true);
   const [slackError, setSlackError] = useState<string | null>(null);
   const [slackDisconnecting, setSlackDisconnecting] = useState(false);
-
-  const EVENTS: { id: string; label: string; description: string; tone: 'error' | 'warning' | 'feature' | 'info' }[] = [
-    { id: 'approval',  label: 'Approval requested',  description: 'A pending action needs review.',           tone: 'warning' },
-    { id: 'denied',    label: 'Action denied',       description: 'A policy blocked an agent action.',         tone: 'error' },
-    { id: 'rewrite',   label: 'Action rewritten',    description: 'Aegis routed an action to a safer path.',   tone: 'feature' },
-    { id: 'policy',    label: 'Policy violated',     description: 'A configured rule fired.',                  tone: 'warning' },
-    { id: 'anomaly',   label: 'Session anomaly',     description: 'Unusual agent behavior detected.',          tone: 'error' },
-    { id: 'budget',    label: 'Token budget threshold', description: 'Spend hit 75% / 90% / 100% of cap.',     tone: 'info' },
-  ];
-  const [events, setEvents] = useState<Record<string, boolean>>(
-    Object.fromEntries(EVENTS.map((e) => [e.id, true])),
-  );
 
   const loadSlackStatus = useCallback(async () => {
     setSlackLoading(true);
@@ -779,11 +814,12 @@ function NotificationsSection({
       const message =
         err instanceof Error ? err.message : 'Failed to disconnect Slack.';
       setSlackError(message);
+      onError(message);
       toast.error(message);
     } finally {
       setSlackDisconnecting(false);
     }
-  }, [onSuccess, toast]);
+  }, [onError, onSuccess, toast]);
 
   const slackDescription = slackLoading
     ? 'Checking whether Aegis is installed in Slack for your account.'
@@ -827,6 +863,10 @@ function NotificationsSection({
       initial={reduce ? false : 'hidden'}
       animate="show"
     >
+      <motion.div variants={fadeUp}>
+        <NotificationPreferencesCard onSuccess={onSuccess} onError={onError} />
+      </motion.div>
+
       <motion.div variants={fadeUp}>
         <SettingsCard
           title="Channels"
@@ -919,36 +959,26 @@ function NotificationsSection({
 
       <motion.div variants={fadeUp}>
         <SettingsCard
-          title="Events"
-          description="Pick exactly which events you want to hear about."
+          title="Notification panel"
+          description="The bell stays lightweight by design."
         >
           <div className="divide-y divide-[var(--stroke-soft-200)]">
-            {EVENTS.map((evt) => (
-              <Row
-                key={evt.id}
-                title={
-                  <div className="flex items-center gap-2">
-                    <Badge tone={evt.tone} uppercase>
-                      {evt.id}
-                    </Badge>
-                    <span>{evt.label}</span>
-                  </div>
-                }
-                description={evt.description}
-                action={
-                  <Switch
-                    checked={events[evt.id]}
-                    onChange={(v) => setEvents((p) => ({ ...p, [evt.id]: v }))}
-                    ariaLabel={`Toggle ${evt.label}`}
-                  />
-                }
-              />
-            ))}
-          </div>
-          <div className="mt-5 flex items-center justify-end">
-            <Button variant="primary" onClick={() => onSuccess('Notification preferences saved')}>
-              Save preferences
-            </Button>
+            <Row
+              title="Sources"
+              description="Notifications are created from session action decisions."
+            />
+            <Row
+              title="Decision types"
+              description="Allow, Deny, Approval, and Rewrite can appear in the panel."
+            />
+            <Row
+              title="What each row shows"
+              description="Tool name, target, room name, read state, and timestamp."
+            />
+            <Row
+              title="What stays out"
+              description="Run details, raw arguments, approval payloads, and execution result data."
+            />
           </div>
         </SettingsCard>
       </motion.div>
@@ -1091,7 +1121,11 @@ function RepositoriesSection({
   }, [user]);
 
   useEffect(() => {
-    if (user) fetchRepos();
+    if (!user) return;
+    const timer = window.setTimeout(() => {
+      void fetchRepos();
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [user, fetchRepos]);
 
   const handleSync = async () => {

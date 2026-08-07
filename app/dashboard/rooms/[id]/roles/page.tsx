@@ -197,6 +197,9 @@ export default function RoomRolesPage() {
               <p className="mt-1 text-[12px] leading-[1.55] text-[var(--neutral-sub-600)]">
                 Keep the labels human-friendly here, then use the Members page to move people between ranks and the Tools page to tune what each rank can do.
               </p>
+              <p className="mt-2 text-[12px] leading-[1.55] text-[var(--neutral-sub-600)]">
+                Removing a rank is not wired yet. Safe removal needs the backend to reindex member ranks, connector tool policies, and approval thresholds in one pass.
+              </p>
             </div>
           </div>
         </motion.section>

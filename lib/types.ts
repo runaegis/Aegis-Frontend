@@ -30,6 +30,38 @@ export interface UserPromptListResponse {
   prompts: UserPrompt[];
 }
 
+export type NotificationType = "ALLOW" | "DENY" | "APPROVAL" | "REWRITE";
+
+export interface NotificationPreferences {
+  notify_allow: boolean;
+  notify_deny: boolean;
+  notify_approval: boolean;
+  notify_rewrite: boolean;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface UserNotification {
+  id: string;
+  notification_type: NotificationType | string;
+  connector_key?: string | null;
+  tool_name: string;
+  target_descriptor?: string | null;
+  room_id?: string | null;
+  room_name?: string | null;
+  is_read: boolean;
+  read_at?: string | null;
+  created_at: string;
+}
+
+export interface UserNotificationsResponse {
+  items: UserNotification[];
+  total: number;
+  unread_count: number;
+  limit: number;
+  offset: number;
+}
+
 export interface PaginatedResponse<T> {
   items: T[];
   total: number;

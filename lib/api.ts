@@ -28,6 +28,9 @@ import {
   CreatedApiKey,
   ConnectorCatalogItem,
   PrivateConnectorCredentialStatus,
+  NotificationPreferences,
+  UserNotification,
+  UserNotificationsResponse,
   OnboardingStatusResponse,
   RoomRolesResponse,
   RoomToolConnector,
@@ -37,6 +40,10 @@ import {
   RoomConnectorPoliciesResponse,
   RoomConnectorPolicyRule,
 } from "./types";
+import {
+  buildDefaultNotificationPreferences,
+  normalizeNotificationType,
+} from "./notifications";
 import {
   matchesActionDateFilters,
   type ActionDateFilters,
@@ -1054,6 +1061,112 @@ function normalizePrivateCredentialStatus(
   };
 }
 
+function normalizeNotificationPreferences(
+  payload: unknown,
+): NotificationPreferences {
+  const defaults = buildDefaultNotificationPreferences();
+  const raw =
+    payload && typeof payload === "object"
+      ? (parseRow(payload) as Record<string, unknown>)
+      : {};
+
+  return {
+    notify_allow:
+      typeof raw.notify_allow === "boolean"
+        ? raw.notify_allow
+        : defaults.notify_allow,
+    notify_deny:
+      typeof raw.notify_deny === "boolean"
+        ? raw.notify_deny
+        : defaults.notify_deny,
+    notify_approval:
+      typeof raw.notify_approval === "boolean"
+        ? raw.notify_approval
+        : defaults.notify_approval,
+    notify_rewrite:
+      typeof raw.notify_rewrite === "boolean"
+        ? raw.notify_rewrite
+        : defaults.notify_rewrite,
+    created_at: typeof raw.created_at === "string" ? raw.created_at : null,
+    updated_at: typeof raw.updated_at === "string" ? raw.updated_at : null,
+  };
+}
+
+function normalizeUserNotification(
+  row: unknown,
+): UserNotification | null {
+  if (!row || typeof row !== "object") return null;
+
+  const raw = parseRow(row) as Record<string, unknown>;
+  const id =
+    typeof raw.id === "string"
+      ? raw.id
+      : typeof raw.notification_id === "string"
+        ? raw.notification_id
+        : "";
+  if (!id) return null;
+
+  const normalizedType = normalizeNotificationType(
+    typeof raw.notification_type === "string"
+      ? raw.notification_type
+      : typeof raw.decision === "string"
+        ? raw.decision
+        : null,
+  );
+  const fallbackType =
+    typeof raw.notification_type === "string"
+      ? raw.notification_type.toUpperCase()
+      : "ALLOW";
+
+  return {
+    id,
+    notification_type: normalizedType ?? fallbackType,
+    connector_key:
+      typeof raw.connector_key === "string" ? raw.connector_key : null,
+    tool_name:
+      typeof raw.tool_name === "string" && raw.tool_name.trim()
+        ? raw.tool_name
+        : "unknown_tool",
+    target_descriptor:
+      typeof raw.target_descriptor === "string" ? raw.target_descriptor : null,
+    room_id: typeof raw.room_id === "string" ? raw.room_id : null,
+    room_name: typeof raw.room_name === "string" ? raw.room_name : null,
+    is_read:
+      typeof raw.is_read === "boolean"
+        ? raw.is_read
+        : typeof raw.read_at === "string",
+    read_at: typeof raw.read_at === "string" ? raw.read_at : null,
+    created_at:
+      typeof raw.created_at === "string"
+        ? raw.created_at
+        : new Date().toISOString(),
+  };
+}
+
+function normalizeUserNotificationsResponse(
+  payload: unknown,
+  options: { limit: number; offset: number },
+): UserNotificationsResponse {
+  const raw =
+    payload && typeof payload === "object"
+      ? (parseRow(payload) as Record<string, unknown>)
+      : {};
+  const items = unwrapArrayPayload(raw.items ?? payload, ["items"])
+    .map(normalizeUserNotification)
+    .filter((item): item is UserNotification => Boolean(item));
+
+  return {
+    items,
+    total: Number(raw.total ?? items.length),
+    unread_count: Number(
+      raw.unread_count ??
+        items.filter((item) => !item.is_read).length,
+    ),
+    limit: Number(raw.limit ?? options.limit),
+    offset: Number(raw.offset ?? options.offset),
+  };
+}
+
 function normalizeRoomRolesResponse(payload: unknown): RoomRolesResponse {
   const raw =
     payload && typeof payload === "object"
@@ -2056,6 +2169,129 @@ export const api = {
     }
 
     return data as { success: boolean; message?: string };
+  },
+
+  getNotificationPreferences: async (): Promise<NotificationPreferences> => {
+    const res = await apiFetch(`${API_BASE}/notifications/preferences`, {
+      cache: "no-store",
+    });
+
+    if (!res.ok) {
+      throw new Error(
+        `Failed to load notification preferences: ${await readErrorMessage(res)}`,
+      );
+    }
+
+    return normalizeNotificationPreferences(await res.json());
+  },
+
+  updateNotificationPreferences: async (
+    payload: Partial<
+      Pick<
+        NotificationPreferences,
+        "notify_allow" | "notify_deny" | "notify_approval" | "notify_rewrite"
+      >
+    >,
+  ): Promise<NotificationPreferences> => {
+    const body = Object.fromEntries(
+      Object.entries(payload).filter(
+        (entry): entry is [string, boolean] => typeof entry[1] === "boolean",
+      ),
+    );
+
+    if (!Object.keys(body).length) {
+      throw new Error("Nothing to update.");
+    }
+
+    const res = await apiFetch(`${API_BASE}/notifications/preferences`, {
+      method: "PUT",
+      headers: getJsonHeaders(),
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      throw new Error(
+        `Failed to update notification preferences: ${await readErrorMessage(res)}`,
+      );
+    }
+
+    return normalizeNotificationPreferences(await res.json());
+  },
+
+  getNotifications: async (
+    options: {
+      unread_only?: boolean;
+      limit?: number;
+      offset?: number;
+    } = {},
+  ): Promise<UserNotificationsResponse> => {
+    const limit = Math.min(Math.max(Math.trunc(options.limit ?? 20), 1), 100);
+    const offset = Math.max(Math.trunc(options.offset ?? 0), 0);
+    const url = new URL(`${API_BASE}/notifications`);
+    url.searchParams.set("limit", String(limit));
+    url.searchParams.set("offset", String(offset));
+    if (options.unread_only) {
+      url.searchParams.set("unread_only", "true");
+    }
+
+    const res = await apiFetch(url.toString(), { cache: "no-store" });
+    if (!res.ok) {
+      throw new Error(
+        `Failed to load notifications: ${await readErrorMessage(res)}`,
+      );
+    }
+
+    return normalizeUserNotificationsResponse(await res.json(), {
+      limit,
+      offset,
+    });
+  },
+
+  markNotificationRead: async (
+    notificationId: string,
+  ): Promise<UserNotification> => {
+    const res = await apiFetch(
+      `${API_BASE}/notifications/${encodeURIComponent(notificationId)}/read`,
+      {
+        method: "PATCH",
+      },
+    );
+    if (!res.ok) {
+      throw new Error(
+        `Failed to update notification: ${await readErrorMessage(res)}`,
+      );
+    }
+
+    const notification = normalizeUserNotification(await res.json());
+    if (!notification) {
+      throw new Error("Server returned an invalid notification payload.");
+    }
+    return notification;
+  },
+
+  markAllNotificationsRead: async (): Promise<{
+    success: boolean;
+    updated_count: number;
+  }> => {
+    const res = await apiFetch(`${API_BASE}/notifications/read-all`, {
+      method: "PATCH",
+    });
+    if (!res.ok) {
+      throw new Error(
+        `Failed to clear notifications: ${await readErrorMessage(res)}`,
+      );
+    }
+
+    const data = await res.json();
+    const raw =
+      data && typeof data === "object"
+        ? (data as Record<string, unknown>)
+        : {};
+
+    return {
+      success: raw.success !== false,
+      updated_count: Number(raw.updated_count ?? 0),
+    };
   },
 
   setPermission: (

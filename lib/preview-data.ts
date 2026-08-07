@@ -7,6 +7,11 @@
 
 import { api } from './api';
 import {
+  buildDefaultNotificationPreferences,
+  isNotificationTypeEnabled,
+  normalizeNotificationType,
+} from './notifications';
+import {
   matchesActionDateFilters,
   type ActionDateFilters,
 } from './dashboardDateRange';
@@ -16,6 +21,7 @@ import type {
   MCPApproval,
   Memory,
   Metrics,
+  NotificationPreferences,
   PaginatedResponse,
   PrivateConnectorCredentialStatus,
   Repo,
@@ -33,6 +39,7 @@ import type {
   TokenAnalyticsResponse,
   TokenMeterResponse,
   TokenUsageSessionItem,
+  UserNotification,
   UserPrompt,
   UserPromptPayload,
 } from './types';
@@ -1816,6 +1823,92 @@ const PREVIEW_MEMORIES: Memory[] = [
   },
 ];
 
+const PREVIEW_NOTIFICATION_PREFERENCES: NotificationPreferences = {
+  ...buildDefaultNotificationPreferences(),
+  created_at: new Date(NOW - 30 * ONE_DAY).toISOString(),
+  updated_at: new Date(NOW - 2 * ONE_DAY).toISOString(),
+};
+
+const PREVIEW_NOTIFICATIONS: UserNotification[] = [
+  {
+    id: 'notif_approval_1',
+    notification_type: 'APPROVAL',
+    connector_key: 'github',
+    tool_name: 'merge_pull_request',
+    target_descriptor: 'runaegis/api#42',
+    room_id: 'room_api',
+    room_name: 'API Reliability',
+    is_read: false,
+    read_at: null,
+    created_at: new Date(NOW - 18 * 60 * 1000).toISOString(),
+  },
+  {
+    id: 'notif_deny_1',
+    notification_type: 'DENY',
+    connector_key: 'terraform',
+    tool_name: 'terraform_apply',
+    target_descriptor: 'prod-network / aws_vpc.main',
+    room_id: 'room_mcp',
+    room_name: 'MCP Platform',
+    is_read: false,
+    read_at: null,
+    created_at: new Date(NOW - 52 * 60 * 1000).toISOString(),
+  },
+  {
+    id: 'notif_rewrite_1',
+    notification_type: 'REWRITE',
+    connector_key: 'github-actions',
+    tool_name: 'workflow_dispatch',
+    target_descriptor: 'aegis/dashboard · deploy-preview.yml',
+    room_id: 'room_dash',
+    room_name: 'Dashboard Control Plane',
+    is_read: false,
+    read_at: null,
+    created_at: new Date(NOW - 95 * 60 * 1000).toISOString(),
+  },
+  {
+    id: 'notif_allow_1',
+    notification_type: 'ALLOW',
+    connector_key: 'mongodb',
+    tool_name: 'mongodb_find',
+    target_descriptor: 'ops.events / production',
+    room_id: 'room_api',
+    room_name: 'API Reliability',
+    is_read: true,
+    read_at: new Date(NOW - 4 * 60 * 60 * 1000).toISOString(),
+    created_at: new Date(NOW - 4 * 60 * 60 * 1000).toISOString(),
+  },
+  {
+    id: 'notif_approval_2',
+    notification_type: 'APPROVAL',
+    connector_key: 'jira',
+    tool_name: 'jira_update_issue',
+    target_descriptor: 'PLAT-208',
+    room_id: 'room_mcp',
+    room_name: 'MCP Platform',
+    is_read: true,
+    read_at: new Date(NOW - 10 * 60 * 60 * 1000).toISOString(),
+    created_at: new Date(NOW - 11 * 60 * 60 * 1000).toISOString(),
+  },
+];
+
+function filterPreviewNotifications(unreadOnly = false): UserNotification[] {
+  return PREVIEW_NOTIFICATIONS
+    .filter((notification) => {
+      const type = normalizeNotificationType(notification.notification_type);
+      if (!type) return false;
+      if (!isNotificationTypeEnabled(PREVIEW_NOTIFICATION_PREFERENCES, type)) {
+        return false;
+      }
+      if (unreadOnly && notification.is_read) return false;
+      return true;
+    })
+    .sort(
+      (a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+    );
+}
+
 // Computed metrics
 function computeMetrics(runs: SessionAction[]): Metrics {
   return {
@@ -2014,6 +2107,55 @@ export function installPreviewApi() {
     success: true,
     message: "Slack disconnected successfully",
   });
+  api.getNotificationPreferences = async () => ({
+    ...PREVIEW_NOTIFICATION_PREFERENCES,
+  });
+  api.updateNotificationPreferences = async (payload) => {
+    if (typeof payload.notify_allow === 'boolean') {
+      PREVIEW_NOTIFICATION_PREFERENCES.notify_allow = payload.notify_allow;
+    }
+    if (typeof payload.notify_deny === 'boolean') {
+      PREVIEW_NOTIFICATION_PREFERENCES.notify_deny = payload.notify_deny;
+    }
+    if (typeof payload.notify_approval === 'boolean') {
+      PREVIEW_NOTIFICATION_PREFERENCES.notify_approval = payload.notify_approval;
+    }
+    if (typeof payload.notify_rewrite === 'boolean') {
+      PREVIEW_NOTIFICATION_PREFERENCES.notify_rewrite = payload.notify_rewrite;
+    }
+    PREVIEW_NOTIFICATION_PREFERENCES.updated_at = new Date().toISOString();
+    return { ...PREVIEW_NOTIFICATION_PREFERENCES };
+  };
+  api.getNotifications = async (options = {}) => {
+    const limit = Math.min(Math.max(Math.trunc(options.limit ?? 20), 1), 100);
+    const offset = Math.max(Math.trunc(options.offset ?? 0), 0);
+    const filtered = filterPreviewNotifications(Boolean(options.unread_only));
+    return {
+      items: filtered.slice(offset, offset + limit).map((item) => ({ ...item })),
+      total: filtered.length,
+      unread_count: filterPreviewNotifications(true).length,
+      limit,
+      offset,
+    };
+  };
+  api.markNotificationRead = async (notificationId: string) => {
+    const notification = PREVIEW_NOTIFICATIONS.find((item) => item.id === notificationId);
+    if (!notification) {
+      throw new Error('Notification not found');
+    }
+    notification.is_read = true;
+    notification.read_at = new Date().toISOString();
+    return { ...notification };
+  };
+  api.markAllNotificationsRead = async () => {
+    const unread = PREVIEW_NOTIFICATIONS.filter((item) => !item.is_read);
+    const now = new Date().toISOString();
+    unread.forEach((item) => {
+      item.is_read = true;
+      item.read_at = now;
+    });
+    return { success: true, updated_count: unread.length };
+  };
   api.syncRepos = async () => ({ success: true, synced: PREVIEW_REPOS.length });
   api.setPermission = async () => ({ success: true });
   api.setPermissions = async () => ({ success: true });
