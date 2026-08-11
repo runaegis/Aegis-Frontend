@@ -20,11 +20,10 @@
  * the Connectors page itself so we don't have two places to update when
  * a connector's brand color or copy changes.
  *
- * `memory` is the one entry here that isn't a third-party brand — it's
- * Aegis's own set_memory/update_memory/list_memory/get_memory_from_name
- * tool family. It gets a purpose-built generic glyph (not a vendor
- * logo) so those runs stop rendering the GitHub mark just because the
- * MCP session happened to be GitHub-authenticated.
+ * `memory` and `workspace` aren't third-party brands — they're Aegis's
+ * own tool families (cross-session memory, and Agent Workspace chat /
+ * pointers). Each gets a purpose-built glyph so those runs don't render
+ * the GitHub mark just because the MCP session was GitHub-authenticated.
  */
 
 import { cn } from '@/lib/utils';
@@ -38,7 +37,8 @@ export type ConnectorId =
   | 'terraform'
   | 'postgres'
   | 'mongodb'
-  | 'memory';
+  | 'memory'
+  | 'workspace';
 
 interface ConnectorDef {
   id: ConnectorId;
@@ -163,6 +163,16 @@ export const CONNECTORS: Record<ConnectorId, ConnectorDef> = {
     policy: { read: 'allow', write: 'allow', destructive: 'approval' },
     bg: '#7C5CFF',
     logoSlug: 'memory',
+  },
+  workspace: {
+    id: 'workspace',
+    name: 'Agent Workspace',
+    category: 'Workspace',
+    description:
+      "Aegis Agent Workspace tools (workspace_post, pointers, mentions, handles). Multi-agent room chat and task pointers — not a third-party connector.",
+    policy: { read: 'allow', write: 'allow', destructive: 'approval' },
+    bg: '#7C5CFF',
+    logoSlug: 'workspace',
   },
 };
 

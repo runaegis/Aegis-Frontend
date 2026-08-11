@@ -2,12 +2,24 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, CheckCircle2, MessagesSquare, Moon, PanelRight, Sun, Users2, X } from 'lucide-react';
+import {
+  ArrowLeft,
+  CheckCircle2,
+  FileText,
+  MessagesSquare,
+  Moon,
+  PanelRight,
+  Sun,
+  Users2,
+  X,
+} from 'lucide-react';
 import {
   api,
+  getWorkspaceMessageStreamUrl,
   type WorkspaceAgentKeyResponse,
   type WorkspaceDetail,
   type WorkspaceFileRef,
+  type WorkspaceMessage,
   type WorkspacePointerStatus,
   type WorkspaceSummary,
 } from '@/lib/api';
@@ -20,13 +32,14 @@ import { AgentKeyDialog } from './AgentKeyDialog';
 import { AgentRoster } from './AgentRoster';
 import { Composer } from './Composer';
 import { MentionText, AgentGlyph, AgentHandle, AgentHueProvider } from './agent-visuals';
-import { SampleDataChip } from './WorkspaceDemoGate';
+import { SampleDataChip, useIsDemo } from './WorkspaceDemoGate';
 import { TaskChecklist } from './TaskChecklist';
 import { FilesPanel } from './FilesPanel';
 import { RoomSummary } from './RoomSummary';
 import { RoomSidebar, type SiblingMeta } from './RoomSidebar';
 import { InlineEdit } from './InlineEdit';
 import { Kbd, ShortcutsDialog, useWorkspaceShortcuts } from './shortcuts';
+import { WorkspaceAgentsMdDialog } from './WorkspaceAgentsMdDialog';
 
 type Tab = 'tasks' | 'agents' | 'files';
 
@@ -40,8 +53,19 @@ function metaFrom(d: WorkspaceDetail): SiblingMeta {
   };
 }
 
+function mergeMessage(messages: WorkspaceMessage[], incoming: WorkspaceMessage): WorkspaceMessage[] {
+  const index = messages.findIndex((message) => message.id === incoming.id);
+  const next =
+    index >= 0
+      ? messages.map((message) => (message.id === incoming.id ? incoming : message))
+      : [...messages, incoming];
+
+  return next.sort((a, b) => a.created_at.localeCompare(b.created_at));
+}
+
 export function WorkspaceRoom({ workspaceId }: { workspaceId: string }) {
   const { theme, setTheme } = useTheme();
+  const isDemo = useIsDemo();
   const [detail, setDetail] = useState<WorkspaceDetail | null>(null);
   const [siblings, setSiblings] = useState<WorkspaceSummary[]>([]);
   const [siblingMeta, setSiblingMeta] = useState<Record<string, SiblingMeta>>({});
@@ -53,6 +77,7 @@ export function WorkspaceRoom({ workspaceId }: { workspaceId: string }) {
   // reachable on narrow screens instead of being hidden entirely.
   const [panelOpen, setPanelOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [agentsMdOpen, setAgentsMdOpen] = useState(false);
   // Counters, not booleans: bumping one is an event the child reacts to.
   const [composerFocus, setComposerFocus] = useState(0);
   const [taskFocus, setTaskFocus] = useState(0);
@@ -101,6 +126,39 @@ export function WorkspaceRoom({ workspaceId }: { workspaceId: string }) {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    if (isDemo) return;
+
+    const es = new EventSource(getWorkspaceMessageStreamUrl(workspaceId), {
+      withCredentials: true,
+    });
+
+    es.onmessage = (event) => {
+      if (!event.data) return;
+
+      try {
+        const incoming = JSON.parse(event.data) as WorkspaceMessage;
+        if (!incoming?.id) return;
+        if (incoming.workspace_id && incoming.workspace_id !== workspaceId) return;
+
+        setDetail((current) =>
+          current
+            ? {
+                ...current,
+                messages: mergeMessage(current.messages, incoming),
+              }
+            : current,
+        );
+      } catch {
+        // Ignore malformed keepalive or diagnostic events from the stream.
+      }
+    };
+
+    return () => {
+      es.close();
+    };
+  }, [isDemo, workspaceId]);
+
   const agents = detail?.agents ?? [];
   const pointers = useMemo(
     () => (detail?.pointers ?? []).slice().sort((a, b) => a.sort_order - b.sort_order),
@@ -108,7 +166,10 @@ export function WorkspaceRoom({ workspaceId }: { workspaceId: string }) {
   );
   const activeCount = agents.filter((a) => a.status === 'active').length;
   const doneCount = pointers.filter((p) => p.status === 'done').length;
-  const fileCount = (detail?.messages ?? []).reduce((n, m) => n + m.file_refs.length, 0);
+  const fileCount = (detail?.messages ?? []).reduce(
+    (n, m) => n + (m.file_refs?.length ?? 0),
+    0,
+  );
 
   // ---- mutations -------------------------------------------------------
   const sendMessage = async (text: string, files: WorkspaceFileRef[]) => {
@@ -180,7 +241,7 @@ export function WorkspaceRoom({ workspaceId }: { workspaceId: string }) {
         setHelpOpen(false);
       },
     },
-    !issued,
+    !issued && !agentsMdOpen,
   );
 
   // ---- loading ---------------------------------------------------------
@@ -249,7 +310,16 @@ export function WorkspaceRoom({ workspaceId }: { workspaceId: string }) {
               />
             </h1>
             <SampleDataChip />
-            <div className="ml-auto flex items-center gap-3 font-mono text-[11.5px] text-[var(--neutral-sub-600)]">
+            <div className="ml-auto flex items-center gap-2 font-mono text-[11.5px] text-[var(--neutral-sub-600)]">
+              <button
+                type="button"
+                onClick={() => setAgentsMdOpen(true)}
+                title="View AGENTS.md workspace instructions"
+                className="inline-flex items-center gap-1 rounded-md border border-[var(--stroke-soft-200)] bg-[var(--white-0)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--neutral-sub-600)] transition-colors hover:bg-[var(--neutral-weak-50)] hover:text-[var(--neutral-strong-950)]"
+              >
+                <FileText size={12} />
+                AGENTS.md
+              </button>
               <span className="inline-flex items-center gap-1">
                 <Users2 size={12} /> {activeCount}
               </span>
@@ -453,6 +523,7 @@ export function WorkspaceRoom({ workspaceId }: { workspaceId: string }) {
       </aside>
 
       <AgentKeyDialog open={!!issued} onOpenChange={(open) => !open && setIssued(null)} issued={issued} />
+      <WorkspaceAgentsMdDialog open={agentsMdOpen} onOpenChange={setAgentsMdOpen} />
       <ShortcutsDialog open={helpOpen} onOpenChange={setHelpOpen} />
     </div>
     </AgentHueProvider>

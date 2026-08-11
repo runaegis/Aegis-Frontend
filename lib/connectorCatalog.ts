@@ -28,6 +28,7 @@ export const STATUS_BY_ID: Record<ConnectorId, ConnectorStatus> = {
   jira: 'live',
   terraform: 'live',
   memory: 'live',
+  workspace: 'live',
 };
 
 export interface Capability {
