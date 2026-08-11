@@ -43,39 +43,39 @@ const PRESENTATION: Record<
     tone: 'success',
     accent: 'success',
     icon: CheckCircle2,
-    title: 'GitHub token is healthy',
-    fallbackDescription: 'GitHub accepted the token. Aegis can talk to GitHub on your behalf.',
+    title: 'GitHub PAT is healthy',
+    fallbackDescription: 'GitHub accepted the PAT. Aegis can talk to GitHub on your behalf.',
   },
   expiring_soon: {
     label: 'Expiring soon',
     tone: 'warning',
     accent: 'warning',
     icon: AlertTriangle,
-    title: 'GitHub token is expiring soon',
-    fallbackDescription: 'The token still works but will stop soon. Rotate it to avoid interruptions.',
+    title: 'GitHub PAT is expiring soon',
+    fallbackDescription: 'The PAT still works but will stop soon. Rotate it to avoid interruptions.',
   },
   expired: {
     label: 'Expired',
     tone: 'error',
     accent: 'error',
     icon: XCircle,
-    title: 'GitHub token has expired',
-    fallbackDescription: 'GitHub no longer accepts this token. Generate a new one and update Aegis.',
+    title: 'GitHub PAT has expired',
+    fallbackDescription: 'GitHub no longer accepts this PAT. Generate a new one and update Aegis.',
   },
   invalid: {
     label: 'Invalid',
     tone: 'error',
     accent: 'error',
     icon: XCircle,
-    title: 'GitHub token is invalid',
-    fallbackDescription: 'GitHub rejected the token (expired, revoked, or incorrect).',
+    title: 'GitHub PAT is invalid',
+    fallbackDescription: 'GitHub rejected the PAT because it is expired, revoked, or incorrect.',
   },
   no_token: {
     label: 'Not set',
     tone: 'neutral',
     accent: 'neutral',
     icon: KeyRound,
-    title: 'No GitHub token on file',
+    title: 'No GitHub PAT on file',
     fallbackDescription: 'Add a classic personal access token so Aegis can reach GitHub.',
   },
   rate_limited: {
@@ -84,7 +84,7 @@ const PRESENTATION: Record<
     accent: 'warning',
     icon: ShieldAlert,
     title: "Couldn't verify right now",
-    fallbackDescription: 'GitHub rate limit reached. The token may still be fine — retry shortly.',
+    fallbackDescription: 'GitHub rate limit reached. The PAT may still be fine. Retry shortly.',
   },
   network_error: {
     label: 'Unreachable',
@@ -106,17 +106,15 @@ function formatExpiry(date: Date): string {
   });
 }
 
-/** Dashboard only surfaces token health when GitHub won't accept the PAT. */
+/** Dashboard only surfaces PAT health when GitHub won't accept it. */
 const ALERT_STATES: GithubPatState[] = ['invalid', 'expired', 'no_token'];
 
 export default function GithubPatStatus({ className }: { className?: string }) {
-  const { user, isLoading: userLoading } = useUser();
+  const { isLoading: userLoading } = useUser();
   const [status, setStatus] = useState<PatStatus | null>(null);
   const [checking, setChecking] = useState(false);
 
-  // Classic PAT lives on the user as `access_token`; `github_pat` is the
-  // payload field name used when saving — read either for resilience.
-  const pat = user?.access_token || user?.github_pat;
+  const pat = null;
 
   const runCheck = useCallback(async () => {
     setChecking(true);
@@ -130,7 +128,7 @@ export default function GithubPatStatus({ className }: { className?: string }) {
 
   useEffect(() => {
     if (userLoading) return;
-    void runCheck();
+    setStatus(null);
   }, [userLoading, runCheck]);
 
   const state = status?.state ?? 'no_token';
@@ -145,8 +143,8 @@ export default function GithubPatStatus({ className }: { className?: string }) {
     typeof document !== 'undefined' &&
     document.documentElement.dataset.demo === 'true';
 
-  // Healthy, unknown, or transient states stay off the dashboard — only
-  // surface when the token is missing or GitHub rejects it.
+  // Healthy, unknown, or transient states stay off the dashboard. Only
+  // surface when the PAT is missing or GitHub rejects it.
   if (
     isDemoWorkspace ||
     userLoading ||
@@ -157,9 +155,9 @@ export default function GithubPatStatus({ className }: { className?: string }) {
     return null;
   }
 
-  // Only reached for no_token / expired / invalid — all three want the same
+  // Only reached for no_token / expired / invalid. All three want the same
   // two resolution actions, rendered unconditionally below.
-  const actionLabel = state === 'no_token' ? 'Add token' : 'Update token';
+  const actionLabel = state === 'no_token' ? 'Add PAT' : 'Update PAT';
   const accentColor = `var(--${accentVar(view.accent)})`;
   const hasCredentialDetail =
     !!status?.login || !!status?.expiresAt || (status?.scopes?.length ?? 0) > 0;
@@ -173,7 +171,7 @@ export default function GithubPatStatus({ className }: { className?: string }) {
           <div className="relative shrink-0">
             <ConnectorMark id="github" size="md" className="cursor-default" />
             <span
-              className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full ring-[2.5px] ring-white"
+              className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full ring-[2.5px] ring-[var(--white-0)]"
               style={{ backgroundColor: accentColor }}
               aria-hidden
             />
@@ -183,9 +181,9 @@ export default function GithubPatStatus({ className }: { className?: string }) {
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-[10.5px] font-semibold uppercase tracking-[0.07em] text-[var(--neutral-soft-400)]">
-                  GitHub access token
+                  GitHub PAT
                 </p>
-                <p className="mt-0.5 text-[14px] font-semibold tracking-[-0.01em] text-[var(--neutral-strong-950)]">
+                <p className="mt-0.5 text-[14px] font-semibold text-[var(--neutral-strong-950)]">
                   {view.title}
                 </p>
               </div>
@@ -198,7 +196,7 @@ export default function GithubPatStatus({ className }: { className?: string }) {
               {description}
             </p>
 
-            {/* Detail panel for a token GitHub actually authenticated. */}
+            {/* Detail panel for a PAT GitHub actually authenticated. */}
             {hasCredentialDetail && (
               <div className="mt-3 space-y-2 rounded-[8px] border border-[var(--stroke-soft-200)] bg-[var(--neutral-weak-50)] px-3 py-2.5">
                 {status?.login && (
@@ -234,7 +232,7 @@ export default function GithubPatStatus({ className }: { className?: string }) {
             <div className="mt-3.5 flex flex-wrap items-center gap-x-3 gap-y-2">
               <Link
                 href="/dashboard/settings#profile"
-                className="inline-flex h-8 items-center gap-1.5 rounded-[8px] border border-[var(--stroke-sub-300)] bg-white px-3 text-[12.5px] font-medium text-[var(--neutral-strong-950)] shadow-[0_1px_2px_rgba(23,23,23,0.04)] transition-colors hover:bg-[var(--neutral-weak-50)]"
+                className="inline-flex h-8 items-center gap-1.5 rounded-[8px] border border-[var(--stroke-sub-300)] bg-[var(--white-0)] px-3 text-[12.5px] font-medium text-[var(--neutral-strong-950)] transition-colors hover:bg-[var(--neutral-weak-50)]"
               >
                 {actionLabel}
                 <ArrowRight className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
@@ -253,7 +251,7 @@ export default function GithubPatStatus({ className }: { className?: string }) {
                 variant="ghost"
                 onClick={() => void runCheck()}
                 disabled={checking}
-                aria-label="Re-check token"
+                aria-label="Re-check GitHub PAT"
                 className="ml-auto"
                 leadingIcon={
                   <RefreshCw

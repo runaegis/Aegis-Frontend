@@ -36,6 +36,7 @@ export type ConnectorId =
   | 'github-actions'
   | 'terraform'
   | 'postgres'
+  | 'mongodb'
   | 'memory'
   | 'workspace';
 
@@ -96,7 +97,7 @@ export const CONNECTORS: Record<ConnectorId, ConnectorDef> = {
     name: 'Linear',
     category: 'Project tracking',
     description:
-      'Planning context for the agent. Read the ticket before writing code; status changes and reassignments route through human approval.',
+      'Issue context for the agent. Read is open; issue writes (create/update/archive/priority changes) are approval-gated and scoped to allowed teams and projects.',
     policy: { read: 'allow', write: 'approval', destructive: 'deny' },
     bg: '#5E6AD2',
     logoSlug: 'linear',
@@ -126,9 +127,9 @@ export const CONNECTORS: Record<ConnectorId, ConnectorDef> = {
     name: 'Terraform',
     category: 'Infrastructure',
     description:
-      'Agents read and plan freely. Apply and destroy are hard-locked under the T1 IaC policy, so no agent ever runs a destructive change against your infrastructure.',
+      'Agents read and plan freely. Applies are approval-gated with plan review, and destructive changes (destroy) are denied by default under the T1 IaC guardrails.',
     primitive: 'T1 IaC Hard Lock',
-    policy: { read: 'allow', write: 'deny', destructive: 'deny' },
+    policy: { read: 'allow', write: 'approval', destructive: 'deny' },
     bg: '#7B42BC',
     logoSlug: 'terraform',
   },
@@ -142,6 +143,16 @@ export const CONNECTORS: Record<ConnectorId, ConnectorDef> = {
     policy: { read: 'allow', write: 'approval', destructive: 'deny' },
     bg: '#336791',
     logoSlug: 'postgresql',
+  },
+  mongodb: {
+    id: 'mongodb',
+    name: 'MongoDB',
+    category: 'Database',
+    description:
+      'Read and aggregate freely. Writes are approval-gated and destructive collection operations are denied by default, with database + collection allowlists and an audit trail.',
+    policy: { read: 'allow', write: 'approval', destructive: 'deny' },
+    bg: '#47A248',
+    logoSlug: 'mongodb',
   },
   memory: {
     id: 'memory',

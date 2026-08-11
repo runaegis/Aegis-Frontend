@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import {
   BookMarked,
@@ -30,10 +30,24 @@ import { DUR, EASE, fadeUp, staggerContainer } from '@/lib/motion';
 
 const EASE_EMPH: [number, number, number, number] = [0.2, 0.8, 0.2, 1];
 
+function isDemoMode(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return (
+      document.documentElement.dataset.demo === 'true' ||
+      localStorage.getItem('aegis_demo') === 'true'
+    );
+  } catch {
+    return false;
+  }
+}
+
 export default function MemoryPage() {
   const { user, isLoading: userLoading } = useUser();
   const reduce = useReducedMotion();
   const toast = useToast();
+  const demo = useMemo(() => isDemoMode(), []);
+  const effectiveUserId = user?.id ?? (demo ? 'preview-user' : null);
 
   const [memories, setMemories] = useState<Memory[]>([]);
   const [loading, setLoading] = useState(true);
@@ -57,7 +71,7 @@ export default function MemoryPage() {
   const [pinningId, setPinningId] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
-    if (!user?.id) {
+    if (!effectiveUserId) {
       if (!userLoading) {
         setMemories([]);
         setLoading(false);
@@ -65,7 +79,7 @@ export default function MemoryPage() {
       return;
     }
     try {
-      const raw = await api.getMemories(user.id);
+      const raw = await api.getMemories(effectiveUserId);
       // Sort: pinned first, then most recently touched
       const data = [...raw].sort((a, b) => {
         if (a.is_pinned && !b.is_pinned) return -1;
@@ -86,15 +100,15 @@ export default function MemoryPage() {
     } finally {
       setLoading(false);
     }
-  }, [user?.id, userLoading]);
+  }, [effectiveUserId, userLoading]);
 
   useEffect(() => {
-    if (user?.id) fetchData();
+    if (effectiveUserId) fetchData();
     else if (!userLoading) {
       setMemories([]);
       setLoading(false);
     }
-  }, [user?.id, userLoading, fetchData]);
+  }, [effectiveUserId, userLoading, fetchData]);
 
   const { lastUpdated } = useAutoRefresh(fetchData, 60000);
 
@@ -112,10 +126,10 @@ export default function MemoryPage() {
 
   const handleSave = async (memory: Memory) => {
     if (!editTitle.trim() && !editMemory.trim()) return;
-    if (!user?.id) return;
+    if (!effectiveUserId) return;
     setSavingId(memory.id);
     try {
-      const updated = await api.updateMemory(memory.id, user.id, {
+      const updated = await api.updateMemory(memory.id, effectiveUserId, {
         title: editTitle.trim() || memory.title,
         memory: editMemory.trim() || memory.memory,
       });
@@ -133,12 +147,12 @@ export default function MemoryPage() {
   };
 
   const handleDelete = async () => {
-    if (!pendingDelete || !user?.id) return;
+    if (!pendingDelete || !effectiveUserId) return;
     const mem = pendingDelete;
     setPendingDelete(null);
     setDeletingId(mem.id);
     try {
-      await api.deleteMemory(mem.id, user.id);
+      await api.deleteMemory(mem.id, effectiveUserId);
       setMemories((prev) => prev.filter((m) => m.id !== mem.id));
       if (detailMemory?.id === mem.id) setDetailMemory(null);
       toast.success('Memory deleted');
@@ -152,7 +166,7 @@ export default function MemoryPage() {
   };
 
   const handlePin = async (memory: Memory) => {
-    if (!user?.id) return;
+    if (!effectiveUserId) return;
     const newPinned = !memory.is_pinned;
     setPinningId(memory.id);
     // Optimistic update
@@ -171,7 +185,7 @@ export default function MemoryPage() {
       prev?.id === memory.id ? { ...prev, is_pinned: newPinned } : prev,
     );
     try {
-      const updated = await api.updateMemory(memory.id, user.id, {
+      const updated = await api.updateMemory(memory.id, effectiveUserId, {
         is_pinned: newPinned,
       });
       setMemories((prev) =>

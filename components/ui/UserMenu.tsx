@@ -81,11 +81,8 @@ export function UserMenu({ pendingApprovals = 0, className }: UserMenuProps) {
   }, [open]);
 
   const handleSignOut = async () => {
-    clearUser();
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
-    localStorage.removeItem('aegis_preview');
     await api.logOut();
+    clearUser();
     router.replace('/auth');
   };
 

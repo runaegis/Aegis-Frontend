@@ -3,13 +3,13 @@
  *
  * Talks directly to the public GitHub REST API (`api.github.com`, which is
  * CORS-enabled for browsers) rather than going through the Aegis backend, so
- * the dashboard can surface whether the token Aegis has on file is still good
+ * the dashboard can surface whether the PAT Aegis has on file is still good
  * without a round-trip.
  *
  * GitHub returns `401 Bad credentials` for both revoked and expired tokens, so
  * a hard distinction between "expired" and "invalid" is only possible for a
- * token that still authenticates: a successful `GET /user` exposes the
- * `github-authentication-token-expiration` header which we use to flag tokens
+ * PAT that still authenticates: a successful `GET /user` exposes the
+ * `github-authentication-token-expiration` header which we use to flag PATs
  * that are valid now but expiring soon.
  */
 
@@ -24,11 +24,11 @@ export type GithubPatState =
 
 export interface GithubPatStatus {
   state: GithubPatState;
-  /** GitHub login the token authenticated as (only on success). */
+  /** GitHub login the PAT authenticated as (only on success). */
   login?: string;
   /** OAuth scopes granted to a classic PAT (from `x-oauth-scopes`). */
   scopes?: string[];
-  /** Parsed expiration date, when the token has one configured. */
+  /** Parsed expiration date, when the PAT has one configured. */
   expiresAt?: Date | null;
   /** Whole days until expiry (negative if already past). */
   daysUntilExpiry?: number | null;
@@ -38,7 +38,7 @@ export interface GithubPatStatus {
   checkedAt: Date;
 }
 
-/** Tokens within this window are flagged as "expiring soon". */
+/** PATs within this window are flagged as "expiring soon". */
 const EXPIRY_WARNING_DAYS = 7;
 
 function parseScopes(header: string | null): string[] {
@@ -65,7 +65,7 @@ function daysBetween(from: Date, to: Date): number {
 
 /**
  * Probe a classic GitHub PAT against `GET https://api.github.com/user`.
- * Never throws — every failure mode is mapped to a {@link GithubPatStatus}.
+ * Never throws. Every failure mode is mapped to a {@link GithubPatStatus}.
  */
 export async function checkGithubPat(
   pat: string | undefined | null,
@@ -75,7 +75,7 @@ export async function checkGithubPat(
   if (!pat || !pat.trim()) {
     return {
       state: "no_token",
-      message: "No GitHub token is on file for this account.",
+      message: "No GitHub PAT is on file for this account.",
       checkedAt,
     };
   }
@@ -92,7 +92,7 @@ export async function checkGithubPat(
   } catch {
     return {
       state: "network_error",
-      message: "Could not reach GitHub to verify the token.",
+      message: "Could not reach GitHub to verify the PAT.",
       checkedAt,
     };
   }
@@ -101,16 +101,16 @@ export async function checkGithubPat(
   if (res.status === 401) {
     return {
       state: "invalid",
-      message: "GitHub rejected the token (expired, revoked, or invalid).",
+      message: "GitHub rejected the PAT because it is expired, revoked, or invalid.",
       checkedAt,
     };
   }
 
-  // 403 with no remaining rate limit → temporarily blocked, not a token issue.
+  // 403 with no remaining rate limit means temporarily blocked, not a PAT issue.
   if (res.status === 403 && res.headers.get("x-ratelimit-remaining") === "0") {
     return {
       state: "rate_limited",
-      message: "GitHub rate limit hit — try again in a little while.",
+      message: "GitHub rate limit hit. Try again in a little while.",
       checkedAt,
     };
   }
@@ -145,7 +145,7 @@ export async function checkGithubPat(
         scopes,
         expiresAt,
         daysUntilExpiry: days,
-        message: "This token's expiration date has already passed.",
+        message: "This PAT's expiration date has already passed.",
         checkedAt,
       };
     }
@@ -156,7 +156,7 @@ export async function checkGithubPat(
         scopes,
         expiresAt,
         daysUntilExpiry: days,
-        message: `This token expires in ${days} day${days === 1 ? "" : "s"}.`,
+        message: `This PAT expires in ${days} day${days === 1 ? "" : "s"}.`,
         checkedAt,
       };
     }

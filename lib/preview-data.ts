@@ -7,18 +7,30 @@
 
 import { api } from './api';
 import {
+  buildDefaultNotificationPreferences,
+  isNotificationTypeEnabled,
+  normalizeNotificationType,
+} from './notifications';
+import {
   matchesActionDateFilters,
   type ActionDateFilters,
 } from './dashboardDateRange';
 import type {
   AggregatedSessionAction,
+  ConnectorCatalogItem,
   MCPApproval,
+  Memory,
   Metrics,
+  NotificationPreferences,
   PaginatedResponse,
+  PrivateConnectorCredentialStatus,
   Repo,
+  RoomConnectorConfig,
+  RoomConnectorPoliciesResponse,
   RoomDetails,
   RoomInvite,
   RoomMember,
+  RoomRolesResponse,
   RoomSessionAction,
   RoomSummary,
   Session,
@@ -27,6 +39,9 @@ import type {
   TokenAnalyticsResponse,
   TokenMeterResponse,
   TokenUsageSessionItem,
+  UserNotification,
+  UserPrompt,
+  UserPromptPayload,
 } from './types';
 
 // ── deterministic PRNG so render is stable across re-mounts ────────────────
@@ -833,28 +848,90 @@ function buildPreviewTokenUsageSessions(
 
 // Rooms
 const PREVIEW_ROOMS: RoomSummary[] = [
-  { id: 'room_dash',  room_id: 'room_dash',  repo_name: 'aegis/dashboard',  owner_username: 'preview-user', created_at: new Date(NOW - 12 * ONE_DAY).toISOString() },
-  { id: 'room_mcp',   room_id: 'room_mcp',   repo_name: 'aegis/mcp-server', owner_username: 'preview-user', created_at: new Date(NOW - 30 * ONE_DAY).toISOString() },
-  { id: 'room_api',   room_id: 'room_api',   repo_name: 'runaegis/api',     owner_username: 'preview-user', created_at: new Date(NOW -  5 * ONE_DAY).toISOString() },
+  {
+    id: 'room_dash',
+    room_id: 'room_dash',
+    name: 'Dashboard Control Plane',
+    description: 'Frontend control room for dashboard rollout and governance tuning.',
+    room_type: 'shared',
+    repo_name: 'aegis/dashboard',
+    owner_username: 'demo',
+    role: 'OWNER',
+    role_rank: 1,
+    created_at: new Date(NOW - 12 * ONE_DAY).toISOString(),
+  },
+  {
+    id: 'room_mcp',
+    room_id: 'room_mcp',
+    name: 'MCP Platform',
+    description: 'Shared room for MCP server integrations and infra rollout.',
+    room_type: 'shared',
+    repo_name: 'aegis/mcp-server',
+    owner_username: 'demo',
+    role: 'OWNER',
+    role_rank: 1,
+    created_at: new Date(NOW - 30 * ONE_DAY).toISOString(),
+  },
+  {
+    id: 'room_api',
+    room_id: 'room_api',
+    name: 'API Reliability',
+    description: 'Ops-heavy room for the production API and data services.',
+    room_type: 'shared',
+    repo_name: 'runaegis/api',
+    owner_username: 'demo',
+    role: 'OWNER',
+    role_rank: 1,
+    created_at: new Date(NOW - 5 * ONE_DAY).toISOString(),
+  },
 ];
 
 const PREVIEW_ROOM_DETAILS: Record<string, RoomDetails> = Object.fromEntries(
   PREVIEW_ROOMS.map((r) => [r.room_id!, { ...r }]),
 );
 
+const PREVIEW_ROOM_ROLES: Record<string, RoomRolesResponse> = {
+  room_dash: {
+    room_id: 'room_dash',
+    roles: {
+      '1': 'Owner',
+      '2': 'Tech Lead',
+      '3': 'Developer',
+      '4': 'Reviewer',
+      '5': 'Viewer',
+    },
+  },
+  room_mcp: {
+    room_id: 'room_mcp',
+    roles: {
+      '1': 'Owner',
+      '2': 'Admin',
+      '3': 'Developer',
+    },
+  },
+  room_api: {
+    room_id: 'room_api',
+    roles: {
+      '1': 'Owner',
+      '2': 'Tech Lead',
+      '3': 'Developer',
+    },
+  },
+};
+
 const PREVIEW_MEMBERS: Record<string, RoomMember[]> = {
   room_dash: [
-    { id: 'm1', user_id: 'preview-user', username: 'demo',  role: 'OWNER',     joined_at: new Date(NOW - 12 * ONE_DAY).toISOString() },
-    { id: 'm2', user_id: 'u_kai',        username: 'kai',      role: 'DEVELOPER', joined_at: new Date(NOW - 10 * ONE_DAY).toISOString() },
-    { id: 'm3', user_id: 'u_sora',       username: 'sora',     role: 'REVIEWER',  joined_at: new Date(NOW -  9 * ONE_DAY).toISOString() },
-    { id: 'm4', user_id: 'u_lin',        username: 'lin',      role: 'VIEWER',    joined_at: new Date(NOW -  6 * ONE_DAY).toISOString() },
+    { id: 'm1', user_id: 'preview-user', username: 'demo', role: 'OWNER', role_rank: 1, joined_at: new Date(NOW - 12 * ONE_DAY).toISOString() },
+    { id: 'm2', user_id: 'u_kai', username: 'kai', role: 'DEVELOPER', role_rank: 3, joined_at: new Date(NOW - 10 * ONE_DAY).toISOString() },
+    { id: 'm3', user_id: 'u_sora', username: 'sora', role: 'REVIEWER', role_rank: 4, joined_at: new Date(NOW - 9 * ONE_DAY).toISOString() },
+    { id: 'm4', user_id: 'u_lin', username: 'lin', role: 'VIEWER', role_rank: 5, joined_at: new Date(NOW - 6 * ONE_DAY).toISOString() },
   ],
   room_mcp: [
-    { id: 'm5', user_id: 'preview-user', username: 'demo',  role: 'OWNER',     joined_at: new Date(NOW - 30 * ONE_DAY).toISOString() },
-    { id: 'm6', user_id: 'u_amir',       username: 'amir',     role: 'DEVELOPER', joined_at: new Date(NOW - 28 * ONE_DAY).toISOString() },
+    { id: 'm5', user_id: 'preview-user', username: 'demo', role: 'OWNER', role_rank: 1, joined_at: new Date(NOW - 30 * ONE_DAY).toISOString() },
+    { id: 'm6', user_id: 'u_amir', username: 'amir', role: 'DEVELOPER', role_rank: 3, joined_at: new Date(NOW - 28 * ONE_DAY).toISOString() },
   ],
   room_api: [
-    { id: 'm7', user_id: 'preview-user', username: 'demo',  role: 'OWNER',     joined_at: new Date(NOW - 5 * ONE_DAY).toISOString() },
+    { id: 'm7', user_id: 'preview-user', username: 'demo', role: 'OWNER', role_rank: 1, joined_at: new Date(NOW - 5 * ONE_DAY).toISOString() },
   ],
 };
 
@@ -1012,7 +1089,7 @@ const PREVIEW_ROOM_ACTIONS: Record<string, RoomSessionAction[]> = (() => {
   };
   for (const room of PREVIEW_ROOMS) {
     const id = room.room_id!;
-    const repo = room.repo_name;
+    const repo = room.repo_name ?? room.name ?? id;
     const members = PREVIEW_MEMBERS[id] ?? [];
     const count = VOLUMES[id] ?? 12;
     const actions = Array.from({ length: count }, (_, i) =>
@@ -1027,12 +1104,579 @@ const PREVIEW_ROOM_ACTIONS: Record<string, RoomSessionAction[]> = (() => {
   return out;
 })();
 
-// Default tool policy per role — mostly true, a few false to add nuance.
-const PREVIEW_ROOM_TOOLS: Record<string, Record<string, boolean>> = {
-  DEVELOPER: Object.fromEntries(TOOLS.map((t) => [t, !t.includes('search_issues')])),
-  REVIEWER:  Object.fromEntries(TOOLS.map((t) => [t, !['push_files', 'create_or_update_file', 'create_branch'].includes(t)])),
-  VIEWER:    Object.fromEntries(TOOLS.map((t) => [t, t.startsWith('get_') || t.startsWith('list_') || t.startsWith('search_')])),
-  OWNER:     Object.fromEntries(TOOLS.map((t) => [t, true])),
+const PREVIEW_CONNECTOR_CATALOG: ConnectorCatalogItem[] = [
+  {
+    connector_key: 'github',
+    display_name: 'GitHub',
+    description: 'Connect a room to a shared repository and branch policy surface.',
+    private_config_schema: {
+      type: 'object',
+      required: ['github_pat'],
+      properties: {
+        github_pat: {
+          type: 'string',
+          title: 'GitHub PAT',
+          description: 'Personal access token with repository access.',
+        },
+      },
+    },
+    public_config_schema: {
+      type: 'object',
+      required: ['repo'],
+      properties: {
+        repo: {
+          type: 'string',
+          title: 'Repository',
+          description: 'GitHub repository full name, for example aegis/dashboard.',
+        },
+        default_branch: {
+          type: 'string',
+          title: 'Default branch',
+          description: 'Branch Aegis should treat as the protected default.',
+        },
+      },
+    },
+    policy_catalog: {
+      protected_branch: {
+        display_name: 'Protected branch',
+        description: 'Blocks direct writes to a protected branch.',
+      },
+      freeze_window: {
+        display_name: 'Freeze window',
+        description: 'Gates risky actions during a change freeze.',
+      },
+      secret_detection: {
+        display_name: 'Secret detection',
+        description: 'Scans outbound content for secrets before execution.',
+      },
+    },
+    is_active: true,
+  },
+  {
+    connector_key: 'postgres',
+    display_name: 'PostgreSQL',
+    description: 'Connect a shared database target for query and migration governance.',
+    private_config_schema: {
+      type: 'object',
+      required: ['connection_string'],
+      properties: {
+        connection_string: {
+          type: 'string',
+          title: 'Connection string',
+          description: 'Personal PostgreSQL connection URL.',
+        },
+      },
+    },
+    public_config_schema: {
+      type: 'object',
+      required: ['database'],
+      properties: {
+        database: {
+          type: 'string',
+          title: 'Database',
+          description: 'Primary database name for this room.',
+        },
+        schema_allowlist: {
+          type: 'string',
+          title: 'Schema allowlist',
+          description: 'Comma-separated schemas the room may access.',
+        },
+      },
+    },
+    policy_catalog: {
+      destructive_sql: {
+        display_name: 'Destructive SQL',
+        description: 'Guards DROP, TRUNCATE, and similar statements.',
+      },
+      migration_gate: {
+        display_name: 'Migration gate',
+        description: 'Requires review for schema-changing statements.',
+      },
+    },
+    is_active: true,
+  },
+  {
+    connector_key: 'mongodb',
+    display_name: 'MongoDB',
+    description: 'Connect a shared MongoDB database and collection scope.',
+    private_config_schema: {
+      type: 'object',
+      required: ['connection_string'],
+      properties: {
+        connection_string: {
+          type: 'string',
+          title: 'Connection string',
+          description: 'Personal MongoDB connection URI.',
+        },
+      },
+    },
+    public_config_schema: {
+      type: 'object',
+      required: ['database'],
+      properties: {
+        database: {
+          type: 'string',
+          title: 'Database',
+          description: 'Primary database name for this room.',
+        },
+        collection_allowlist: {
+          type: 'string',
+          title: 'Collection allowlist',
+          description: 'Comma-separated collections the room may access.',
+        },
+      },
+    },
+    policy_catalog: {
+      destructive_write: {
+        display_name: 'Destructive write',
+        description: 'Gates bulk or destructive MongoDB mutations.',
+      },
+    },
+    is_active: true,
+  },
+  {
+    connector_key: 'linear',
+    display_name: 'Linear',
+    description: 'Connect a shared Linear team or project scope.',
+    private_config_schema: {
+      type: 'object',
+      required: ['api_key'],
+      properties: {
+        api_key: {
+          type: 'string',
+          title: 'API key',
+          description: 'Personal Linear API key.',
+        },
+      },
+    },
+    public_config_schema: {
+      type: 'object',
+      required: ['team_key'],
+      properties: {
+        team_key: {
+          type: 'string',
+          title: 'Team key',
+          description: 'Linear team key, for example ENG.',
+        },
+        project_key: {
+          type: 'string',
+          title: 'Project key',
+          description: 'Optional Linear project key.',
+        },
+      },
+    },
+    policy_catalog: {
+      scope_guard: {
+        display_name: 'Scope guard',
+        description: 'Ensures updates stay inside the allowed team or project.',
+      },
+    },
+    is_active: true,
+  },
+  {
+    connector_key: 'jira',
+    display_name: 'Jira',
+    description: 'Connect a shared Jira project scope for issue and workflow updates.',
+    private_config_schema: {
+      type: 'object',
+      required: ['url', 'username', 'api_token'],
+      properties: {
+        url: {
+          type: 'string',
+          title: 'Jira URL',
+          description: 'Your Jira site URL.',
+        },
+        username: {
+          type: 'string',
+          title: 'Jira username',
+          description: 'Jira account email or username.',
+        },
+        api_token: {
+          type: 'string',
+          title: 'Jira API token',
+          description: 'Stored as a secret and used for Jira API access.',
+        },
+      },
+    },
+    public_config_schema: {
+      type: 'object',
+      required: ['project_key'],
+      properties: {
+        project_key: {
+          type: 'string',
+          title: 'Project key',
+          description: 'Jira project key, for example OPS.',
+        },
+      },
+    },
+    policy_catalog: {
+      project_scope: {
+        display_name: 'Project scope',
+        description: 'Restricts changes to approved Jira projects.',
+      },
+    },
+    is_active: true,
+  },
+  {
+    connector_key: 'terraform',
+    display_name: 'Terraform',
+    description: 'Connect a shared Terraform organization or workspace scope.',
+    private_config_schema: {
+      type: 'object',
+      required: ['url', 'api_token'],
+      properties: {
+        url: {
+          type: 'string',
+          title: 'Terraform URL',
+          description: 'Terraform Cloud or Terraform Enterprise base URL.',
+        },
+        api_token: {
+          type: 'string',
+          title: 'Terraform API token',
+          description: 'Stored as a secret and used for Terraform API access.',
+        },
+      },
+    },
+    public_config_schema: {
+      type: 'object',
+      required: ['organization'],
+      properties: {
+        organization: {
+          type: 'string',
+          title: 'Organization',
+          description: 'Terraform organization slug.',
+        },
+        workspace: {
+          type: 'string',
+          title: 'Workspace',
+          description: 'Optional default Terraform workspace.',
+        },
+      },
+    },
+    policy_catalog: {
+      apply_requires_approval: {
+        display_name: 'Apply requires approval',
+        description: 'Requires review before applies can run.',
+      },
+      destroy_guard: {
+        display_name: 'Destroy guard',
+        description: 'Denies destructive Terraform actions by default.',
+      },
+    },
+    is_active: true,
+  },
+];
+
+const PREVIEW_TOOL_GROUPS_BY_CONNECTOR: Record<string, Array<{ key: string; label: string; tools: string[] }>> = {
+  github: [
+    {
+      key: 'pr_tools',
+      label: 'Pull request tools',
+      tools: ['create_pull_request', 'list_pull_requests', 'pull_request_read', 'merge_pull_request'],
+    },
+    {
+      key: 'file_change_tools',
+      label: 'File change tools',
+      tools: ['get_file_contents', 'create_or_update_file', 'push_files', 'create_branch'],
+    },
+    {
+      key: 'issue_tools',
+      label: 'Issue tools',
+      tools: ['issue_read', 'issue_write', 'list_issues', 'add_issue_comment'],
+    },
+  ],
+  postgres: [
+    {
+      key: 'sql_tools',
+      label: 'SQL tools',
+      tools: ['list_schemas', 'list_tables', 'execute_sql'],
+    },
+  ],
+  mongodb: [
+    {
+      key: 'document_tools',
+      label: 'Document tools',
+      tools: ['mongo_find', 'mongo_aggregate', 'mongo_update_many'],
+    },
+  ],
+  linear: [
+    {
+      key: 'issue_tools',
+      label: 'Issue tools',
+      tools: ['linear_search_issues', 'linear_get_issue', 'linear_create_issue', 'linear_update_issue'],
+    },
+  ],
+  jira: [
+    {
+      key: 'issue_tools',
+      label: 'Issue tools',
+      tools: ['jira_search', 'jira_get_issue', 'jira_create_issue', 'jira_update_issue', 'jira_transition_issue'],
+    },
+  ],
+  terraform: [
+    {
+      key: 'workspace_tools',
+      label: 'Workspace tools',
+      tools: ['terraform_list_workspaces', 'terraform_get_workspace_details', 'terraform_create_run'],
+    },
+    {
+      key: 'plan_apply_tools',
+      label: 'Plan and apply tools',
+      tools: ['terraform_get_plan_details', 'terraform_get_apply_details', 'terraform_apply', 'terraform_destroy'],
+    },
+  ],
+};
+
+function buildConnectorToolPolicy(
+  connectorKey: string,
+): Record<number, Record<string, boolean>> {
+  const groups = PREVIEW_TOOL_GROUPS_BY_CONNECTOR[connectorKey] ?? [];
+  const tools = groups.flatMap((group) => group.tools);
+  const readOnly = Object.fromEntries(
+    tools.map((tool) => [
+      tool,
+      /(get_|list_|search|read)/.test(tool),
+    ]),
+  );
+  const standard = Object.fromEntries(
+    tools.map((tool) => [
+      tool,
+      !/(merge|destroy|apply|update_many|execute_sql|push_files)/.test(tool),
+    ]),
+  );
+  const admin = Object.fromEntries(
+    tools.map((tool) => [
+      tool,
+      !/(destroy)/.test(tool),
+    ]),
+  );
+  const owner = Object.fromEntries(tools.map((tool) => [tool, true]));
+
+  return {
+    1: owner,
+    2: admin,
+    3: standard,
+    4: readOnly,
+    5: readOnly,
+  };
+}
+
+const PREVIEW_ROOM_CONNECTOR_TOOL_POLICIES: Record<
+  string,
+  Record<string, Record<number, Record<string, boolean>>>
+> = {
+  room_dash: {
+    github: buildConnectorToolPolicy('github'),
+    linear: buildConnectorToolPolicy('linear'),
+  },
+  room_mcp: {
+    github: buildConnectorToolPolicy('github'),
+    terraform: buildConnectorToolPolicy('terraform'),
+  },
+  room_api: {
+    github: buildConnectorToolPolicy('github'),
+    postgres: buildConnectorToolPolicy('postgres'),
+    mongodb: buildConnectorToolPolicy('mongodb'),
+  },
+};
+
+const PREVIEW_ROOM_CONNECTOR_CONFIGS: Record<string, RoomConnectorConfig[]> = {
+  room_dash: [
+    {
+      room_id: 'room_dash',
+      connector_key: 'github',
+      display_name: 'GitHub',
+      configured: true,
+      is_enabled: true,
+      public_config: {
+        repo: 'aegis/dashboard',
+        default_branch: 'main',
+      },
+      created_at: new Date(NOW - 11 * ONE_DAY).toISOString(),
+      updated_at: new Date(NOW - 2 * ONE_DAY).toISOString(),
+    },
+    {
+      room_id: 'room_dash',
+      connector_key: 'linear',
+      display_name: 'Linear',
+      configured: true,
+      is_enabled: true,
+      public_config: {
+        team_key: 'ENG',
+        project_key: 'DASH',
+      },
+      created_at: new Date(NOW - 9 * ONE_DAY).toISOString(),
+      updated_at: new Date(NOW - 4 * ONE_DAY).toISOString(),
+    },
+  ],
+  room_mcp: [
+    {
+      room_id: 'room_mcp',
+      connector_key: 'github',
+      display_name: 'GitHub',
+      configured: true,
+      is_enabled: true,
+      public_config: {
+        repo: 'aegis/mcp-server',
+        default_branch: 'main',
+      },
+      created_at: new Date(NOW - 29 * ONE_DAY).toISOString(),
+      updated_at: new Date(NOW - 7 * ONE_DAY).toISOString(),
+    },
+    {
+      room_id: 'room_mcp',
+      connector_key: 'terraform',
+      display_name: 'Terraform',
+      configured: true,
+      is_enabled: true,
+      public_config: {
+        organization: 'aegis-core',
+        workspace: 'mcp-platform',
+      },
+      created_at: new Date(NOW - 26 * ONE_DAY).toISOString(),
+      updated_at: new Date(NOW - 8 * ONE_DAY).toISOString(),
+    },
+  ],
+  room_api: [
+    {
+      room_id: 'room_api',
+      connector_key: 'github',
+      display_name: 'GitHub',
+      configured: true,
+      is_enabled: true,
+      public_config: {
+        repo: 'runaegis/api',
+        default_branch: 'main',
+      },
+      created_at: new Date(NOW - 5 * ONE_DAY).toISOString(),
+      updated_at: new Date(NOW - 2 * ONE_DAY).toISOString(),
+    },
+    {
+      room_id: 'room_api',
+      connector_key: 'postgres',
+      display_name: 'PostgreSQL',
+      configured: true,
+      is_enabled: true,
+      public_config: {
+        database: 'aegis_prod',
+        schema_allowlist: 'public, audit',
+      },
+      created_at: new Date(NOW - 4 * ONE_DAY).toISOString(),
+      updated_at: new Date(NOW - 1 * ONE_DAY).toISOString(),
+    },
+    {
+      room_id: 'room_api',
+      connector_key: 'mongodb',
+      display_name: 'MongoDB',
+      configured: true,
+      is_enabled: true,
+      public_config: {
+        database: 'events',
+        collection_allowlist: 'replays, traces',
+      },
+      created_at: new Date(NOW - 3 * ONE_DAY).toISOString(),
+      updated_at: new Date(NOW - 1 * ONE_DAY).toISOString(),
+    },
+  ],
+};
+
+const PREVIEW_ROOM_CONNECTOR_POLICIES: Record<
+  string,
+  Record<string, RoomConnectorPoliciesResponse>
+> = {
+  room_dash: {
+    github: {
+      room_id: 'room_dash',
+      connector_key: 'github',
+      can_manage: true,
+      policies: [
+        {
+          policy_key: 'protected_branch',
+          display_name: 'Protected branch',
+          description: 'Direct writes to protected branches are rerouted or blocked.',
+          effect: 'DENY',
+          is_enabled: true,
+        },
+        {
+          policy_key: 'freeze_window',
+          display_name: 'Freeze window',
+          description: 'Writes during a freeze require human sign-off.',
+          effect: 'REQUIRE_APPROVAL',
+          minimum_role_rank_required: 2,
+          is_enabled: true,
+        },
+        {
+          policy_key: 'secret_detection',
+          display_name: 'Secret detection',
+          description: 'Outbound secrets are blocked before execution.',
+          effect: 'DENY',
+          is_enabled: true,
+        },
+      ],
+    },
+    linear: {
+      room_id: 'room_dash',
+      connector_key: 'linear',
+      can_manage: true,
+      policies: [
+        {
+          policy_key: 'scope_guard',
+          display_name: 'Scope guard',
+          description: 'Writes stay inside the allowed team and project.',
+          effect: 'DENY',
+          is_enabled: true,
+        },
+      ],
+    },
+  },
+  room_mcp: {
+    terraform: {
+      room_id: 'room_mcp',
+      connector_key: 'terraform',
+      can_manage: true,
+      policies: [
+        {
+          policy_key: 'apply_requires_approval',
+          display_name: 'Apply requires approval',
+          description: 'Applies pause for review before they execute.',
+          effect: 'REQUIRE_APPROVAL',
+          minimum_role_rank_required: 1,
+          is_enabled: true,
+        },
+        {
+          policy_key: 'destroy_guard',
+          display_name: 'Destroy guard',
+          description: 'Destroy operations are blocked by default.',
+          effect: 'DENY',
+          is_enabled: true,
+        },
+      ],
+    },
+  },
+  room_api: {
+    postgres: {
+      room_id: 'room_api',
+      connector_key: 'postgres',
+      can_manage: true,
+      policies: [
+        {
+          policy_key: 'destructive_sql',
+          display_name: 'Destructive SQL',
+          description: 'DROP and TRUNCATE are denied.',
+          effect: 'DENY',
+          is_enabled: true,
+        },
+        {
+          policy_key: 'migration_gate',
+          display_name: 'Migration gate',
+          description: 'Schema changes require review.',
+          effect: 'REQUIRE_APPROVAL',
+          minimum_role_rank_required: 1,
+          is_enabled: true,
+        },
+      ],
+    },
+  },
 };
 
 // Freeze windows
@@ -1056,6 +1700,214 @@ const PREVIEW_FREEZE_WINDOWS = [
     created_at: new Date(NOW - 5 * ONE_DAY).toISOString(),
   },
 ];
+
+const PREVIEW_PRIVATE_CONNECTOR_STATUS: Record<string, PrivateConnectorCredentialStatus> = {
+  github: {
+    connector_key: 'github',
+    configured: true,
+    configured_keys: ['github_pat'],
+    credential_metadata: null,
+    created_at: new Date(NOW - 18 * ONE_DAY).toISOString(),
+    updated_at: new Date(NOW - 4 * ONE_DAY).toISOString(),
+    revoked_at: null,
+  },
+  postgres: {
+    connector_key: 'postgres',
+    configured: true,
+    configured_keys: ['connection_string'],
+    credential_metadata: null,
+    created_at: new Date(NOW - 16 * ONE_DAY).toISOString(),
+    updated_at: new Date(NOW - 6 * ONE_DAY).toISOString(),
+    revoked_at: null,
+  },
+};
+
+function getPreviewRoleRankForUser(roomId: string, userId = 'preview-user'): number {
+  const member = (PREVIEW_MEMBERS[roomId] ?? []).find((item) => item.user_id === userId);
+  return member?.role_rank ?? 1;
+}
+
+function getPreviewRoomToolMatrix(roomId: string) {
+  const roleRank = getPreviewRoleRankForUser(roomId);
+  const visibleRoles = PREVIEW_ROOM_ROLES[roomId]?.roles ?? { '1': 'Owner', '2': 'Admin', '3': 'Developer' };
+  void visibleRoles;
+  const configuredByConnector = Object.fromEntries(
+    (PREVIEW_ROOM_CONNECTOR_CONFIGS[roomId] ?? []).map((config) => [config.connector_key, config]),
+  );
+
+  return {
+    room_id: roomId,
+    role_rank: roleRank,
+    connectors: PREVIEW_CONNECTOR_CATALOG
+      .filter((connector) => {
+        if (roleRank <= 2) return true;
+        return Boolean(configuredByConnector[connector.connector_key]?.configured);
+      })
+      .map((connector) => {
+        const configured = Boolean(configuredByConnector[connector.connector_key]?.configured);
+        const privateConfigured = Boolean(PREVIEW_PRIVATE_CONNECTOR_STATUS[connector.connector_key]?.configured);
+        return {
+          connector_key: connector.connector_key,
+          display_name: connector.display_name,
+          description: connector.description ?? null,
+          configured,
+          private_credentials_configured: privateConfigured,
+          can_configure_connector: roleRank <= 2,
+          tool_groups:
+            configured && privateConfigured
+              ? PREVIEW_TOOL_GROUPS_BY_CONNECTOR[connector.connector_key] ?? []
+              : [],
+        };
+      }),
+  };
+}
+
+const PREVIEW_USER_PROMPTS: UserPrompt[] = [
+  {
+    id: 'prompt_1',
+    user_id: 'preview-user',
+    name: 'PR review checklist',
+    description: 'Run before approving a merge.',
+    prompt:
+      'Review the PR for {repo}.\n\n' +
+      '- Summarize intent in 3 bullets.\n' +
+      '- Call out security + correctness risks.\n' +
+      '- Identify migrations or rollout concerns.\n' +
+      '- Recommend tests to add or run.\n',
+    created_at: new Date(NOW - 21 * ONE_DAY).toISOString(),
+    updated_at: new Date(NOW - 3 * ONE_DAY).toISOString(),
+  },
+  {
+    id: 'prompt_2',
+    user_id: 'preview-user',
+    name: 'Incident note',
+    description: 'Draft a crisp postmortem update.',
+    prompt:
+      'Write an incident update for {incident_id}.\n\n' +
+      'Include:\n' +
+      '- Impact\n' +
+      '- Current status\n' +
+      '- Next steps\n' +
+      '- ETA (if known)\n',
+    created_at: new Date(NOW - 14 * ONE_DAY).toISOString(),
+    updated_at: new Date(NOW - 14 * ONE_DAY).toISOString(),
+  },
+];
+
+const PREVIEW_MEMORIES: Memory[] = [
+  {
+    id: 'mem_1',
+    user_id: 'preview-user',
+    title: 'Branch rules',
+    memory:
+      'Never push to `main`.\n\n' +
+      '- Create a feature branch\n' +
+      '- Open a PR\n' +
+      '- Wait for CI + approval\n',
+    is_pinned: true,
+    created_at: new Date(NOW - 40 * ONE_DAY).toISOString(),
+    updated_at: new Date(NOW - 12 * ONE_DAY).toISOString(),
+  },
+  {
+    id: 'mem_2',
+    user_id: 'preview-user',
+    title: 'Release checklist',
+    memory:
+      'Before shipping:\n\n' +
+      '1. Confirm freeze windows\n' +
+      '2. Verify migrations have rollback\n' +
+      '3. Capture audit export\n',
+    is_pinned: false,
+    created_at: new Date(NOW - 18 * ONE_DAY).toISOString(),
+    updated_at: new Date(NOW - 2 * ONE_DAY).toISOString(),
+  },
+];
+
+const PREVIEW_NOTIFICATION_PREFERENCES: NotificationPreferences = {
+  ...buildDefaultNotificationPreferences(),
+  created_at: new Date(NOW - 30 * ONE_DAY).toISOString(),
+  updated_at: new Date(NOW - 2 * ONE_DAY).toISOString(),
+};
+
+const PREVIEW_NOTIFICATIONS: UserNotification[] = [
+  {
+    id: 'notif_approval_1',
+    notification_type: 'APPROVAL',
+    connector_key: 'github',
+    tool_name: 'merge_pull_request',
+    target_descriptor: 'runaegis/api#42',
+    room_id: 'room_api',
+    room_name: 'API Reliability',
+    is_read: false,
+    read_at: null,
+    created_at: new Date(NOW - 18 * 60 * 1000).toISOString(),
+  },
+  {
+    id: 'notif_deny_1',
+    notification_type: 'DENY',
+    connector_key: 'terraform',
+    tool_name: 'terraform_apply',
+    target_descriptor: 'prod-network / aws_vpc.main',
+    room_id: 'room_mcp',
+    room_name: 'MCP Platform',
+    is_read: false,
+    read_at: null,
+    created_at: new Date(NOW - 52 * 60 * 1000).toISOString(),
+  },
+  {
+    id: 'notif_rewrite_1',
+    notification_type: 'REWRITE',
+    connector_key: 'github-actions',
+    tool_name: 'workflow_dispatch',
+    target_descriptor: 'aegis/dashboard · deploy-preview.yml',
+    room_id: 'room_dash',
+    room_name: 'Dashboard Control Plane',
+    is_read: false,
+    read_at: null,
+    created_at: new Date(NOW - 95 * 60 * 1000).toISOString(),
+  },
+  {
+    id: 'notif_allow_1',
+    notification_type: 'ALLOW',
+    connector_key: 'mongodb',
+    tool_name: 'mongodb_find',
+    target_descriptor: 'ops.events / production',
+    room_id: 'room_api',
+    room_name: 'API Reliability',
+    is_read: true,
+    read_at: new Date(NOW - 4 * 60 * 60 * 1000).toISOString(),
+    created_at: new Date(NOW - 4 * 60 * 60 * 1000).toISOString(),
+  },
+  {
+    id: 'notif_approval_2',
+    notification_type: 'APPROVAL',
+    connector_key: 'jira',
+    tool_name: 'jira_update_issue',
+    target_descriptor: 'PLAT-208',
+    room_id: 'room_mcp',
+    room_name: 'MCP Platform',
+    is_read: true,
+    read_at: new Date(NOW - 10 * 60 * 60 * 1000).toISOString(),
+    created_at: new Date(NOW - 11 * 60 * 60 * 1000).toISOString(),
+  },
+];
+
+function filterPreviewNotifications(unreadOnly = false): UserNotification[] {
+  return PREVIEW_NOTIFICATIONS
+    .filter((notification) => {
+      const type = normalizeNotificationType(notification.notification_type);
+      if (!type) return false;
+      if (!isNotificationTypeEnabled(PREVIEW_NOTIFICATION_PREFERENCES, type)) {
+        return false;
+      }
+      if (unreadOnly && notification.is_read) return false;
+      return true;
+    })
+    .sort(
+      (a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+    );
+}
 
 // Computed metrics
 function computeMetrics(runs: SessionAction[]): Metrics {
@@ -1228,13 +2080,18 @@ export function installPreviewApi() {
   };
   api.getRecentActionCount = async () => [{ count: RUNS.slice(0, 3).length }];
 
-  api.getUserTokenUsage = async () => ({
-    items: TOKEN_METER,
-    total: TOKEN_METER.length,
-    page: 1,
-    page_size: TOKEN_METER.length,
-    pages: 1,
-  });
+  api.getUserTokenUsage = async (_userId, page = 1, page_size = 20) => {
+    const safePage = Math.max(1, page);
+    const safePageSize = Math.max(1, page_size);
+    const start = (safePage - 1) * safePageSize;
+    return {
+      items: TOKEN_METER.slice(start, start + safePageSize),
+      total: TOKEN_METER.length,
+      page: safePage,
+      page_size: safePageSize,
+      pages: Math.max(1, Math.ceil(TOKEN_METER.length / safePageSize)),
+    };
+  };
 
   api.getUserTokenUsageAll = async () => [...TOKEN_METER];
 
@@ -1250,17 +2107,116 @@ export function installPreviewApi() {
     success: true,
     message: "Slack disconnected successfully",
   });
+  api.getNotificationPreferences = async () => ({
+    ...PREVIEW_NOTIFICATION_PREFERENCES,
+  });
+  api.updateNotificationPreferences = async (payload) => {
+    if (typeof payload.notify_allow === 'boolean') {
+      PREVIEW_NOTIFICATION_PREFERENCES.notify_allow = payload.notify_allow;
+    }
+    if (typeof payload.notify_deny === 'boolean') {
+      PREVIEW_NOTIFICATION_PREFERENCES.notify_deny = payload.notify_deny;
+    }
+    if (typeof payload.notify_approval === 'boolean') {
+      PREVIEW_NOTIFICATION_PREFERENCES.notify_approval = payload.notify_approval;
+    }
+    if (typeof payload.notify_rewrite === 'boolean') {
+      PREVIEW_NOTIFICATION_PREFERENCES.notify_rewrite = payload.notify_rewrite;
+    }
+    PREVIEW_NOTIFICATION_PREFERENCES.updated_at = new Date().toISOString();
+    return { ...PREVIEW_NOTIFICATION_PREFERENCES };
+  };
+  api.getNotifications = async (options = {}) => {
+    const limit = Math.min(Math.max(Math.trunc(options.limit ?? 20), 1), 100);
+    const offset = Math.max(Math.trunc(options.offset ?? 0), 0);
+    const filtered = filterPreviewNotifications(Boolean(options.unread_only));
+    return {
+      items: filtered.slice(offset, offset + limit).map((item) => ({ ...item })),
+      total: filtered.length,
+      unread_count: filterPreviewNotifications(true).length,
+      limit,
+      offset,
+    };
+  };
+  api.markNotificationRead = async (notificationId: string) => {
+    const notification = PREVIEW_NOTIFICATIONS.find((item) => item.id === notificationId);
+    if (!notification) {
+      throw new Error('Notification not found');
+    }
+    notification.is_read = true;
+    notification.read_at = new Date().toISOString();
+    return { ...notification };
+  };
+  api.markAllNotificationsRead = async () => {
+    const unread = PREVIEW_NOTIFICATIONS.filter((item) => !item.is_read);
+    const now = new Date().toISOString();
+    unread.forEach((item) => {
+      item.is_read = true;
+      item.read_at = now;
+    });
+    return { success: true, updated_count: unread.length };
+  };
   api.syncRepos = async () => ({ success: true, synced: PREVIEW_REPOS.length });
   api.setPermission = async () => ({ success: true });
   api.setPermissions = async () => ({ success: true });
-
-  api.getUserPolicy = async () => '111111110111'; // 11 of 12 armed (secret_detection off); new connector policies armed
-  api.upsertUserPolicy = async () => undefined;
 
   api.getMyRooms = async () => PREVIEW_ROOMS;
   api.getRoomDetails = async (roomId: string) =>
     PREVIEW_ROOM_DETAILS[roomId] ?? PREVIEW_ROOMS[0];
   api.getRoomMembers = async (roomId: string) => PREVIEW_MEMBERS[roomId] ?? [];
+  api.getMyRoomMembership = async (roomId: string) => {
+    const member = (PREVIEW_MEMBERS[roomId] ?? []).find((item) => item.user_id === 'preview-user');
+    if (!member) return null;
+    return {
+      room_id: roomId,
+      user_id: member.user_id ?? null,
+      role: member.role ?? null,
+      role_rank: member.role_rank ?? null,
+    };
+  };
+  api.getRoomRoles = async (roomId: string) =>
+    PREVIEW_ROOM_ROLES[roomId] ?? {
+      room_id: roomId,
+      roles: { '1': 'Owner', '2': 'Admin', '3': 'Developer' },
+    };
+  api.updateRoomRoles = async (roomId: string, roles) => {
+    PREVIEW_ROOM_ROLES[roomId] = { room_id: roomId, roles: { ...roles } };
+    return PREVIEW_ROOM_ROLES[roomId];
+  };
+  api.updateRoomMemberRank = async (roomId: string, userId: string, roleRank: number) => {
+    const roleLabel = PREVIEW_ROOM_ROLES[roomId]?.roles?.[String(roleRank)] ?? `Rank ${roleRank}`;
+    const member = (PREVIEW_MEMBERS[roomId] ?? []).find((item) => item.user_id === userId);
+    if (!member) throw new Error('Member not found');
+    member.role_rank = roleRank;
+    member.role = roleLabel;
+    return member;
+  };
+  api.removeRoomMember = async (roomId: string, userId: string) => {
+    const members = PREVIEW_MEMBERS[roomId] ?? [];
+    const idx = members.findIndex((item) => item.user_id === userId);
+    if (idx >= 0) members.splice(idx, 1);
+    return { success: true };
+  };
+  api.transferRoomOwnership = async (roomId: string, newOwnerId: string) => {
+    const members = PREVIEW_MEMBERS[roomId] ?? [];
+    const currentOwner = members.find((item) => item.role_rank === 1);
+    const nextOwner = members.find((item) => item.user_id === newOwnerId);
+    if (!nextOwner) throw new Error('Member not found');
+    if (currentOwner) {
+      currentOwner.role_rank = 2;
+      currentOwner.role = PREVIEW_ROOM_ROLES[roomId]?.roles?.['2'] ?? 'Admin';
+    }
+    nextOwner.role_rank = 1;
+    nextOwner.role = 'Owner';
+    if (PREVIEW_ROOM_DETAILS[roomId]) {
+      PREVIEW_ROOM_DETAILS[roomId].owner_username = nextOwner.username;
+    }
+    const summary = PREVIEW_ROOMS.find((room) => room.room_id === roomId);
+    if (summary) {
+      summary.owner_username = nextOwner.username;
+    }
+    return { success: true };
+  };
   api.getRoomInvites = async (roomId: string) => PREVIEW_INVITES[roomId] ?? [];
   // Activity tab inside a room. Returns paginated `RoomSessionAction[]`
   // pinned to that room — same shape as the real endpoint
@@ -1278,9 +2234,82 @@ export function installPreviewApi() {
     const items = all.slice(start, start + pageSize);
     return { items, total, page: safePage, page_size: pageSize, pages };
   };
-  api.getRoomTools = async (_roomId: string, role: string) =>
-    PREVIEW_ROOM_TOOLS[role] ?? PREVIEW_ROOM_TOOLS.DEVELOPER;
-  api.updateRoomTools = async () => ({ success: true });
+  api.getRoomTools = async (roomId: string) => getPreviewRoomToolMatrix(roomId);
+  api.getRoomConnectorRankTools = async (roomId: string, connectorKey: string, roleRank: number) =>
+    PREVIEW_ROOM_CONNECTOR_TOOL_POLICIES[roomId]?.[connectorKey]?.[roleRank] ??
+    buildConnectorToolPolicy(connectorKey)[roleRank] ??
+    {};
+  api.updateRoomConnectorRankTools = async (
+    roomId: string,
+    connectorKey: string,
+    roleRank: number,
+    tools: Record<string, boolean>,
+  ) => {
+    if (!PREVIEW_ROOM_CONNECTOR_TOOL_POLICIES[roomId]) {
+      PREVIEW_ROOM_CONNECTOR_TOOL_POLICIES[roomId] = {};
+    }
+    if (!PREVIEW_ROOM_CONNECTOR_TOOL_POLICIES[roomId][connectorKey]) {
+      PREVIEW_ROOM_CONNECTOR_TOOL_POLICIES[roomId][connectorKey] = buildConnectorToolPolicy(connectorKey);
+    }
+    PREVIEW_ROOM_CONNECTOR_TOOL_POLICIES[roomId][connectorKey][roleRank] = { ...tools };
+    return PREVIEW_ROOM_CONNECTOR_TOOL_POLICIES[roomId][connectorKey][roleRank];
+  };
+  api.getRoomConnectorConfigs = async (roomId: string) =>
+    PREVIEW_ROOM_CONNECTOR_CONFIGS[roomId] ?? [];
+  api.saveRoomConnectorConfig = async (roomId: string, connectorKey: string, publicConfig: Record<string, unknown>) => {
+    const existing = PREVIEW_ROOM_CONNECTOR_CONFIGS[roomId] ?? (PREVIEW_ROOM_CONNECTOR_CONFIGS[roomId] = []);
+    const idx = existing.findIndex((item) => item.connector_key === connectorKey);
+    const catalog = PREVIEW_CONNECTOR_CATALOG.find((item) => item.connector_key === connectorKey);
+    const next: RoomConnectorConfig = {
+      room_id: roomId,
+      connector_key: connectorKey,
+      display_name: catalog?.display_name ?? connectorKey,
+      configured: true,
+      is_enabled: true,
+      public_config: { ...publicConfig },
+      created_at: idx >= 0 ? existing[idx].created_at : new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    if (idx >= 0) existing[idx] = next;
+    else existing.push(next);
+    return next;
+  };
+  api.disableRoomConnector = async (roomId: string, connectorKey: string) => {
+    const existing = PREVIEW_ROOM_CONNECTOR_CONFIGS[roomId] ?? [];
+    const idx = existing.findIndex((item) => item.connector_key === connectorKey);
+    if (idx >= 0) existing.splice(idx, 1);
+    return { success: true };
+  };
+  api.getRoomConnectorPolicies = async (roomId: string, connectorKey: string) =>
+    PREVIEW_ROOM_CONNECTOR_POLICIES[roomId]?.[connectorKey] ?? {
+      room_id: roomId,
+      connector_key: connectorKey,
+      can_manage: true,
+      policies: [],
+    };
+  api.updateRoomConnectorPolicies = async (roomId: string, connectorKey: string, policies) => {
+    const current = PREVIEW_ROOM_CONNECTOR_POLICIES[roomId]?.[connectorKey] ?? {
+      room_id: roomId,
+      connector_key: connectorKey,
+      can_manage: true,
+      policies: [],
+    };
+    const byKey = Object.fromEntries(current.policies.map((policy) => [policy.policy_key, policy]));
+    for (const [policyKey, patch] of Object.entries(policies)) {
+      byKey[policyKey] = {
+        ...(byKey[policyKey] ?? { policy_key: policyKey }),
+        ...patch,
+      };
+    }
+    if (!PREVIEW_ROOM_CONNECTOR_POLICIES[roomId]) {
+      PREVIEW_ROOM_CONNECTOR_POLICIES[roomId] = {};
+    }
+    PREVIEW_ROOM_CONNECTOR_POLICIES[roomId][connectorKey] = {
+      ...current,
+      policies: Object.values(byKey),
+    };
+    return PREVIEW_ROOM_CONNECTOR_POLICIES[roomId][connectorKey];
+  };
   // Room MCP integration URL — rendered into the copyable Integration
   // field on the rooms page. Without this mock the Promise.all on
   // /dashboard/rooms rejects and the whole detail panel goes empty.
@@ -1305,30 +2334,43 @@ export function installPreviewApi() {
   //     immediately without a refetch race
   // Net effect: creating a new room surfaces all OWNER-only affordances
   // (Generate invite, etc.) the same way the seeded demo rooms do.
-  api.createRoom = async (repoId: string) => {
+  api.createRoom = async (payload: Parameters<typeof api.createRoom>[0]) => {
     const newId = `room_${Date.now()}`;
     const createdAt = new Date().toISOString();
+    const trimmedName = payload.name.trim();
     const newRoom: RoomSummary = {
       id: newId,
       room_id: newId,
-      repo_name: repoId,
+      name: trimmedName,
+      description: payload.description?.trim() || null,
+      room_type: payload.room_type ?? 'shared',
+      repo_name: payload.repo_name?.trim() || null,
       owner_username: 'demo',
       role: 'OWNER',
+      role_rank: 1,
       created_at: createdAt,
     };
     PREVIEW_ROOMS.push(newRoom);
     PREVIEW_ROOM_DETAILS[newId] = { ...newRoom };
+    PREVIEW_ROOM_ROLES[newId] = {
+      room_id: newId,
+      roles: { '1': 'Owner', '2': 'Admin', '3': 'Developer' },
+    };
     PREVIEW_MEMBERS[newId] = [
       {
         id: `m_${Date.now()}`,
         user_id: 'preview-user',
         username: 'demo',
         role: 'OWNER',
+        role_rank: 1,
         joined_at: createdAt,
       },
     ];
     PREVIEW_INVITES[newId] = [];
     PREVIEW_ROOM_ACTIONS[newId] = [];
+    PREVIEW_ROOM_CONNECTOR_CONFIGS[newId] = [];
+    PREVIEW_ROOM_CONNECTOR_TOOL_POLICIES[newId] = {};
+    PREVIEW_ROOM_CONNECTOR_POLICIES[newId] = {};
     return newRoom;
   };
   // Create an invite AND persist it into PREVIEW_INVITES so a refetch
@@ -1350,6 +2392,25 @@ export function installPreviewApi() {
     return newInvite;
   };
   api.joinRoom = async () => ({ success: true });
+  api.leaveRoom = async (roomId: string) => {
+    const members = PREVIEW_MEMBERS[roomId] ?? [];
+    const idx = members.findIndex((member) => member.user_id === 'preview-user');
+    if (idx >= 0) members.splice(idx, 1);
+    return { success: true };
+  };
+  api.deleteRoom = async (roomId: string) => {
+    const roomIdx = PREVIEW_ROOMS.findIndex((room) => room.room_id === roomId);
+    if (roomIdx >= 0) PREVIEW_ROOMS.splice(roomIdx, 1);
+    delete PREVIEW_ROOM_DETAILS[roomId];
+    delete PREVIEW_MEMBERS[roomId];
+    delete PREVIEW_INVITES[roomId];
+    delete PREVIEW_ROOM_ACTIONS[roomId];
+    delete PREVIEW_ROOM_ROLES[roomId];
+    delete PREVIEW_ROOM_CONNECTOR_CONFIGS[roomId];
+    delete PREVIEW_ROOM_CONNECTOR_POLICIES[roomId];
+    delete PREVIEW_ROOM_CONNECTOR_TOOL_POLICIES[roomId];
+    return { success: true };
+  };
 
   api.getFreezeWindows = async () => PREVIEW_FREEZE_WINDOWS;
   api.createFreezeWindow = async (payload: any) => {
@@ -1368,47 +2429,117 @@ export function installPreviewApi() {
     return { success: true };
   };
 
-  api.saveUser = async (u) => ({
-    ...u,
-    id: 'preview-user',
-    username: 'demo',
-    email: 'preview@runaegis.co',
-    github_user_id: 0,
-    created_at: new Date().toISOString(),
-    postgres_connection_string: null,
-    jira_url: null,
-    jira_username: null,
-    jira_api_token: null,
-    mongodb_connection_string: null,
-    linear_api_key: null,
-    terraform_api_token: null,
-    terraform_url: null,
-  });
+  api.getUserPrompts = async () => {
+    // Matches backend ordering: updated_at desc, created_at desc, id asc.
+    return [...PREVIEW_USER_PROMPTS].sort((a, b) => {
+      const ta = new Date(a.updated_at ?? a.created_at ?? 0).getTime();
+      const tb = new Date(b.updated_at ?? b.created_at ?? 0).getTime();
+      if (ta !== tb) return tb - ta;
+      const ca = new Date(a.created_at ?? 0).getTime();
+      const cb = new Date(b.created_at ?? 0).getTime();
+      if (ca !== cb) return cb - ca;
+      return (a.id ?? '').localeCompare(b.id ?? '');
+    });
+  };
+  api.createUserPrompt = async (payload: UserPromptPayload) => {
+    const promptText = String(payload.prompt ?? '').trim();
+    if (!promptText) throw new Error('prompt is required');
+    const now = new Date().toISOString();
+    const created: UserPrompt = {
+      id: `prompt_${Date.now()}`,
+      user_id: 'preview-user',
+      prompt: promptText,
+      name: (payload.name ?? '').trim() || 'temp name',
+      description: payload.description ? payload.description.trim() : null,
+      created_at: now,
+      updated_at: now,
+    };
+    PREVIEW_USER_PROMPTS.unshift(created);
+    return created;
+  };
+  api.updateUserPrompt = async (promptId: string, payload: UserPromptPayload) => {
+    const idx = PREVIEW_USER_PROMPTS.findIndex((p) => p.id === promptId);
+    if (idx < 0) throw new Error('Prompt not found');
+    const promptText = String(payload.prompt ?? '').trim();
+    if (!promptText) throw new Error('prompt is required');
+    const row = PREVIEW_USER_PROMPTS[idx];
+    row.prompt = promptText;
+    if (payload.name !== undefined) {
+      row.name = payload.name.trim() || 'temp name';
+    }
+    if (payload.description !== undefined) {
+      row.description = payload.description.trim() || null;
+    }
+    row.updated_at = new Date().toISOString();
+    return row;
+  };
+
+  api.getMemories = async (userId: string) =>
+    PREVIEW_MEMORIES.filter((m) => m.user_id === (userId || 'preview-user'));
+  api.updateMemory = async (
+    memoryId: string,
+    userId: string,
+    payload: Partial<Pick<Memory, 'title' | 'memory' | 'is_pinned'>>,
+  ) => {
+    const idx = PREVIEW_MEMORIES.findIndex((m) => m.id === memoryId && m.user_id === userId);
+    if (idx < 0) throw new Error('Memory not found');
+    const row = PREVIEW_MEMORIES[idx];
+    if (payload.title !== undefined) row.title = String(payload.title);
+    if (payload.memory !== undefined) row.memory = String(payload.memory);
+    if (payload.is_pinned !== undefined) row.is_pinned = !!payload.is_pinned;
+    row.updated_at = new Date().toISOString();
+    return row;
+  };
+  api.deleteMemory = async (memoryId: string, userId: string) => {
+    const idx = PREVIEW_MEMORIES.findIndex((m) => m.id === memoryId && m.user_id === userId);
+    if (idx >= 0) PREVIEW_MEMORIES.splice(idx, 1);
+  };
+
+  api.saveUser = async (u) => {
+    void u;
+    return {
+      id: 'preview-user',
+      name: 'Demo',
+      username: 'demo',
+      email: 'preview@runaegis.co',
+      onboarding_status: false,
+      created_at: new Date().toISOString(),
+    };
+  };
   api.getUserDetails = async () => ({
     id: 'preview-user',
+    name: 'Demo',
     username: 'demo',
     email: 'preview@runaegis.co',
-    github_user_id: 0,
-    access_token: null,
-    github_pat: null,
-    postgres_connection_string: null,
-    jira_url: null,
-    jira_username: null,
-    jira_api_token: null,
-    mongodb_connection_string: null,
-    linear_api_key: null,
-    terraform_api_token: null,
-    terraform_url: null,
+    avatar_url: null,
+    email_verified_at: new Date().toISOString(),
+    is_active: true,
+    primary_auth_method: 'preview',
+    onboarding_status: true,
+    created_at: new Date().toISOString(),
   });
-  // Preview onboarding when the user is actually ON /onboarding (so
-  // designers can review the flow). Anywhere else, claim "complete" so
-  // they don't get pulled back into the wizard mid-session. The numeric
-  // value matters: > 4 redirects to /dashboard, 1..4 renders that step.
-  api.getOnboardingStep = async () => {
+  api.getOnboardingStatus = async () => {
     const onOnboarding =
       typeof window !== 'undefined' &&
       window.location.pathname.startsWith('/onboarding');
-    return { onboarding_step: onOnboarding ? 1 : 6 };
+    return { onboarding_status: !onOnboarding };
   };
-  api.updateOnboardingStep = async () => ({ success: true });
+  api.updateOnboardingStatus = async (status) => ({ onboarding_status: status });
+  api.getConnectorCatalog = async () => PREVIEW_CONNECTOR_CATALOG;
+  api.getPrivateConnectorCredentials = async () => Object.values(PREVIEW_PRIVATE_CONNECTOR_STATUS);
+  api.savePrivateConnectorCredentials = async (connectorKey, credentials) => {
+    const now = new Date().toISOString();
+    const prev = PREVIEW_PRIVATE_CONNECTOR_STATUS[connectorKey];
+    const next: PrivateConnectorCredentialStatus = {
+      connector_key: connectorKey,
+      configured: true,
+      configured_keys: Object.keys(credentials),
+      credential_metadata: null,
+      created_at: prev?.created_at ?? now,
+      updated_at: now,
+      revoked_at: null,
+    };
+    PREVIEW_PRIVATE_CONNECTOR_STATUS[connectorKey] = next;
+    return next;
+  };
 }

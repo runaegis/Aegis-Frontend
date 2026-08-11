@@ -11,11 +11,11 @@
  *   2. `deriveTarget` — the connector-appropriate "target" of the action
  *      (repo+branch for GitHub, database+table for Postgres, channel for
  *      Slack, workspace+resource for Terraform, project+issue for Linear/
- *      Jira). The backend only persists `target_repo`/`target_branch` today,
- *      so for non-GitHub connectors we read the tool's `arguments` (the only
- *      place the resource currently lives) and degrade to null — the UI
- *      renders a muted dash rather than a wrong GitHub value. When the
- *      backend adds a generic `target` field this is the one place to wire it.
+ *      Jira). New rows can provide `connector_key`, `target_type`,
+ *      `target_display`, and `target_metadata`; older rows still fall back to
+ *      `target_repo` / `target_branch` plus the tool arguments. Keeping the
+ *      logic here means every dashboard surface stays consistent as the
+ *      backend rollout mixes old and new shapes.
  */
 
 import type { ConnectorId } from '@/components/ui/ConnectorMark';
@@ -37,6 +37,17 @@ const TOOL_CONNECTOR: Record<string, ConnectorId> = {
   run_migration: 'postgres',
   list_tables: 'postgres',
   describe_table: 'postgres',
+  // MongoDB (tool names vary; keep explicit mappings for the common ones)
+  mongo_find: 'mongodb',
+  mongo_aggregate: 'mongodb',
+  mongo_insert: 'mongodb',
+  mongo_update: 'mongodb',
+  mongo_delete: 'mongodb',
+  mongodb_find: 'mongodb',
+  mongodb_aggregate: 'mongodb',
+  mongodb_insert: 'mongodb',
+  mongodb_update: 'mongodb',
+  mongodb_delete: 'mongodb',
   // Terraform
   terraform_plan: 'terraform',
   terraform_apply: 'terraform',
@@ -85,9 +96,31 @@ export function connectorForTool(toolName?: string | null): ConnectorId {
   if (/linear/.test(t)) return 'linear';
   if (/slack|message|channel|notify/.test(t)) return 'slack';
   if (/sql|query|migration|psql|postgres|truncate|(^|_)drop_|(^|_)table(_|$)|schema/.test(t)) return 'postgres';
+  if (/mongo|mongodb/.test(t)) return 'mongodb';
   if (/workflow|secret|dispatch/.test(t)) return 'github-actions';
   if (/memory/.test(t)) return 'memory';
   return 'github';
+}
+
+const CONNECTOR_KEY_ALIASES: Record<string, ConnectorId> = {
+  github: 'github',
+  github_actions: 'github-actions',
+  'github-actions': 'github-actions',
+  postgres: 'postgres',
+  postgresql: 'postgres',
+  mongodb: 'mongodb',
+  mongo: 'mongodb',
+  terraform: 'terraform',
+  linear: 'linear',
+  jira: 'jira',
+  slack: 'slack',
+  memory: 'memory',
+};
+
+function connectorIdFromKey(connectorKey?: string | null): ConnectorId | null {
+  const normalized = (connectorKey ?? '').trim().toLowerCase();
+  if (!normalized) return null;
+  return CONNECTOR_KEY_ALIASES[normalized] ?? null;
 }
 
 export interface RunTarget {
@@ -123,45 +156,146 @@ function tableFromSql(sql: string | null): string | null {
  */
 export interface TargetSource {
   tool_name?: string | null;
-  arguments?: Record<string, any> | null;
+  connector_key?: string | null;
+  arguments?: Record<string, unknown> | null;
+  target_type?: string | null;
+  target_ref?: string | null;
+  target_display?: string | null;
+  target_metadata?: Record<string, unknown> | null;
+  target_descriptor?: string | null;
   target_repo?: string | null;
   target_branch?: string | null;
 }
 
+export function connectorForAction(action: TargetSource): ConnectorId {
+  return connectorIdFromKey(action.connector_key) ?? connectorForTool(action.tool_name);
+}
+
+function readTargetMetadata(
+  action: TargetSource,
+): Record<string, unknown> | null {
+  if (!action.target_metadata || typeof action.target_metadata !== 'object') {
+    return null;
+  }
+  return action.target_metadata as Record<string, unknown>;
+}
+
+function kindFromTargetType(
+  targetType: string | null | undefined,
+  connector: ConnectorId,
+): string {
+  const raw = (targetType ?? '').trim();
+  if (raw) {
+    const tail = raw.split('.').pop()?.split('_').filter(Boolean) ?? [];
+    if (tail.length > 0) {
+      return tail
+        .join(' ')
+        .toUpperCase();
+    }
+  }
+
+  switch (connector) {
+    case 'postgres':
+    case 'mongodb':
+      return 'DATABASE';
+    case 'terraform':
+      return 'WORKSPACE';
+    case 'linear':
+    case 'jira':
+      return 'PROJECT';
+    case 'slack':
+      return 'CHANNEL';
+    case 'memory':
+      return 'MEMORY';
+    default:
+      return 'REPO';
+  }
+}
+
+function targetFromNewFields(
+  action: TargetSource,
+  connector: ConnectorId,
+): RunTarget | null {
+  const metadata = readTargetMetadata(action);
+  const primary =
+    str(metadata?.primary) ??
+    str(metadata?.label) ??
+    str(metadata?.display) ??
+    str(metadata?.name) ??
+    str(action.target_display) ??
+    str(action.target_descriptor);
+  const secondary =
+    str(metadata?.secondary) ??
+    str(metadata?.branch) ??
+    str(metadata?.table) ??
+    str(metadata?.collection) ??
+    str(metadata?.resource) ??
+    str(metadata?.workflow) ??
+    str(metadata?.issue) ??
+    str(metadata?.key);
+
+  if (!primary && !secondary) return null;
+
+  return {
+    kind: kindFromTargetType(action.target_type, connector),
+    primary,
+    secondary,
+  };
+}
+
 export function deriveTarget(action: TargetSource): RunTarget {
-  const connector = connectorForTool(action.tool_name);
+  const connector = connectorForAction(action);
   const args = (action.arguments ?? {}) as Record<string, unknown>;
+  const explicitTarget = targetFromNewFields(action, connector);
+
+  if (explicitTarget && connector === 'memory') {
+    return explicitTarget;
+  }
 
   switch (connector) {
     case 'postgres': {
       const sql = str(args.query) ?? str(args.sql) ?? str(args.statement);
-      return {
+      const derived = {
         kind: 'DATABASE',
         primary: str(args.database) ?? str(args.db) ?? str(action.target_repo),
         secondary: str(args.table) ?? tableFromSql(sql),
       };
+      return derived.primary || derived.secondary ? derived : (explicitTarget ?? derived);
     }
-    case 'terraform':
-      return {
+    case 'mongodb': {
+      const derived = {
+        kind: 'DATABASE',
+        primary: str(args.database) ?? str(args.db) ?? str(action.target_repo),
+        secondary: str(args.collection) ?? str(args.coll) ?? str(args.table),
+      };
+      return derived.primary || derived.secondary ? derived : (explicitTarget ?? derived);
+    }
+    case 'terraform': {
+      const derived = {
         kind: 'WORKSPACE',
         primary: str(args.workspace) ?? str(args.dir) ?? str(args.path),
         secondary: str(args.resource) ?? str(args.target) ?? str(args.address),
       };
+      return derived.primary || derived.secondary ? derived : (explicitTarget ?? derived);
+    }
     case 'slack': {
       const ch = str(args.channel) ?? str(args.channel_id);
-      return {
+      const derived = {
         kind: 'CHANNEL',
         primary: ch ? (ch.startsWith('#') ? ch : `#${ch}`) : null,
         secondary: null,
       };
+      return derived.primary || derived.secondary ? derived : (explicitTarget ?? derived);
     }
     case 'linear':
-    case 'jira':
-      return {
+    case 'jira': {
+      const derived = {
         kind: 'PROJECT',
         primary: str(args.project) ?? str(args.team) ?? str(args.repo),
         secondary: str(args.issue) ?? str(args.key) ?? str(args.id),
       };
+      return derived.primary || derived.secondary ? derived : (explicitTarget ?? derived);
+    }
     case 'github-actions':
       // Same repo-shaped target as GitHub, but the workflow file is the more
       // meaningful scope than a branch for a dispatch / secret operation.
@@ -169,12 +303,21 @@ export function deriveTarget(action: TargetSource): RunTarget {
         kind: 'REPO',
         primary: str(action.target_repo) ?? str(args.repo) ?? str(args.owner_repo),
         secondary:
-          str(args.workflow) ?? str(args.workflow_id) ?? str(action.target_branch) ?? str(args.branch),
+          str(args.workflow) ??
+          str(args.workflow_id) ??
+          str(action.target_branch) ??
+          str(args.branch) ??
+          explicitTarget?.secondary ??
+          null,
       };
     case 'memory':
       return {
         kind: 'MEMORY',
-        primary: str(args.title) ?? str(args.id) ?? null,
+        primary:
+          explicitTarget?.primary ??
+          str(args.title) ??
+          str(args.id) ??
+          null,
         secondary: null,
       };
     case 'workspace':
@@ -192,10 +335,29 @@ export function deriveTarget(action: TargetSource): RunTarget {
     default:
       return {
         kind: 'REPO',
-        primary: str(action.target_repo) ?? str(args.repo) ?? str(args.owner_repo),
-        secondary: str(action.target_branch) ?? str(args.branch),
+        primary:
+          str(action.target_repo) ??
+          str(args.repo) ??
+          str(args.owner_repo) ??
+          explicitTarget?.primary ??
+          null,
+        secondary:
+          str(action.target_branch) ??
+          str(args.branch) ??
+          explicitTarget?.secondary ??
+          null,
       };
   }
+}
+
+export function formatRunTargetLabel(
+  target: RunTarget,
+  fallback = 'this target',
+): string {
+  if (target.primary && target.secondary) {
+    return `${target.primary} · ${target.secondary}`;
+  }
+  return target.primary ?? target.secondary ?? fallback;
 }
 
 // Connectors that can show up in the Runs feed — drives the connector filter
@@ -204,6 +366,7 @@ export const RUN_CONNECTOR_FILTERS: ConnectorId[] = [
   'github',
   'github-actions',
   'postgres',
+  'mongodb',
   'terraform',
   'slack',
   'linear',

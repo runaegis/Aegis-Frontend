@@ -122,6 +122,18 @@ const TIMEZONES = [
   'Australia/Sydney',
 ];
 
+function isDemoMode(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return (
+      document.documentElement.dataset.demo === 'true' ||
+      localStorage.getItem('aegis_demo') === 'true'
+    );
+  } catch {
+    return false;
+  }
+}
+
 // Built-in templates — Cal.com / Linear-style "start from a
 // preset" tiles. Each maps to a partial form payload; the user
 // can tweak before saving. The set covers the three most common
@@ -219,6 +231,7 @@ export default function FreezeWindowPage() {
   const { user, isLoading: userLoading } = useUser();
   const reduce = useReducedMotion();
   const toast = useToast();
+  const demo = useMemo(() => isDemoMode(), []);
   const [windows, setWindows] = useState<FreezeWindow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -244,7 +257,7 @@ export default function FreezeWindowPage() {
   }));
 
   const fetchWindows = useCallback(async () => {
-    if (!user?.id) return;
+    if (!demo && !user?.id) return;
     setLoading(true);
     try {
       const data = await api.getFreezeWindows();
@@ -255,12 +268,12 @@ export default function FreezeWindowPage() {
     } finally {
       setLoading(false);
     }
-  }, [user?.id]);
+  }, [demo, user?.id]);
 
   useEffect(() => {
-    if (user?.id) fetchWindows();
+    if (demo || user?.id) fetchWindows();
     else if (!userLoading) setLoading(false);
-  }, [user?.id, userLoading, fetchWindows]);
+  }, [demo, user?.id, userLoading, fetchWindows]);
 
   // Tick the "now" indicator forward every 60s so the status
   // banner + preview indicator stay accurate without polling
@@ -276,7 +289,7 @@ export default function FreezeWindowPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user?.id) return;
+    if (!demo && !user?.id) return;
     if (formData.work_days.length === 0) {
       toast.error('Pick at least one day', {
         description: 'A freeze window with no days never fires.',
@@ -313,7 +326,7 @@ export default function FreezeWindowPage() {
   };
 
   const handleDelete = async (windowId: string) => {
-    if (!user?.id) return;
+    if (!demo && !user?.id) return;
     try {
       await api.deleteFreezeWindow(windowId);
       await fetchWindows();

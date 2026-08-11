@@ -4,12 +4,12 @@
  * Room Overview — the default landing tab for a room.
  *
  * Pulls the per-room story together: recent activity, pending
- * approvals scoped to this room's repo, member count, and a quick-
+ * approvals scoped to this room, member count, and a quick-
  * action strip. The point is to make the room feel ALIVE — a live
  * dashboard, not a config screen.
  *
  * All data is client-side filtered from existing endpoints
- * (`getRuns`, `getMcpApprovals`) against the room's repo_name. No
+ * (`getSessionsByRoomId`, `getMcpApprovals`) against the room scope. No
  * backend changes required. When per-room filters land in the
  * backend later, this page swaps to use them transparently.
  */
@@ -28,8 +28,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { api } from '@/lib/api';
-import { useUser } from '@/lib/hooks';
-import type { MCPApproval, SessionAction } from '@/lib/types';
+import type { MCPApproval, RoomSessionAction } from '@/lib/types';
 import { CodeChip } from '@/components/ui/CodeChip';
 import DecisionBadge from '@/components/ui/DecisionBadge';
 import EmptyState from '@/components/ui/EmptyState';
@@ -38,34 +37,34 @@ import { SetupChecklist } from '@/components/ui/SetupChecklist';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { useRoom } from '@/lib/roomContext';
 import { fadeUp, staggerContainer } from '@/lib/motion';
+import { deriveTarget, formatRunTargetLabel } from '@/lib/runConnector';
 
 export default function RoomOverviewPage() {
-  const { user } = useUser();
   const { roomId, room, members, loading: roomLoading } = useRoom();
   const reduce = useReducedMotion();
-  const [recentRuns, setRecentRuns] = useState<SessionAction[]>([]);
+  const [recentRuns, setRecentRuns] = useState<RoomSessionAction[]>([]);
   const [pendingApprovals, setPendingApprovals] = useState<MCPApproval[]>([]);
   const [activityLoading, setActivityLoading] = useState(true);
 
-  const repoName = room?.repo_name ?? '';
+  const repoName = room?.repo_name ?? room?.name ?? 'this room';
 
-  // Filter the user's runs + approvals to just this room's repo —
-  // client-side until the backend supports per-room queries.
   const loadActivity = useCallback(async () => {
-    if (!user?.id || !repoName) return;
+    if (!roomId) return;
     setActivityLoading(true);
     try {
-      const [runs, approvals] = await Promise.all([
-        api.getRuns(user.id),
+      const [roomRuns, approvals] = await Promise.all([
+        api.getSessionsByRoomId(roomId, 1, 5),
         api.getMcpApprovals(),
       ]);
       setRecentRuns(
-        runs.filter((r) => r.target_repo === repoName).slice(0, 5),
+        roomRuns.items,
       );
       setPendingApprovals(
         approvals.filter(
           (a) =>
-            (a.arguments as { repo?: string })?.repo === repoName &&
+            (a.room_id === roomId ||
+              (!!room?.repo_name &&
+                (a.arguments as { repo?: string })?.repo === room.repo_name)) &&
             a.status === 'pending',
         ),
       );
@@ -75,7 +74,7 @@ export default function RoomOverviewPage() {
     } finally {
       setActivityLoading(false);
     }
-  }, [user?.id, repoName]);
+  }, [room?.repo_name, roomId]);
 
   useEffect(() => {
     void loadActivity();
@@ -189,41 +188,46 @@ export default function RoomOverviewPage() {
               <EmptyState
                 icon={<Activity className="h-5 w-5" />}
                 title="No activity yet"
-                description={`Once an agent runs an action against ${repoName}, it'll appear here.`}
+              description={`Once an agent runs an action in ${repoName}, it'll appear here.`}
                 compact
               />
             ) : (
               <ul className="divide-y divide-[var(--stroke-soft-200)]">
-                {recentRuns.map((run) => (
-                  <li
-                    key={run.id}
-                    className="flex items-center gap-3 px-5 py-3"
-                  >
-                    <DecisionBadge decision={run.decision} />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-[12.5px] font-medium text-[var(--neutral-strong-950)]">
-                        {run.agent_name || 'Agent'}
-                      </p>
-                      <p className="truncate text-[11px] text-[var(--neutral-soft-400)]">
-                        <CodeChip className="!h-[15px] !px-1 !text-[10px]">
-                          {run.tool_name}
-                        </CodeChip>
-                        {run.target_branch && (
-                          <span className="ml-1.5">
-                            on{' '}
-                            <span className="font-mono text-[10.5px] text-[var(--neutral-sub-600)]">
-                              {run.target_branch}
+                {recentRuns.map((run) => {
+                  const target = deriveTarget(run);
+                  const targetLabel = formatRunTargetLabel(target, '');
+
+                  return (
+                    <li
+                      key={run.id}
+                      className="flex items-center gap-3 px-5 py-3"
+                    >
+                      <DecisionBadge decision={run.decision} />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[12.5px] font-medium text-[var(--neutral-strong-950)]">
+                          {run.agent_name || 'Agent'}
+                        </p>
+                        <p className="truncate text-[11px] text-[var(--neutral-soft-400)]">
+                          <CodeChip className="!h-[15px] !px-1 !text-[10px]">
+                            {run.tool_name}
+                          </CodeChip>
+                          {targetLabel ? (
+                            <span className="ml-1.5">
+                              on{' '}
+                              <span className="font-mono text-[10.5px] text-[var(--neutral-sub-600)]">
+                                {targetLabel}
+                              </span>
                             </span>
-                          </span>
-                        )}
-                      </p>
-                    </div>
-                    <RelativeTime
-                      timestamp={run.timestamp}
-                      className="shrink-0 text-[11px] text-[var(--neutral-soft-400)]"
-                    />
-                  </li>
-                ))}
+                          ) : null}
+                        </p>
+                      </div>
+                      <RelativeTime
+                        timestamp={run.timestamp}
+                        className="shrink-0 text-[11px] text-[var(--neutral-soft-400)]"
+                      />
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </div>
@@ -232,15 +236,21 @@ export default function RoomOverviewPage() {
               Overview tab. */}
           <div className="space-y-3">
             <QuickAction
+              icon={Shield}
+              title="Set up connectors"
+              description="Attach GitHub, databases, or issue trackers to this room."
+              href={`/dashboard/rooms/${room?.room_id ?? room?.id}/connectors`}
+            />
+            <QuickAction
               icon={Plug}
               title="Connect an agent"
-              description="Wire Cursor / Claude Code into this room."
+              description="Wire Cursor, Claude Code, or another MCP client into this room."
               href={`/dashboard/rooms/${room?.room_id ?? room?.id}/connect`}
             />
             <QuickAction
               icon={Shield}
               title="Adjust tool policies"
-              description="Control what agents can do in this repo."
+              description="Control what each role can do with each connector."
               href={`/dashboard/rooms/${room?.room_id ?? room?.id}/tools`}
             />
             <QuickAction

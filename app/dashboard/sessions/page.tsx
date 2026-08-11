@@ -7,7 +7,6 @@ import {
   ChevronDown,
   ChevronRight,
   Clock,
-  GitBranch,
   Hash,
   Layers,
   Timer,
@@ -33,8 +32,8 @@ import JsonViewer from '@/components/ui/JsonViewer';
 import { SessionsSkeleton } from '@/components/ui/PageSkeletons';
 import { BlastRadiusChip } from '@/components/ui/BlastRadiusChip';
 import { CodeChip } from '@/components/ui/CodeChip';
-import { ConnectorMark } from '@/components/ui/ConnectorMark';
-import { connectorForTool } from '@/lib/runConnector';
+import { CONNECTORS, ConnectorMark } from '@/components/ui/ConnectorMark';
+import { connectorForAction, connectorForTool, deriveTarget } from '@/lib/runConnector';
 import { PolicyChip } from '@/components/ui/PolicyChip';
 import { PullRequestLink } from '@/components/ui/PullRequestLink';
 import { DUR, EASE, fadeUp, fadeUpSm, staggerContainer } from '@/lib/motion';
@@ -261,12 +260,8 @@ function SessionRow({
   const agentName =
     session.sessions[0]?.agent_name || 'Agent';
 
-  const repos = [
-    ...new Set(
-      session.sessions
-        .map((a) => a.target_repo)
-        .filter(Boolean)
-    ),
+  const connectorIds: Array<keyof typeof CONNECTORS> = [
+    ...new Set(session.sessions.map((action) => connectorForAction(action))),
   ];
 
   const totalDecisions = session.sessions.length;
@@ -291,14 +286,15 @@ function SessionRow({
   // trigger doesn't "snap" back to white while the panel is still
   // collapsing below it.
   const [stillExpanded, setStillExpanded] = useState(isExpanded);
-  useEffect(() => {
-    if (isExpanded) setStillExpanded(true);
-  }, [isExpanded]);
+  const handleToggle = () => {
+    if (!isExpanded) setStillExpanded(true);
+    onToggle();
+  };
 
   return (
     <motion.li variants={fadeUpSm} className="bg-white">
       <button
-        onClick={onToggle}
+        onClick={handleToggle}
         className={
           stillExpanded
             ? // Top half of the continuous orange → white wash. End-stop
@@ -334,12 +330,25 @@ function SessionRow({
               </span>{' '}
               {Number(session.action_count) === 1 ? 'action' : 'actions'}
             </span>
-            {repos.length > 0 && (
+            {connectorIds.length > 0 && (
               <>
                 <span className="hidden text-[var(--stroke-sub-300)] sm:inline">·</span>
-                <span className="hidden items-center gap-1 sm:inline-flex">
-                  <GitBranch className="h-3 w-3" strokeWidth={2} />
-                  <span className="truncate max-w-[260px]">{repos.join(', ')}</span>
+                <span className="hidden items-center gap-1.5 sm:inline-flex">
+                  <span className="inline-flex items-center gap-1">
+                    {connectorIds.slice(0, 3).map((connectorId) => (
+                      <ConnectorMark
+                        key={connectorId}
+                        id={connectorId}
+                        size="xs"
+                        className="cursor-default"
+                      />
+                    ))}
+                  </span>
+                  <span className="truncate max-w-[260px]">
+                    {connectorIds.length === 1
+                      ? CONNECTORS[connectorIds[0]].name
+                      : `${connectorIds.length} connectors`}
+                  </span>
                 </span>
               </>
             )}
@@ -418,6 +427,7 @@ function SessionRow({
                     result: action.result,
                     arguments: action.arguments,
                   });
+                  const target = deriveTarget(action);
                   return (
                   <li
                     key={action.id}
@@ -483,6 +493,12 @@ function SessionRow({
                             <p className="mt-1.5 text-[13px] leading-[1.45] text-[var(--neutral-strong-950)]">
                               {action.action_summary}
                             </p>
+                            {(target.primary || target.secondary) && (
+                              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                                {target.primary ? <CodeChip>{target.primary}</CodeChip> : null}
+                                {target.secondary ? <CodeChip>{target.secondary}</CodeChip> : null}
+                              </div>
+                            )}
                           </div>
                           <div className="flex shrink-0 flex-col items-end gap-1.5">
                             <DecisionBadge decision={action.decision} />

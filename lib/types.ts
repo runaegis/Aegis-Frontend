@@ -30,6 +30,38 @@ export interface UserPromptListResponse {
   prompts: UserPrompt[];
 }
 
+export type NotificationType = "ALLOW" | "DENY" | "APPROVAL" | "REWRITE";
+
+export interface NotificationPreferences {
+  notify_allow: boolean;
+  notify_deny: boolean;
+  notify_approval: boolean;
+  notify_rewrite: boolean;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface UserNotification {
+  id: string;
+  notification_type: NotificationType | string;
+  connector_key?: string | null;
+  tool_name: string;
+  target_descriptor?: string | null;
+  room_id?: string | null;
+  room_name?: string | null;
+  is_read: boolean;
+  read_at?: string | null;
+  created_at: string;
+}
+
+export interface UserNotificationsResponse {
+  items: UserNotification[];
+  total: number;
+  unread_count: number;
+  limit: number;
+  offset: number;
+}
+
 export interface PaginatedResponse<T> {
   items: T[];
   total: number;
@@ -43,12 +75,17 @@ export interface SessionAction {
   session_id: string;
   agent_name: string;
   tool_name: string;
+  connector_key?: string | null;
   arguments: Record<string, any>;
   /** Human-readable bullet points; preferred over raw `arguments` in the UI when present. */
   action_pointers?: string[];
   action_summary: string;
   result: string;
   decision: "ALLOW" | "DENY" | "cd" | "REQUIRE_APPROVAL" | string;
+  target_type?: string | null;
+  target_ref?: string | null;
+  target_display?: string | null;
+  target_metadata?: Record<string, unknown> | null;
   target_repo: string;
   target_branch: string | null;
   sequence_order: number;
@@ -106,6 +143,15 @@ export interface MCPApproval {
   result: any;
   context: Record<string, any>;
   action_summary: string;
+  room_id?: string | null;
+  connector_key?: string | null;
+  target_type?: string | null;
+  target_ref?: string | null;
+  target_display?: string | null;
+  target_metadata?: Record<string, unknown> | null;
+  target_descriptor?: string | null;
+  minimum_role_rank_required?: number | null;
+  resolved_by?: string | null;
   /**
    * Backend-supplied human-readable bullet points. For PR-related tools the
    * last entry typically contains the GitHub PR URL so reviewers can jump to
@@ -129,21 +175,40 @@ export interface Session {
 }
 
 export interface User {
-  id?: string; // UUID primary key from database
-  github_user_id: number;
+  id?: string;
+  name?: string | null;
   username: string;
   email: string;
-  created_at?: string;
-  github_pat?: string | null;
-  access_token?: string | null;
-  postgres_connection_string?: string | null;
-  jira_url?: string | null;
-  jira_username?: string | null;
-  jira_api_token?: string | null;
-  mongodb_connection_string?: string | null;
-  linear_api_key?: string | null;
-  terraform_api_token?: string | null;
-  terraform_url?: string | null;
+  avatar_url?: string | null;
+  email_verified_at?: string | null;
+  is_active?: boolean;
+  primary_auth_method?: string | null;
+  onboarding_status?: boolean | null;
+  created_at?: string | null;
+}
+
+export interface OnboardingStatusResponse {
+  onboarding_status: boolean;
+}
+
+export interface ConnectorCatalogItem {
+  connector_key: string;
+  display_name: string;
+  description?: string | null;
+  private_config_schema?: Record<string, unknown> | null;
+  public_config_schema?: Record<string, unknown> | null;
+  policy_catalog?: Record<string, unknown> | null;
+  is_active?: boolean;
+}
+
+export interface PrivateConnectorCredentialStatus {
+  connector_key: string;
+  configured: boolean;
+  configured_keys: string[];
+  credential_metadata?: Record<string, unknown> | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  revoked_at?: string | null;
 }
 
 export interface SlackIntegrationStatus {
@@ -249,8 +314,12 @@ export interface RoomSummary {
   id?: string;
   room_id?: string;
 
-  repo_name: string;
+  name?: string | null;
+  description?: string | null;
+  room_type?: string | null;
+  repo_name?: string | null;
   owner_username?: string;
+  role_rank?: number | null;
 
   role?: string;
   is_active?: boolean;
@@ -266,11 +335,22 @@ export interface RoomDetails extends RoomSummary {
 }
 
 export interface RoomMember {
+  id?: string;
+  user_id?: string;
   username: string;
   role?: string;
+  role_rank?: number | null;
+  email?: string | null;
   joined_at?: string;
 
   [key: string]: any;
+}
+
+export interface RoomMembership {
+  room_id: string;
+  user_id?: string | null;
+  role?: string | null;
+  role_rank?: number | null;
 }
 
 export interface RoomInvite {
@@ -284,6 +364,61 @@ export interface RoomInvite {
   expires_at?: string | null;
   created_at?: string;
   [key: string]: any;
+}
+
+export interface RoomRolesResponse {
+  room_id: string;
+  roles: Record<string, string>;
+}
+
+export interface RoomToolGroup {
+  key: string;
+  label: string;
+  tools: string[];
+}
+
+export interface RoomToolConnector {
+  connector_key: string;
+  display_name: string;
+  description?: string | null;
+  configured: boolean;
+  private_credentials_configured: boolean;
+  can_configure_connector: boolean;
+  tool_groups: RoomToolGroup[];
+}
+
+export interface RoomToolMatrixResponse {
+  room_id: string;
+  role_rank?: number | null;
+  connectors: RoomToolConnector[];
+}
+
+export interface RoomConnectorConfig {
+  room_id: string;
+  connector_key: string;
+  display_name?: string | null;
+  public_config?: Record<string, unknown> | null;
+  configured?: boolean;
+  is_enabled?: boolean;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface RoomConnectorPolicyRule {
+  policy_key: string;
+  display_name?: string | null;
+  description?: string | null;
+  effect?: "ALLOW" | "DENY" | "REQUIRE_APPROVAL" | string | null;
+  minimum_role_rank_required?: number | null;
+  is_enabled?: boolean;
+  config?: Record<string, unknown> | null;
+}
+
+export interface RoomConnectorPoliciesResponse {
+  room_id: string;
+  connector_key: string;
+  can_manage: boolean;
+  policies: RoomConnectorPolicyRule[];
 }
 
 export interface ApiTokenPrefix {

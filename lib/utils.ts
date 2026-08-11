@@ -35,6 +35,25 @@ export function getRoomCreatedAt(room: {
   return roomCreated || created || undefined;
 }
 
+export function getRoomDisplayName(room: {
+  name?: string | null;
+  repo_name?: string | null;
+  room_id?: string | null;
+  id?: string | null;
+} | null | undefined): string {
+  const name = typeof room?.name === 'string' ? room.name.trim() : '';
+  if (name) return name;
+
+  const repo = typeof room?.repo_name === 'string' ? room.repo_name.trim() : '';
+  if (repo) return repo;
+
+  const roomId = typeof room?.room_id === 'string' ? room.room_id.trim() : '';
+  if (roomId) return roomId;
+
+  const id = typeof room?.id === 'string' ? room.id.trim() : '';
+  return id || 'Room';
+}
+
 export function formatRelativeTime(timestamp: string): string {
   const parsed = parseApiUtcTimestamp(timestamp);
   const then = parsed.getTime();
@@ -258,7 +277,7 @@ const PR_URL_RE = /https?:\/\/[^\s"'<>)\]]+\/pull\/\d+(?:\/[^\s"'<>)\]]*)?/i;
  * Default host used ONLY when we have to synthesize a PR URL from arguments
  * (i.e. `action_pointers` / `result` carry no URL of their own). For any
  * URL discovered in backend payloads we preserve its host verbatim — that
- * way enterprise GitHub instances (e.g. `github.company.com`) keep working
+ * way enterprise GitHub instances (e.g. `github.com`) keep working
  * without needing per-tenant config in the frontend.
  */
 const GITHUB_HOST_FALLBACK = 'github.com';
@@ -486,12 +505,53 @@ export function getRoomSlug(
  */
 export type RoomRoleBadgeTone = 'primary' | 'warning' | 'info' | 'neutral';
 
-export function getRoomRoleBadgeTone(role?: string | null): RoomRoleBadgeTone {
+function normalizeRoomRankValue(
+  roleRank?: number | string | null,
+): number | null {
+  if (typeof roleRank === 'number' && Number.isFinite(roleRank)) return roleRank;
+  if (typeof roleRank === 'string' && roleRank.trim()) {
+    const parsed = Number(roleRank);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+export function getRoomRoleLabel(
+  role?: string | null,
+  roleRank?: number | string | null,
+): string {
+  const explicit = role?.trim();
+  const rank = normalizeRoomRankValue(roleRank);
+  if (explicit) return explicit;
+  if (rank === 1) return 'Owner';
+  if (rank === 2) return 'Admin';
+  if (rank === 3) return 'Developer';
+  if (typeof rank === 'number' && rank > 0) return `Rank ${rank}`;
+  return 'Member';
+}
+
+export function getRoomRoleBadgeTone(
+  role?: string | null,
+  roleRank?: number | string | null,
+): RoomRoleBadgeTone {
+  const rank = normalizeRoomRankValue(roleRank);
+  if (rank === 1) return 'primary';
+  if (rank === 2) return 'warning';
+  if (rank === 3) return 'info';
   const r = role?.toUpperCase().trim();
   if (r === 'OWNER') return 'primary';
-  if (r === 'ADMIN') return 'warning';
+  if (r === 'ADMIN' || r === 'TECH LEAD' || r === 'TECH_LEAD') return 'warning';
   if (r === 'DEVELOPER') return 'info';
   return 'neutral';
+}
+
+export function isRoomOwner(roleRank?: number | string | null): boolean {
+  return normalizeRoomRankValue(roleRank) === 1;
+}
+
+export function hasRoomAdminAccess(roleRank?: number | string | null): boolean {
+  const rank = normalizeRoomRankValue(roleRank);
+  return typeof rank === 'number' && rank > 0 && rank <= 2;
 }
 
 /** Read blast radius from a `SessionAction`-shaped object, tolerant of typo & corrected key. */
@@ -531,7 +591,7 @@ export function parsePullRequestUrl(
  *     appears even when the backend hasn't appended one yet.
  *
  * URLs discovered in backend payloads are returned VERBATIM (host preserved)
- * so enterprise GitHub hosts like `github.company.com` keep working. Only the
+ * so enterprise GitHub hosts like `github.com` keep working. Only the
  * synthesized fallback (#4) defaults to public `github.com`, because we have
  * no host hint when only `owner`/`repo`/`pull_number` are available.
  */

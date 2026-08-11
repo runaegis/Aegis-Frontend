@@ -27,6 +27,7 @@ import { Button } from '@/components/ui/Button';
 import { RoomSwitcher } from '@/components/ui/RoomSwitcher';
 import { RoomTabs } from '@/components/ui/RoomTabs';
 import { RoomProvider, useRoom } from '@/lib/roomContext';
+import { getRoomDisplayName } from '@/lib/utils';
 
 export default function RoomScopeLayout({
   children,
@@ -58,12 +59,12 @@ export default function RoomScopeLayout({
 /** Renders the Topbar + tabs. Lives inside RoomProvider so it can
  *  use `useRoom()` and reflect the live room name / role. */
 function RoomScopeInner() {
-  const { roomId, room, role, loading, error } = useRoom();
+  const { roomId, room, role, roleRank, loading, error } = useRoom();
 
   // Title strategy: keep "Rooms" as the static page name (so the
   // breadcrumb is consistent across the section), use the repo name
   // as the subtitle since that's the real identity of a Room.
-  const subtitle = room?.repo_name ?? (loading ? 'Loading…' : roomId);
+  const subtitle = room ? getRoomDisplayName(room) : loading ? 'Loading…' : roomId;
 
   return (
     <>
@@ -136,7 +137,7 @@ function RoomScopeInner() {
                 aria-hidden
               />
               <span className="truncate font-medium text-[var(--neutral-sub-600)]">
-                {room?.repo_name ?? (loading ? 'Loading…' : roomId)}
+                {room ? getRoomDisplayName(room) : loading ? 'Loading…' : roomId}
               </span>
             </nav>
 
@@ -154,8 +155,9 @@ function RoomScopeInner() {
             ) : room ? (
               <RoomSwitcher
                 activeRoomId={roomId}
-                activeRepoName={room.repo_name}
+                activeRoomName={getRoomDisplayName(room)}
                 role={role}
+                roleRank={roleRank}
               />
             ) : null}
           </div>
