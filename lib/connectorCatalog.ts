@@ -23,9 +23,10 @@ export const STATUS_BY_ID: Record<ConnectorId, ConnectorStatus> = {
   'github-actions': 'live',
   slack: 'in-progress',
   postgres: 'live',
-  linear: 'coming-soon',
+  mongodb: 'live',
+  linear: 'live',
   jira: 'live',
-  terraform: 'coming-soon',
+  terraform: 'live',
   memory: 'live',
   workspace: 'live',
 };
@@ -74,5 +75,74 @@ export const CONNECTOR_CAPABILITIES: Partial<Record<ConnectorId, ConnectorCapabi
       { label: 'Production stays human-only', detail: 'Production deployment is never agent-initiated without explicit approval.' },
     ],
     note: 'Rides your existing GitHub connection — no separate setup or token. GitHub Actions governance is a capability layered on the GitHub connector.',
+  },
+  postgres: {
+    governs: [
+      { label: 'Queries', detail: 'Run read queries and safe writes against your databases.' },
+      { label: 'Migrations', detail: 'Execute migrations with explicit visibility and rollback expectations.' },
+      { label: 'Schema reads', detail: 'List tables and describe schemas for context.' },
+    ],
+    aegisAdds: [
+      { label: 'Write + destructive guards', detail: 'Risky statements (DROP/TRUNCATE, mass updates, deletes without WHERE) are denied or routed to approval, depending on policy.' },
+      { label: 'Schema/table allowlists', detail: 'Room-scoped allowlists keep the agent inside approved schemas and tables.' },
+      { label: 'Sensitive data approvals', detail: 'Access to sensitive tables can require an explicit human sign-off.' },
+      { label: 'Classification + audit trail', detail: 'Every query is classified by risk and written to an immutable audit log.' },
+      { label: 'Token metering', detail: 'Per-action token and cost attribution for every tool call.' },
+    ],
+  },
+  mongodb: {
+    governs: [
+      { label: 'Find + aggregate', detail: 'Read and aggregate documents for context and reporting.' },
+      { label: 'Writes', detail: 'Insert, update, and delete documents against approved collections.' },
+      { label: 'Collection discovery', detail: 'List databases/collections and inspect shapes where supported.' },
+    ],
+    aegisAdds: [
+      { label: 'Write + destructive guards', detail: 'Bulk writes and destructive collection operations are blocked or require approval based on policy.' },
+      { label: 'Database/collection allowlists', detail: 'Room-scoped allowlists keep the agent inside approved databases and collections.' },
+      { label: 'Sensitive collection approvals', detail: 'Sensitive collections can require explicit human sign-off.' },
+      { label: 'Classification + audit trail', detail: 'Every operation is classified and written to an immutable audit log.' },
+      { label: 'Token metering', detail: 'Per-action token and cost attribution for every tool call.' },
+    ],
+  },
+  linear: {
+    governs: [
+      { label: 'Read issues', detail: 'Load tickets, projects, and team context before acting.' },
+      { label: 'Create/update issues', detail: 'Draft or apply issue updates with clear intent and scope.' },
+      { label: 'Workflow actions', detail: 'Move states, set priority, assign, and archive with guardrails.' },
+    ],
+    aegisAdds: [
+      { label: 'Team/project scope enforcement', detail: 'The agent is restricted to allowed teams and projects configured per room.' },
+      { label: 'Approval-gated writes', detail: 'Issue writes can pause for review before executing.' },
+      { label: 'Classification + audit trail', detail: 'Every change is classified and written to an immutable audit log.' },
+      { label: 'Token metering', detail: 'Per-action token and cost attribution for every tool call.' },
+    ],
+  },
+  jira: {
+    governs: [
+      { label: 'Read issues', detail: 'Load tickets, epics, and project context.' },
+      { label: 'Create/update issues', detail: 'Create and update issues with controlled write access.' },
+      { label: 'Transitions', detail: 'Move workflow states with explicit intent.' },
+    ],
+    aegisAdds: [
+      { label: 'Project scope enforcement', detail: 'The agent is restricted to allowed Jira projects configured per room.' },
+      { label: 'Approval-gated writes', detail: 'Issue updates and transitions can pause for review before executing.' },
+      { label: 'Classification + audit trail', detail: 'Every change is classified and written to an immutable audit log.' },
+      { label: 'Token metering', detail: 'Per-action token and cost attribution for every tool call.' },
+    ],
+  },
+  terraform: {
+    governs: [
+      { label: 'Plans', detail: 'Generate Terraform plans for proposed infrastructure changes.' },
+      { label: 'Applies', detail: 'Apply changes to approved workspaces under policy.' },
+      { label: 'Workspace reads', detail: 'Read workspace state and metadata for context.' },
+    ],
+    aegisAdds: [
+      { label: 'Plan review required', detail: 'Plans can be required and inspected before any apply is allowed.' },
+      { label: 'Approval-gated apply', detail: 'Applies pause for human sign-off before they execute.' },
+      { label: 'Destroy guard', detail: 'Destroy is denied by default and can be gated behind explicit approval in policy.' },
+      { label: 'Org/workspace scope enforcement', detail: 'The agent is restricted to approved organizations and workspaces per room.' },
+      { label: 'Classification + audit trail', detail: 'Every action is classified and written to an immutable audit log.' },
+      { label: 'Token metering', detail: 'Per-action token and cost attribution for every tool call.' },
+    ],
   },
 };

@@ -22,7 +22,7 @@ import { CONNECTORS, ConnectorMark } from '@/components/ui/ConnectorMark';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { FreshnessBanner } from '@/components/ui/FreshnessBanner';
 import { PullRequestLink } from '@/components/ui/PullRequestLink';
-import { connectorForTool, deriveTarget } from '@/lib/runConnector';
+import { connectorForAction, deriveTarget, formatRunTargetLabel } from '@/lib/runConnector';
 import { useToast } from '@/components/ui/Toast';
 import { DUR, EASE, fadeUp, fadeUpSm, staggerContainer } from '@/lib/motion';
 import { AuthError } from '@/lib/api';
@@ -151,7 +151,7 @@ export default function ApprovalsPage() {
     } finally {
       setLoading(false);
     }
-  }, [router, user?.id, userLoading]);
+  }, [router, user, userLoading]);
 
   useEffect(() => {
     if (user?.id) fetchData();
@@ -363,7 +363,7 @@ export default function ApprovalsPage() {
         subtitle="Actions requiring review"
         lastUpdated={lastUpdated}
         onRefresh={fetchData}
-        unreadCount={counts.pending}
+        pendingApprovalsCount={counts.pending}
       />
       {/* Floating freshness pill — appears below the topbar when
           auto-refresh detects new pending approvals the reviewer
@@ -551,14 +551,6 @@ export default function ApprovalsPage() {
                 typeof approval.context?.user === 'string'
                   ? approval.context.user
                   : 'Agent';
-              const repo =
-                typeof approval.arguments?.repo === 'string'
-                  ? approval.arguments.repo
-                  : null;
-              const branch =
-                typeof approval.arguments?.branch === 'string'
-                  ? approval.arguments.branch
-                  : null;
               const summary =
                 typeof approval.action_summary === 'string'
                   ? approval.action_summary
@@ -577,8 +569,6 @@ export default function ApprovalsPage() {
                   approval={approval}
                   contextUser={contextUser}
                   summary={summary}
-                  repo={repo}
-                  branch={branch}
                   prUrl={prUrl}
                   isPending={isPending}
                   isActioning={isActioning}
@@ -625,15 +615,25 @@ export default function ApprovalsPage() {
         description={
           pendingDeny ? (
             <>
-              The agent will be blocked from running{' '}
-              <span className="font-mono text-[12.5px] text-[var(--neutral-strong-950)]">
-                {pendingDeny.tool_name}
-              </span>{' '}
-              on{' '}
-              <span className="font-mono text-[12.5px] text-[var(--neutral-strong-950)]">
-                {pendingDeny.arguments?.repo ?? 'this repository'}
-              </span>
-              . The denial appears in the audit log and can't be undone.
+              {(() => {
+                const denyTarget = formatRunTargetLabel(
+                  deriveTarget(pendingDeny),
+                  'the selected target',
+                );
+                return (
+                  <>
+                    The agent will be blocked from running{' '}
+                    <span className="font-mono text-[12.5px] text-[var(--neutral-strong-950)]">
+                      {pendingDeny.tool_name}
+                    </span>{' '}
+                    on{' '}
+                    <span className="font-mono text-[12.5px] text-[var(--neutral-strong-950)]">
+                      {denyTarget}
+                    </span>
+                    . The denial appears in the audit log and can&apos;t be undone.
+                  </>
+                );
+              })()}
             </>
           ) : null
         }
@@ -698,7 +698,7 @@ export default function ApprovalsPage() {
             <>
               {pendingBulkDeny.length === 1 ? 'The agent' : 'These agents'} will
               be blocked from running their requested actions. All denials
-              appear in the audit log and can't be undone.
+              appear in the audit log and can&apos;t be undone.
             </>
           ) : null
         }
@@ -718,8 +718,6 @@ function ApprovalItem({
   approval,
   contextUser,
   summary,
-  repo,
-  branch,
   prUrl,
   isPending,
   isActioning,
@@ -732,8 +730,6 @@ function ApprovalItem({
   approval: MCPApproval;
   contextUser: string;
   summary: string;
-  repo: string | null;
-  branch: string | null;
   prUrl: string | null;
   isPending: boolean;
   isActioning: boolean;
@@ -764,6 +760,7 @@ function ApprovalItem({
           'border-[var(--stroke-soft-200)] bg-white'
         : 'border-[var(--primary-base)]/20 bg-gradient-to-b from-[var(--primary-lighter)]/55 via-[var(--white-0)] to-[var(--white-0)]'
     : 'border-[var(--stroke-soft-200)] bg-white opacity-75';
+  const target = deriveTarget(approval);
 
   return (
     <motion.li
@@ -857,31 +854,23 @@ function ApprovalItem({
           <MetaCell label="Connector">
             <span className="inline-flex items-center gap-1.5">
               <ConnectorMark
-                id={connectorForTool(approval.tool_name)}
+                id={connectorForAction(approval)}
                 size="xs"
                 className="cursor-default"
               />
               <span className="text-[13px] text-[var(--neutral-strong-950)]">
-                {CONNECTORS[connectorForTool(approval.tool_name)].name}
+                {CONNECTORS[connectorForAction(approval)].name}
               </span>
             </span>
           </MetaCell>
-          {(() => {
-            // Connector-aware target — repo+branch for GitHub, but also
-            // database+table, workspace+resource, #channel, project+issue
-            // for the other connectors that now flow through approvals
-            // (e.g. terraform_apply, workflow_dispatch).
-            const tgt = deriveTarget(approval);
-            if (!tgt.primary && !tgt.secondary) return null;
-            return (
-              <MetaCell label="Target">
-                <span className="inline-flex flex-wrap items-center gap-1.5">
-                  {tgt.primary && <CodeChip>{tgt.primary}</CodeChip>}
-                  {tgt.secondary && <CodeChip>{tgt.secondary}</CodeChip>}
-                </span>
-              </MetaCell>
-            );
-          })()}
+          {target.primary || target.secondary ? (
+            <MetaCell label="Target">
+              <span className="inline-flex flex-wrap items-center gap-1.5">
+                {target.primary && <CodeChip>{target.primary}</CodeChip>}
+                {target.secondary && <CodeChip>{target.secondary}</CodeChip>}
+              </span>
+            </MetaCell>
+          ) : null}
           {approval.context?.model && (
             <MetaCell label="Model">
               <CodeChip>{String(approval.context.model)}</CodeChip>

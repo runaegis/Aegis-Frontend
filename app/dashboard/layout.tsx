@@ -70,9 +70,10 @@ function isFirstVisit(): boolean {
 
 const DEMO_USER = {
   id: 'demo-user',
+  name: 'Demo',
   username: 'demo',
   email: 'demo@runaegis.co',
-  github_user_id: 0,
+  onboarding_status: true,
 };
 
 // Theme handling — reads from `?theme=` query string OR persisted

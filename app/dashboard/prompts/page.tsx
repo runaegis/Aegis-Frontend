@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
 import { Braces, Check, Clock, Pencil, Plus, ScrollText, X } from 'lucide-react';
 import { api } from '@/lib/api';
@@ -25,6 +25,18 @@ const textareaClass = cn(
   inputClass,
   'resize-y px-3 py-2.5 leading-[1.6]',
 );
+
+function isDemoMode(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return (
+      document.documentElement.dataset.demo === 'true' ||
+      localStorage.getItem('aegis_demo') === 'true'
+    );
+  } catch {
+    return false;
+  }
+}
 
 type PromptFormState = {
   name: string;
@@ -141,6 +153,7 @@ export default function PromptsPage() {
   const { user, isLoading: userLoading } = useUser();
   const reduce = useReducedMotion();
   const toast = useToast();
+  const demo = useMemo(() => isDemoMode(), []);
 
   const [prompts, setPrompts] = useState<UserPrompt[]>([]);
   const [loading, setLoading] = useState(true);
@@ -154,7 +167,7 @@ export default function PromptsPage() {
   const [savingId, setSavingId] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
-    if (!user) {
+    if (!user && !demo) {
       if (!userLoading) {
         setPrompts([]);
         setLoading(false);
@@ -170,15 +183,15 @@ export default function PromptsPage() {
     } finally {
       setLoading(false);
     }
-  }, [user, userLoading]);
+  }, [demo, user, userLoading]);
 
   useEffect(() => {
-    if (user) fetchData();
+    if (demo || user) fetchData();
     else if (!userLoading) {
       setPrompts([]);
       setLoading(false);
     }
-  }, [user, userLoading, fetchData]);
+  }, [demo, user, userLoading, fetchData]);
 
   const { lastUpdated } = useAutoRefresh(fetchData, 60000);
 
@@ -204,7 +217,7 @@ export default function PromptsPage() {
 
   const handleCreate = async () => {
     const payload = buildPayload(newForm);
-    if (!payload.prompt || !user) return;
+    if (!payload.prompt || (!user && !demo)) return;
     setCreating(true);
     try {
       const created = await api.createUserPrompt(payload);
@@ -222,7 +235,7 @@ export default function PromptsPage() {
 
   const handleSave = async (prompt: UserPrompt) => {
     const payload = buildPayload(editForm);
-    if (!payload.prompt || !user) return;
+    if (!payload.prompt || (!user && !demo)) return;
     setSavingId(prompt.id);
     try {
       const updated = await api.updateUserPrompt(prompt.id, payload);

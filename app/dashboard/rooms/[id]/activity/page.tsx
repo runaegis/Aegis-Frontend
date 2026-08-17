@@ -55,7 +55,7 @@ import { PullRequestLink } from '@/components/ui/PullRequestLink';
 import { RelativeTime } from '@/components/ui/RelativeTime';
 import { Table, TBody, TD, TH, THead, TR, TRExpanded } from '@/components/ui/Table';
 import { ToolLogo, getAgentToolId } from '@/components/ui/ToolLogo';
-import { connectorForTool, deriveTarget } from '@/lib/runConnector';
+import { connectorForTool, deriveTarget, formatRunTargetLabel } from '@/lib/runConnector';
 
 const PAGE_SIZE = 20;
 
@@ -270,9 +270,10 @@ function RoomActivityRow({
   // exit animation. Same pattern as the Runs row to avoid the "snap
   // back" layout shift while collapsing.
   const [stillExpanded, setStillExpanded] = useState(isExpanded);
-  useEffect(() => {
-    if (isExpanded) setStillExpanded(true);
-  }, [isExpanded]);
+  const handleToggle = () => {
+    if (!isExpanded) setStillExpanded(true);
+    onToggle();
+  };
 
   const userLabel = action.username?.trim() || 'Unknown user';
   const toolId = getAgentToolId(action.agent_name || '');
@@ -281,10 +282,11 @@ function RoomActivityRow({
     result: action.result,
     arguments: action.arguments,
   });
+  const target = deriveTarget(action);
 
   return (
     <>
-      <TR clickable isExpanded={stillExpanded} onClick={onToggle}>
+      <TR clickable isExpanded={stillExpanded} onClick={handleToggle}>
         <TD>
           <div className="flex items-center gap-2.5">
             <span
@@ -424,9 +426,9 @@ function RoomActivityRow({
               </div>
               <div className="grid grid-cols-2 gap-3 text-[12px] md:grid-cols-4">
                 <Meta
-                  label="Repository"
-                  value={action.target_repo || 'Not recorded'}
-                  muted={!action.target_repo}
+                  label="Target"
+                  value={formatRunTargetLabel(target, 'Not recorded')}
+                  muted={!target.primary && !target.secondary}
                 />
                 <Meta label="Sequence" value={`#${action.sequence_order}`} />
                 <Meta

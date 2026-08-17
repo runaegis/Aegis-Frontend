@@ -1,40 +1,27 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Activity, ChevronRight, Search } from 'lucide-react';
+import { Activity, ChevronRight, Search, X } from 'lucide-react';
 import Link from 'next/link';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
-import { DUR, EASE, fadeUp, staggerContainer } from '@/lib/motion';
-import { useUser } from '@/lib/hooks';
-import { formatDashboardDateRangeLabel } from '@/lib/dashboardDateRange';
-import { SessionAction } from '@/lib/types';
-import { useDashboardData } from '@/lib/dashboardDataContext';
-import {
-  blastRadiusRank,
-  extractPullRequestUrl,
-  formatExecutionTimeMs,
-  formatFullTimestamp,
-  normalizeDecision,
-  readBlastRadius,
-} from '@/lib/utils';
-import { RelativeTime } from '@/components/ui/RelativeTime';
 import Topbar from '@/components/layout/Topbar';
 import { AgentMark } from '@/components/ui/AgentMark';
-import { ConnectorMark, CONNECTORS, type ConnectorId } from '@/components/ui/ConnectorMark';
-import { connectorForTool, deriveTarget, RUN_CONNECTOR_FILTERS } from '@/lib/runConnector';
-// import { isPostgresTool } from '@/lib/toolConnectors';
-import DecisionBadge, { decisionColor } from '@/components/ui/DecisionBadge';
-import EmptyState from '@/components/ui/EmptyState';
-import ErrorBanner from '@/components/ui/ErrorBanner';
-import JsonViewer from '@/components/ui/JsonViewer';
-import { RunsSkeleton } from '@/components/ui/PageSkeletons';
+import { Badge } from '@/components/ui/Badge';
 import { BlastRadiusChip } from '@/components/ui/BlastRadiusChip';
 import { Button } from '@/components/ui/Button';
 import { CodeChip } from '@/components/ui/CodeChip';
+import { CONNECTORS, ConnectorMark } from '@/components/ui/ConnectorMark';
+import DecisionBadge, { decisionColor } from '@/components/ui/DecisionBadge';
+import EmptyState from '@/components/ui/EmptyState';
+import ErrorBanner from '@/components/ui/ErrorBanner';
+import { FilterChip } from '@/components/ui/FilterChip';
 import { Input } from '@/components/ui/Input';
+import JsonViewer from '@/components/ui/JsonViewer';
+import { RunsSkeleton } from '@/components/ui/PageSkeletons';
 import { PolicyChip } from '@/components/ui/PolicyChip';
 import { PullRequestLink } from '@/components/ui/PullRequestLink';
-import { SelectMenu } from '@/components/ui/SelectMenu';
+import { RelativeTime } from '@/components/ui/RelativeTime';
 import {
   Table,
   TBody,
@@ -45,126 +32,342 @@ import {
   TRExpanded,
   type SortDirection,
 } from '@/components/ui/Table';
+import { api } from '@/lib/api';
+import {
+  formatDashboardDateRangeLabel,
+  getActionDateFilters,
+  matchesActionDateFilters,
+} from '@/lib/dashboardDateRange';
+import { useDashboardData } from '@/lib/dashboardDataContext';
+import { useUser } from '@/lib/hooks';
+import { DUR, EASE, fadeUp, staggerContainer } from '@/lib/motion';
+import { buildRunActivityFilterOptions, buildRunActivityViewModel, filterRunActivity, summarizeRunActivity, type RunActivityViewModel } from '@/lib/runActivity';
+import { extractPullRequestUrl, formatExecutionTimeMs, formatFullTimestamp, readBlastRadius } from '@/lib/utils';
+import type { Metrics, PaginatedResponse, SessionAction } from '@/lib/types';
 
-// Tool -> connector mapping and connector-aware target derivation live in
-// lib/runConnector.ts, so the Runs, Sessions and Audit surfaces share one
-// source of truth for actions that span GitHub, Postgres, Terraform, Slack
-// and the rest. The Runs table no longer assumes a repo/branch shape.
+const PAGE_SIZE = 20;
+const EMPTY_PAGE: PaginatedResponse<SessionAction> = {
+  items: [],
+  total: 0,
+  page: 1,
+  page_size: PAGE_SIZE,
+  pages: 0,
+};
+const EMPTY_METRICS: Metrics = {
+  total: 0,
+  allows: 0,
+  denies: 0,
+  rewrites: 0,
+  approvals: 0,
+};
+
+type SortKey =
+  | 'agent'
+  | 'tool'
+  | 'connector'
+  | 'target'
+  | 'policy'
+  | 'risk'
+  | 'decision'
+  | 'time';
+
+function compareText(left: string, right: string): number {
+  return left.localeCompare(right, undefined, { sensitivity: 'base' });
+}
 
 export default function RunsPage() {
-  const { isLoading: userLoading } = useUser();
-  const reduce = useReducedMotion();
-  const [search, setSearch] = useState('');
-  const [decisionFilter, setDecisionFilter] = useState('all');
-  const [connectorFilter, setConnectorFilter] = useState('all');
+  const { user, isLoading: userLoading } = useUser();
+  const { dateRange, setDateRange } = useDashboardData();
+  const reduceMotion = useReducedMotion();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const scopedSessionId = searchParams.get('session')?.trim() || null;
+
+  const [runs, setRuns] = useState<SessionAction[]>([]);
+  const [pageMeta, setPageMeta] = useState<PaginatedResponse<SessionAction>>(EMPTY_PAGE);
+  const [rangeMetrics, setRangeMetrics] = useState<Metrics>(EMPTY_METRICS);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | undefined>(undefined);
+  const [page, setPage] = useState(1);
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
-  const {
-  dateRange,
-  setDateRange,
-  sessionActions: runs,
-  runsLoading,
-  runsLoadingMore,
-  runsError,
-  dismissRunsError,
-  hasMoreRuns,
-  loadMoreRuns,
-  refreshRuns,
-  metrics,
-  lastUpdated,
-} = useDashboardData();
+  const [searchQuery, setSearchQuery] = useState('');
+  const [agentFilter, setAgentFilter] = useState<string[]>([]);
+  const [decisionFilter, setDecisionFilter] = useState<string[]>([]);
+  const [connectorFilter, setConnectorFilter] = useState<string[]>([]);
+  const [targetFilter, setTargetFilter] = useState<string[]>([]);
+  const [toolFilter, setToolFilter] = useState<string[]>([]);
+
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
+  const [sortDir, setSortDir] = useState<SortDirection>(null);
+
+  const dateFilters = useMemo(() => getActionDateFilters(dateRange), [dateRange]);
   const rangeLabel = useMemo(
     () => formatDashboardDateRangeLabel(dateRange, 'All time'),
     [dateRange],
   );
 
-  const filteredRuns = runs.filter((run) => {
-    const connectorId = connectorForTool(run.tool_name);
-    const target = deriveTarget(run);
-    const q = search.toLowerCase();
-    const matchesSearch =
-      !search ||
-      run.agent_name?.toLowerCase().includes(q) ||
-      run.tool_name?.toLowerCase().includes(q) ||
-      CONNECTORS[connectorId].name.toLowerCase().includes(q) ||
-      (target.primary ?? '').toLowerCase().includes(q) ||
-      (target.secondary ?? '').toLowerCase().includes(q) ||
-      run.action_summary?.toLowerCase().includes(q);
+  const fetchData = useCallback(
+    async (options?: { soft?: boolean }) => {
+      if (!user?.id) {
+        if (!userLoading) {
+          setRuns([]);
+          setPageMeta(EMPTY_PAGE);
+          setRangeMetrics(EMPTY_METRICS);
+          setLoading(false);
+        }
+        return;
+      }
 
-    const canonical = normalizeDecision(run.decision);
-    const matchesDecision =
-      decisionFilter === 'all' ||
-      (decisionFilter === 'approval'
-        ? canonical === 'REQUIRE_APPROVAL'
-        : canonical === decisionFilter);
+      if (!options?.soft) {
+        setLoading(true);
+      }
 
-    const matchesConnector =
-      connectorFilter === 'all' || connectorId === connectorFilter;
+      try {
+        if (scopedSessionId) {
+          const sessionActions = (await api.getSessionActions(scopedSessionId))
+            .filter((action) => matchesActionDateFilters(action.timestamp, dateFilters))
+            .sort(
+              (left, right) =>
+                new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime(),
+            );
 
-    return matchesSearch && matchesDecision && matchesConnector;
-  });
+          const scopedMetrics = summarizeRunActivity(
+            sessionActions.map((action) => buildRunActivityViewModel(action)),
+          );
 
-  // Client-side sort layered on top of the filter. Default is null
-  // (server order — newest-first from DashboardDataProvider). Clicking
-  // a sortable column header cycles asc → desc → null. No backend
-  // change: we're just reordering the in-memory filtered array.
-  //
-  // `policy` sorts alphabetically by the policy verdict text.
-  // `risk` sorts by blast-radius severity rank (most severe last in
-  // asc / first in desc) — more product-meaningful than sorting by
-  // the textual blast-radius label.
-  type SortKey = 'agent' | 'tool' | 'connector' | 'target' | 'policy' | 'risk' | 'decision' | 'time';
-  const [sortKey, setSortKey] = useState<SortKey | null>(null);
-  const [sortDir, setSortDir] = useState<SortDirection>(null);
+          setRuns(sessionActions);
+          setPageMeta({
+            items: sessionActions,
+            total: sessionActions.length,
+            page: 1,
+            page_size: PAGE_SIZE,
+            pages: sessionActions.length > 0 ? 1 : 0,
+          });
+          setRangeMetrics(scopedMetrics);
+        } else {
+          const [pagedRuns, metrics] = await Promise.all([
+            api.getSessionActionsPage(user.id, page, PAGE_SIZE, dateFilters),
+            api.getMetrics(user.id, dateFilters),
+          ]);
+
+          setRuns(Array.isArray(pagedRuns.items) ? pagedRuns.items : []);
+          setPageMeta(pagedRuns);
+          setRangeMetrics(metrics);
+        }
+        setLastUpdated(new Date());
+        setError(null);
+      } catch (fetchError) {
+        setError(fetchError instanceof Error ? fetchError.message : 'Failed to load runs.');
+      } finally {
+        if (!options?.soft) {
+          setLoading(false);
+        }
+      }
+    },
+    [dateFilters, page, scopedSessionId, user?.id, userLoading],
+  );
+
+  useEffect(() => {
+    if (user?.id) {
+      void fetchData();
+      return;
+    }
+    if (!userLoading) {
+      setRuns([]);
+      setPageMeta(EMPTY_PAGE);
+      setRangeMetrics(EMPTY_METRICS);
+      setLoading(false);
+    }
+  }, [fetchData, page, scopedSessionId, user?.id, userLoading]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const interval = window.setInterval(() => {
+      void fetchData({ soft: true });
+    }, 30000);
+    return () => window.clearInterval(interval);
+  }, [fetchData, user?.id]);
+
+  const runItems = useMemo(
+    () => runs.map((run) => buildRunActivityViewModel(run)),
+    [runs],
+  );
+
+  const filterOptions = useMemo(
+    () => buildRunActivityFilterOptions(runItems),
+    [runItems],
+  );
+
+  const filteredItems = useMemo(
+    () =>
+      filterRunActivity(runItems, {
+        searchQuery,
+        agentFilter,
+        decisionFilter,
+        connectorFilter,
+        targetFilter,
+        toolFilter,
+        scopedSessionId,
+      }),
+    [
+      agentFilter,
+      connectorFilter,
+      decisionFilter,
+      runItems,
+      scopedSessionId,
+      searchQuery,
+      targetFilter,
+      toolFilter,
+    ],
+  );
+
+  const filteredMetrics = useMemo(
+    () => summarizeRunActivity(filteredItems),
+    [filteredItems],
+  );
+
+  const totalMetrics = useMemo(
+    () => rangeMetrics,
+    [rangeMetrics],
+  );
+
   const onSort = useCallback(
     (key: SortKey) => {
       if (sortKey !== key) {
         setSortKey(key);
         setSortDir('asc');
-      } else if (sortDir === 'asc') {
-        setSortDir('desc');
-      } else {
-        setSortKey(null);
-        setSortDir(null);
+        return;
       }
+
+      if (sortDir === 'asc') {
+        setSortDir('desc');
+        return;
+      }
+
+      setSortKey(null);
+      setSortDir(null);
     },
-    [sortKey, sortDir],
+    [sortDir, sortKey],
   );
 
-  const sortedRuns = useMemo(() => {
-    if (!sortKey || sortDir === null) return filteredRuns;
-    const acc = (r: typeof filteredRuns[number]): string | number => {
+  const sortedItems = useMemo(() => {
+    if (!sortKey || sortDir === null) {
+      return filteredItems;
+    }
+
+    const sorted = [...filteredItems];
+    sorted.sort((left, right) => {
       switch (sortKey) {
-        case 'agent':     return r.agent_name?.toLowerCase() ?? '';
-        case 'tool':      return r.tool_name?.toLowerCase() ?? '';
-        case 'connector': return CONNECTORS[connectorForTool(r.tool_name)].name.toLowerCase();
-        case 'target':    return (deriveTarget(r).primary ?? '').toLowerCase();
-        case 'policy':    return String(r.policy ?? '').toLowerCase();
-        case 'risk':      return blastRadiusRank(readBlastRadius(r));
-        case 'decision':  return r.decision ?? '';
-        case 'time':      return new Date(r.timestamp).getTime();
+        case 'agent':
+          return compareByDirection(
+            left.action.agent_name || '',
+            right.action.agent_name || '',
+            sortDir,
+          );
+        case 'tool':
+          return compareByDirection(left.toolLabel, right.toolLabel, sortDir);
+        case 'connector':
+          return compareByDirection(
+            CONNECTORS[left.connectorId].name,
+            CONNECTORS[right.connectorId].name,
+            sortDir,
+          );
+        case 'target':
+          return compareByDirection(
+            left.target.primary || '',
+            right.target.primary || '',
+            sortDir,
+          );
+        case 'policy':
+          return compareByDirection(
+            String(left.action.policy || ''),
+            String(right.action.policy || ''),
+            sortDir,
+          );
+        case 'risk':
+          return compareByDirection(
+            blastRadiusSortValue(left.action),
+            blastRadiusSortValue(right.action),
+            sortDir,
+          );
+        case 'decision':
+          return compareByDirection(left.decision, right.decision, sortDir);
+        case 'time':
+          return compareByDirection(
+            new Date(left.action.timestamp).getTime(),
+            new Date(right.action.timestamp).getTime(),
+            sortDir,
+          );
       }
-    };
-    const arr = [...filteredRuns];
-    arr.sort((a, b) => {
-      const av = acc(a);
-      const bv = acc(b);
-      if (av < bv) return sortDir === 'asc' ? -1 : 1;
-      if (av > bv) return sortDir === 'asc' ? 1 : -1;
-      return 0;
     });
-    return arr;
-  }, [filteredRuns, sortKey, sortDir]);
 
-  const dirFor = (key: SortKey): SortDirection =>
-    sortKey === key ? sortDir : null;
+    return sorted;
+  }, [filteredItems, sortDir, sortKey]);
 
-  if (userLoading || (runsLoading && runs.length === 0)) {
+  const safePage = scopedSessionId ? 1 : Math.max(1, pageMeta.page || 1);
+  const totalPages = scopedSessionId ? (pageMeta.total > 0 ? 1 : 0) : pageMeta.pages;
+  const visibleItems = sortedItems;
+
+  const hasActiveFilters =
+    agentFilter.length > 0 ||
+    decisionFilter.length > 0 ||
+    connectorFilter.length > 0 ||
+    targetFilter.length > 0 ||
+    toolFilter.length > 0 ||
+    searchQuery.trim().length > 0 ||
+    Boolean(scopedSessionId);
+
+  useEffect(() => {
+    setExpandedRow(null);
+  }, [
+    agentFilter,
+    decisionFilter,
+    searchQuery,
+    connectorFilter,
+    targetFilter,
+    toolFilter,
+  ]);
+
+  useEffect(() => {
+    setPage(1);
+    setExpandedRow(null);
+  }, [dateRange, scopedSessionId]);
+
+  const clearSessionScope = useCallback(() => {
+    const nextParams = new URLSearchParams(searchParams.toString());
+    nextParams.delete('session');
+    const nextUrl = nextParams.toString() ? `${pathname}?${nextParams.toString()}` : pathname;
+    router.replace(nextUrl, { scroll: false });
+  }, [pathname, router, searchParams]);
+
+  const clearAllFilters = useCallback(() => {
+    setSearchQuery('');
+    setAgentFilter([]);
+    setDecisionFilter([]);
+    setConnectorFilter([]);
+    setTargetFilter([]);
+    setToolFilter([]);
+    setSortKey(null);
+    setSortDir(null);
+    if (scopedSessionId) {
+      clearSessionScope();
+    }
+  }, [clearSessionScope, scopedSessionId]);
+
+  const dirFor = useCallback(
+    (key: SortKey): SortDirection => (sortKey === key ? sortDir : null),
+    [sortDir, sortKey],
+  );
+
+  if (userLoading || (loading && runs.length === 0)) {
     return (
       <>
         <Topbar
           title="Runs"
-          subtitle="Real-time agent activity"
+          subtitle="Cross-connector agent activity"
           showDateRange
           dateRangeValue={dateRange}
           onDateRangeChange={setDateRange}
@@ -180,37 +383,39 @@ export default function RunsPage() {
     <>
       <Topbar
         title="Runs"
-        subtitle="Real-time agent activity"
+        subtitle="Cross-connector agent activity"
         lastUpdated={lastUpdated}
-        onRefresh={refreshRuns}
+        onRefresh={() => void fetchData()}
         showDateRange
         dateRangeValue={dateRange}
         onDateRangeChange={setDateRange}
       />
       <div className="mx-auto max-w-[1320px] 2xl:max-w-[1480px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
-        {runsError && (
+        {error ? (
           <div className="mb-6">
             <ErrorBanner
-              message={runsError}
-              onDismiss={() => dismissRunsError()}
-              onRetry={refreshRuns}
+              message={error}
+              onDismiss={() => setError(null)}
+              onRetry={() => void fetchData()}
             />
           </div>
-        )}
+        ) : null}
 
-        {/* Eyebrow + page title */}
         <motion.header
           className="mb-6"
           variants={staggerContainer(0.05, 0.04)}
-          initial={reduce ? false : 'hidden'}
+          initial={reduceMotion ? false : 'hidden'}
           animate="show"
         >
-          <motion.p
-            variants={fadeUp}
-            className="mb-2 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-[var(--neutral-soft-400)]"
-          >
-            Agent activity · {rangeLabel}
-          </motion.p>
+          <motion.div variants={fadeUp} className="mb-3 flex flex-wrap items-center gap-2">
+            <Badge tone="info" leadingDot>
+              Agent activity
+            </Badge>
+            <Badge tone="neutral">{rangeLabel}</Badge>
+            {scopedSessionId ? (
+              <Badge tone="feature">Scoped session</Badge>
+            ) : null}
+          </motion.div>
           <motion.h1
             variants={fadeUp}
             className="text-[26px] font-semibold leading-[1.1] tracking-[-0.03em] text-[var(--neutral-strong-950)]"
@@ -221,29 +426,38 @@ export default function RunsPage() {
             variants={fadeUp}
             className="mt-2 text-[13.5px] text-[var(--neutral-sub-600)]"
           >
-            {metrics.total.toLocaleString()} {metrics.total === 1 ? 'decision' : 'decisions'} evaluated in the selected range · auto-refresh every 30s
+            {filteredMetrics.total.toLocaleString()} visible runs on this page
+            {hasActiveFilters
+              ? ` of ${totalMetrics.total.toLocaleString()} in ${scopedSessionId ? 'this session scope' : 'the selected range'}.`
+              : ` of ${totalMetrics.total.toLocaleString()} in ${scopedSessionId ? 'this session scope' : 'the selected range'}.`}
           </motion.p>
+          {scopedSessionId ? (
+            <motion.div variants={fadeUp} className="mt-3 flex flex-wrap items-center gap-2">
+              <CodeChip>{scopedSessionId}</CodeChip>
+              <button
+                type="button"
+                onClick={clearSessionScope}
+                className="text-[12px] font-medium text-[var(--neutral-sub-600)] underline decoration-[var(--stroke-sub-300)] underline-offset-2 transition-colors hover:text-[var(--neutral-strong-950)]"
+              >
+                Clear session scope
+              </button>
+            </motion.div>
+          ) : null}
         </motion.header>
 
-        {/* Metric strip — single card, 5 divided cells (matches Dashboard stat strip) */}
         <motion.section
           className="mb-6 overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]"
-          initial={reduce ? false : { opacity: 0, y: 8 }}
+          initial={reduceMotion ? false : { opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: DUR.slow, ease: EASE.out, delay: 0.16 }}
+          transition={{ duration: DUR.slow, ease: EASE.out, delay: 0.12 }}
         >
-          <motion.div
-            className="grid grid-cols-2 divide-y divide-[var(--stroke-soft-200)] sm:grid-cols-3 sm:divide-y-0 lg:grid-cols-5 lg:divide-x lg:divide-y-0"
-            variants={staggerContainer(0.04, 0.28)}
-            initial={reduce ? false : 'hidden'}
-            animate="show"
-          >
-            <MetricStripCell label="Total Runs" value={metrics.total} />
-            <MetricStripCell label="Allowed"    value={metrics.allows}    dot="var(--success)" />
-            <MetricStripCell label="Denied"     value={metrics.denies}    dot="var(--error)" />
-            <MetricStripCell label="Rewritten"  value={metrics.rewrites}  dot="var(--feature)" />
-            <MetricStripCell label="Approvals"  value={metrics.approvals} dot="var(--primary-base)" />
-          </motion.div>
+          <div className="grid grid-cols-2 divide-y divide-[var(--stroke-soft-200)] sm:grid-cols-3 sm:divide-y-0 lg:grid-cols-5 lg:divide-x lg:divide-y-0">
+            <MetricStripCell label="Visible runs" value={filteredMetrics.total} />
+            <MetricStripCell label="Allow" value={filteredMetrics.allows} dot="var(--success)" />
+            <MetricStripCell label="Deny" value={filteredMetrics.denies} dot="var(--error)" />
+            <MetricStripCell label="Rewrite" value={filteredMetrics.rewrites} dot="var(--feature)" />
+            <MetricStripCell label="Approval" value={filteredMetrics.approvals} dot="var(--warning)" />
+          </div>
         </motion.section>
 
         {runs.length === 0 ? (
@@ -251,7 +465,7 @@ export default function RunsPage() {
             <EmptyState
               icon={<Activity className="h-5 w-5" />}
               title="No agent actions yet"
-              description="Connect your agent to start monitoring actions."
+              description="Connect your agent to start monitoring governed actions."
               action={
                 <Link href="/onboarding">
                   <Button variant="primary">Set up agent</Button>
@@ -259,113 +473,210 @@ export default function RunsPage() {
               }
             />
           </div>
+        ) : filteredItems.length === 0 ? (
+          <div className="rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
+            <EmptyState
+              icon={<Activity className="h-5 w-5" />}
+              title="No runs match the current filters"
+              description="Adjust or clear the current search and filters to inspect other actions in this range."
+              action={
+                <Button variant="secondary" onClick={clearAllFilters}>
+                  Clear filters
+                </Button>
+              }
+            />
+          </div>
         ) : (
-          <div className="space-y-3">
-            {/* Filters */}
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="min-w-[220px] flex-1 sm:min-w-[260px]">
-                <Input
-                  type="text"
-                  placeholder="Search by agent, tool, connector, target, summary…"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  leadingIcon={<Search className="h-3.5 w-3.5" strokeWidth={2} />}
-                />
-              </div>
-              <SelectMenu
-                value={connectorFilter}
-                onChange={setConnectorFilter}
-                ariaLabel="Filter by connector"
-                minWidth={190}
-                align="end"
-                options={[
-                  { value: 'all', label: 'All connectors', leading: <Swatch color="var(--neutral-soft-400)" /> },
-                  ...RUN_CONNECTOR_FILTERS.map((id) => ({
-                    value: id,
-                    label: CONNECTORS[id].name,
-                    leading: <ConnectorMark id={id} size="xs" className="cursor-default" />,
-                  })),
-                ]}
-              />
-              <SelectMenu
-                value={decisionFilter}
-                onChange={setDecisionFilter}
-                ariaLabel="Filter by decision"
-                minWidth={180}
-                align="end"
-                options={[
-                  { value: 'all',      label: 'All decisions', leading: <Swatch color="var(--neutral-soft-400)" /> },
-                  { value: 'ALLOW',    label: 'Allow',         leading: <Swatch color="var(--success)" /> },
-                  { value: 'DENY',     label: 'Deny',          leading: <Swatch color="var(--error)" /> },
-                  { value: 'REWRITE',  label: 'Rewrite',       leading: <Swatch color="var(--feature)" /> },
-                  { value: 'approval', label: 'Approval',      leading: <Swatch color="var(--warning)" /> },
-                ]}
-              />
-            </div>
-
-            {/* Table — wide (9 data columns), so horizontal scroll stays
-                on at every breakpoint. Trades the page-level sticky thead
-                for a wrapper-level one — acceptable since this page is
-                table-first and the user is rarely scrolled far past the
-                header anyway. */}
-            <Table scrollX>
-              <THead>
-                <tr>
-                  <TH sortable sortDirection={dirFor('agent')} onSort={() => onSort('agent')}>Agent</TH>
-                  <TH sortable sortDirection={dirFor('tool')} onSort={() => onSort('tool')}>Tool</TH>
-                  <TH sortable sortDirection={dirFor('connector')} onSort={() => onSort('connector')}>Connector</TH>
-                  <TH sortable sortDirection={dirFor('target')} onSort={() => onSort('target')}>Target</TH>
-                  <TH sortable sortDirection={dirFor('policy')} onSort={() => onSort('policy')}>Policy</TH>
-                  <TH sortable sortDirection={dirFor('risk')} onSort={() => onSort('risk')}>Blast Radius</TH>
-                  <TH sortable sortDirection={dirFor('decision')} onSort={() => onSort('decision')}>Decision</TH>
-                  <TH sortable sortDirection={dirFor('time')} onSort={() => onSort('time')} className="text-right">Time</TH>
-                  <TH aria-label="Expand" className="w-8" />
-                </tr>
-              </THead>
-              <TBody>
-                {sortedRuns.map((run) => (
-                  <RunRow
-                    key={run.id}
-                    run={run}
-                    isExpanded={expandedRow === run.id}
-                    onToggle={() =>
-                      setExpandedRow(expandedRow === run.id ? null : run.id)
+          <>
+            <motion.div
+              className="mb-3 rounded-[12px] border border-[var(--stroke-soft-200)] bg-white p-3 shadow-[0_1px_2px_rgba(23,23,23,0.04)]"
+              initial={reduceMotion ? false : { opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: DUR.slow, ease: EASE.out, delay: 0.16 }}
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="min-w-[240px] flex-1">
+                  <Input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(event) => setSearchQuery(event.target.value)}
+                    placeholder="Search agent, tool, connector, target, policy, or session"
+                    leadingIcon={<Search className="h-3.5 w-3.5" strokeWidth={2} />}
+                    trailingIcon={
+                      searchQuery ? (
+                        <button
+                          type="button"
+                          onClick={() => setSearchQuery('')}
+                          aria-label="Clear search"
+                          className="rounded p-0.5 text-[var(--neutral-soft-400)] transition-colors hover:text-[var(--neutral-strong-950)]"
+                        >
+                          <X className="h-3.5 w-3.5" strokeWidth={2.25} />
+                        </button>
+                      ) : undefined
                     }
                   />
-                ))}
-              </TBody>
-            </Table>
-            {filteredRuns.length === 0 && search && (
-              <div className="rounded-[12px] border border-[var(--stroke-soft-200)] bg-white py-10 text-center text-[13px] text-[var(--neutral-soft-400)]">
-                No runs match your search.
+                </div>
+                <FilterChip
+                  label="Agent"
+                  options={filterOptions.agents}
+                  value={agentFilter}
+                  onChange={setAgentFilter}
+                />
+                <FilterChip
+                  label="Decision"
+                  options={filterOptions.decisions.map((option) => ({
+                    value: option.value,
+                    label: option.label,
+                    icon: <DecisionOptionDot decision={option.value} />,
+                  }))}
+                  value={decisionFilter}
+                  onChange={setDecisionFilter}
+                />
+                <FilterChip
+                  label="Connector"
+                  options={filterOptions.connectors.map((option) => ({
+                    value: option.value,
+                    label: CONNECTORS[option.value as keyof typeof CONNECTORS].name,
+                    icon: (
+                      <ConnectorMark
+                        id={option.value as keyof typeof CONNECTORS}
+                        size="xs"
+                        className="cursor-default"
+                      />
+                    ),
+                  }))}
+                  value={connectorFilter}
+                  onChange={setConnectorFilter}
+                />
+                <FilterChip
+                  label="Target"
+                  options={filterOptions.targets}
+                  value={targetFilter}
+                  onChange={setTargetFilter}
+                />
+                <FilterChip
+                  label="Tool"
+                  options={filterOptions.tools}
+                  value={toolFilter}
+                  onChange={setToolFilter}
+                />
+                {hasActiveFilters ? (
+                  <button
+                    type="button"
+                    onClick={clearAllFilters}
+                    className="inline-flex h-7 items-center gap-1 rounded-[8px] px-2 text-[11.5px] font-medium text-[var(--neutral-sub-600)] transition-colors hover:bg-[var(--neutral-weak-50)] hover:text-[var(--neutral-strong-950)]"
+                  >
+                    <X className="h-3 w-3" strokeWidth={2.25} aria-hidden />
+                    Clear filters
+                  </button>
+                ) : null}
               </div>
-            )}
+              {!scopedSessionId ? (
+                <p className="mt-2 text-[11.5px] text-[var(--neutral-soft-400)]">
+                  Search and facet filters apply to the loaded page. Use pagination to inspect older activity.
+                </p>
+              ) : null}
+            </motion.div>
 
-            {hasMoreRuns && (
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-[12px] border border-[var(--stroke-soft-200)] bg-white px-4 py-3 shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
+            <motion.div
+              initial={reduceMotion ? false : { opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: DUR.slow, ease: EASE.out, delay: 0.2 }}
+            >
+              <Table scrollX>
+                <THead>
+                  <tr>
+                    <TH sortable sortDirection={dirFor('agent')} onSort={() => onSort('agent')}>
+                      Agent
+                    </TH>
+                    <TH sortable sortDirection={dirFor('tool')} onSort={() => onSort('tool')}>
+                      Tool
+                    </TH>
+                    <TH sortable sortDirection={dirFor('connector')} onSort={() => onSort('connector')}>
+                      Connector
+                    </TH>
+                    <TH sortable sortDirection={dirFor('target')} onSort={() => onSort('target')}>
+                      Target
+                    </TH>
+                    <TH>Summary</TH>
+                    <TH sortable sortDirection={dirFor('policy')} onSort={() => onSort('policy')}>
+                      Policy
+                    </TH>
+                    <TH sortable sortDirection={dirFor('risk')} onSort={() => onSort('risk')}>
+                      Blast Radius
+                    </TH>
+                    <TH sortable sortDirection={dirFor('decision')} onSort={() => onSort('decision')}>
+                      Decision
+                    </TH>
+                    <TH
+                      sortable
+                      sortDirection={dirFor('time')}
+                      onSort={() => onSort('time')}
+                      className="text-right"
+                    >
+                      Time
+                    </TH>
+                    <TH aria-label="Expand" className="w-8" />
+                  </tr>
+                </THead>
+                <TBody>
+                  {visibleItems.map((item) => (
+                    <RunRow
+                      key={item.action.id}
+                      item={item}
+                      isExpanded={expandedRow === item.action.id}
+                      onToggle={() =>
+                        setExpandedRow(expandedRow === item.action.id ? null : item.action.id)
+                      }
+                    />
+                  ))}
+                </TBody>
+              </Table>
+
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-[12px] border border-[var(--stroke-soft-200)] bg-white px-4 py-3 shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
                 <p className="text-xs text-[var(--neutral-soft-400)]">
                   Showing{' '}
                   <span className="font-medium text-[var(--neutral-strong-950)]">
-                    {runs.length.toLocaleString()}
+                    {sortedItems.length.toLocaleString()}
                   </span>{' '}
-                  of{' '}
-                  <span className="font-medium text-[var(--neutral-strong-950)]">
-                    {metrics.total.toLocaleString()}
-                  </span>{' '}
-                  actions loaded.
+                  matching runs on this page
+                  {!scopedSessionId ? (
+                    <>
+                      {' '}
+                      of{' '}
+                      <span className="font-medium text-[var(--neutral-strong-950)]">
+                        {pageMeta.total.toLocaleString()}
+                      </span>{' '}
+                      in the selected range
+                    </>
+                  ) : null}
                 </p>
-
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  disabled={runsLoadingMore}
-                  onClick={() => void loadMoreRuns()}
-                >
-                  {runsLoadingMore ? 'Loading…' : 'Load more'}
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={Boolean(scopedSessionId) || safePage <= 1}
+                    onClick={() => setPage((current) => Math.max(1, current - 1))}
+                  >
+                    Previous
+                  </Button>
+                  <span className="text-[12px] text-[var(--neutral-soft-400)]">
+                    Page {safePage} of {Math.max(totalPages, 1)}
+                  </span>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={Boolean(scopedSessionId) || totalPages <= 1 || safePage >= totalPages}
+                    onClick={() =>
+                      setPage((current) => Math.min(Math.max(totalPages, 1), current + 1))
+                    }
+                  >
+                    Next
+                  </Button>
+                </div>
               </div>
-            )}
-            </div>
+            </motion.div>
+          </>
         )}
       </div>
     </>
@@ -373,107 +684,89 @@ export default function RunsPage() {
 }
 
 function RunRow({
-  run,
+  item,
   isExpanded,
   onToggle,
 }: {
-  run: SessionAction;
+  item: RunActivityViewModel;
   isExpanded: boolean;
   onToggle: () => void;
 }) {
-  // Delayed visual-expanded state — keeps the trigger row in its expanded
-  // visual treatment (gradient, no row-divider) until the panel below
-  // has finished its exit animation. Prevents the trigger row from
-  // "snapping back" with a 1px border re-appearing while the panel is
-  // still collapsing — which the user perceived as a layout shift.
-  const [stillExpanded, setStillExpanded] = useState(isExpanded);
-  useEffect(() => {
-    if (isExpanded) setStillExpanded(true);
-    // collapse → false happens via AnimatePresence onExitComplete below
-  }, [isExpanded]);
-
+  const action = item.action;
   const prUrl = extractPullRequestUrl({
-    action_pointers: run.action_pointers,
-    result: run.result,
-    arguments: run.arguments,
+    action_pointers: action.action_pointers,
+    result: action.result,
+    arguments: action.arguments,
   });
 
   return (
     <>
-      <TR clickable isExpanded={stillExpanded} onClick={onToggle}>
+      <TR clickable isExpanded={isExpanded} onClick={onToggle}>
         <TD className="max-w-[220px]">
           <div className="flex items-center gap-2.5">
             <span
               className="inline-block h-1.5 w-1.5 shrink-0 rounded-full"
-              style={{ backgroundColor: decisionColor(run.decision) }}
+              style={{ backgroundColor: decisionColor(action.decision) }}
               aria-hidden
             />
-            <AgentMark name={run.agent_name || ''} size="xs" />
+            <AgentMark name={action.agent_name || ''} size="xs" />
             <span className="truncate text-[13.5px] font-semibold text-[var(--neutral-strong-950)]">
-              {run.agent_name || 'Unknown'}
+              {action.agent_name || 'Unknown'}
             </span>
           </div>
         </TD>
         <TD>
-          <CodeChip>{run.tool_name}</CodeChip>
+          <CodeChip title={action.tool_name || ''}>{item.toolLabel}</CodeChip>
         </TD>
         <TD className="whitespace-nowrap">
-          {(() => {
-            const connectorId = connectorForTool(run.tool_name);
-            return (
-              <div
-                className="flex items-center gap-2"
-                title={`${CONNECTORS[connectorId].name} connector`}
-              >
-                <ConnectorMark id={connectorId} size="xs" className="cursor-default" />
-                <span className="text-[12.5px] text-[var(--neutral-sub-600)]">
-                  {CONNECTORS[connectorId].name}
-                </span>
-              </div>
-            );
-          })()}
+          <div
+            className="flex items-center gap-2"
+            title={`${CONNECTORS[item.connectorId].name} connector`}
+          >
+            <ConnectorMark id={item.connectorId} size="xs" className="cursor-default" />
+            <span className="text-[12.5px] text-[var(--neutral-sub-600)]">
+              {CONNECTORS[item.connectorId].name}
+            </span>
+          </div>
         </TD>
         <TD className="max-w-[260px]">
-          {(() => {
-            const tgt = deriveTarget(run);
-            if (!tgt.primary && !tgt.secondary) return null;
-            return (
-              <div className="flex min-w-0 items-center gap-2">
-                {tgt.primary && (
-                  <span
-                    className="truncate text-[12.5px] text-[var(--neutral-sub-600)]"
-                    title={tgt.primary}
-                  >
-                    {tgt.primary}
-                  </span>
-                )}
-                {tgt.secondary && <CodeChip>{tgt.secondary}</CodeChip>}
-              </div>
-            );
-          })()}
+          {item.target.primary ? (
+            <div className="flex min-w-0 items-center gap-2" title={item.target.kind}>
+              <span className="truncate text-[12.5px] text-[var(--neutral-sub-600)]">
+                {item.target.primary}
+              </span>
+              {item.target.secondary ? <CodeChip>{item.target.secondary}</CodeChip> : null}
+            </div>
+          ) : (
+            <span className="text-[12px] italic text-[var(--neutral-soft-400)]">No target</span>
+          )}
+        </TD>
+        <TD className="max-w-[320px] text-[12.5px] text-[var(--neutral-sub-600)]">
+          <span className="block truncate" title={action.action_summary}>
+            {action.action_summary || 'No summary provided'}
+          </span>
         </TD>
         <TD className="whitespace-nowrap">
-          <PolicyChip policy={run.policy} />
+          <PolicyChip policy={action.policy} />
         </TD>
         <TD className="whitespace-nowrap">
-          <BlastRadiusChip value={readBlastRadius(run)} />
+          <BlastRadiusChip value={readBlastRadius(action)} />
         </TD>
         <TD className="whitespace-nowrap">
           <div className="flex flex-col items-start gap-1">
-            <DecisionBadge decision={run.decision} />
-            {prUrl && <PullRequestLink url={prUrl} variant="chip" />}
+            <DecisionBadge decision={action.decision} />
+            {prUrl ? <PullRequestLink url={prUrl} variant="chip" /> : null}
           </div>
         </TD>
         <TD className="whitespace-nowrap text-right tabular-nums">
           <div className="flex flex-col items-end gap-1">
             <RelativeTime
-              timestamp={run.timestamp}
+              timestamp={action.timestamp}
               className="whitespace-nowrap text-[12px] text-[var(--neutral-soft-400)]"
             />
-            {(() => {
-              const exec = formatExecutionTimeMs(run.execution_time);
-              return exec ? <CodeChip>{exec}</CodeChip> : null;
-            })()}
+            {action.execution_time !== undefined && action.execution_time !== null ? (
+              <CodeChip>{formatExecutionTimeMs(action.execution_time)}</CodeChip>
+            ) : null}
           </div>
         </TD>
         <TD className="w-8 text-right">
@@ -485,94 +778,98 @@ function RunRow({
           />
         </TD>
       </TR>
-      <AnimatePresence
-        initial={false}
-        onExitComplete={() => setStillExpanded(false)}
-      >
-      {isExpanded && (
-        <TRExpanded key="expanded" colSpan={9}>
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-            <div>
-              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.05em] text-[var(--neutral-soft-400)]">
-                Full Summary
-              </p>
-              {run.action_summary ? (
-                <p className="text-[13px] text-[var(--neutral-strong-950)]">
-                  {run.action_summary}
-                </p>
-              ) : (
-                <p className="text-[13px] italic text-[var(--neutral-soft-400)]">
-                  No summary provided
-                </p>
-              )}
-              {/* Policy + Blast Radius are already shown as separate
-                  columns in the row — no need to repeat them inside the
-                  expanded panel. Keeps the inspector focused on details
-                  not visible at the row level. */}
-            </div>
-            <div className="grid grid-cols-2 gap-3 text-[12px] md:grid-cols-4">
+      <AnimatePresence initial={false}>
+        {isExpanded ? (
+          <TRExpanded key="expanded" colSpan={10}>
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(320px,0.9fr)]">
               <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.05em] text-[var(--neutral-soft-400)]">
-                  Sequence
+                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.05em] text-[var(--neutral-soft-400)]">
+                  Full summary
                 </p>
-                <p className="mt-0.5 text-[var(--neutral-strong-950)]">
-                  #{run.sequence_order}
+                <p className="text-[13px] leading-[1.6] text-[var(--neutral-strong-950)]">
+                  {action.action_summary || 'No summary provided'}
                 </p>
+                {action.arguments ? (
+                  <div className="mt-4">
+                    <JsonViewer data={action.arguments} collapsed={false} label="Arguments" />
+                  </div>
+                ) : null}
               </div>
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.05em] text-[var(--neutral-soft-400)]">
-                  Session
-                </p>
-                <Link
-                  href={`/dashboard/sessions?id=${run.session_id}`}
-                  className="mt-0.5 block text-[var(--primary-base)] hover:underline [font-family:var(--font-geist-mono),ui-monospace,monospace]"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {run.session_id?.substring(0, 8)}…
-                </Link>
-              </div>
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.05em] text-[var(--neutral-soft-400)]">
-                  Timestamp
-                </p>
-                <p className="mt-0.5 text-[var(--neutral-strong-950)]">
-                  {formatFullTimestamp(run.timestamp)}
-                </p>
-              </div>
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.05em] text-[var(--neutral-soft-400)]">
-                  Execution
-                </p>
-                <p className="mt-0.5 text-[var(--neutral-strong-950)]">
-                  {formatExecutionTimeMs(run.execution_time)}
-                </p>
+
+              <div className="grid grid-cols-2 gap-3 text-[12px] md:grid-cols-3">
+                <MetaCell label="Connector" value={CONNECTORS[item.connectorId].name} />
+                <MetaCell label="Target kind" value={item.target.kind} />
+                <MetaCell label="Session" value={action.session_id || 'Unavailable'} mono />
+                <MetaCell label="Timestamp" value={formatFullTimestamp(action.timestamp)} />
+                <MetaCell
+                  label="Execution"
+                  value={formatExecutionTimeMs(action.execution_time) || 'Unavailable'}
+                />
+                <MetaCell label="Policy" value={String(action.policy || 'Unavailable')} mono />
               </div>
             </div>
-          </div>
-          {run.arguments && (
-            <div className="mt-4">
-              <JsonViewer data={run.arguments} collapsed={false} label="Arguments" />
-            </div>
-          )}
-        </TRExpanded>
-      )}
+          </TRExpanded>
+        ) : null}
       </AnimatePresence>
     </>
   );
 }
 
-// ── Decision color swatch for the SelectMenu options ───────────────────────
-function Swatch({ color }: { color: string }) {
+function DecisionOptionDot({ decision }: { decision: string }) {
   return (
     <span
       className="inline-block h-2 w-2 shrink-0 rounded-full"
-      style={{ backgroundColor: color }}
+      style={{ backgroundColor: decisionColor(decision) }}
       aria-hidden
     />
   );
 }
 
-// ── Metric strip cell — divided cells inside one card (no gaps) ─────────────
+function MetaCell({
+  label,
+  value,
+  mono = false,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+}) {
+  return (
+    <div>
+      <p className="text-[10px] font-semibold uppercase tracking-[0.05em] text-[var(--neutral-soft-400)]">
+        {label}
+      </p>
+      <p
+        className={
+          mono
+            ? 'mt-0.5 break-all text-[var(--neutral-strong-950)] [font-family:var(--font-geist-mono),ui-monospace,monospace]'
+            : 'mt-0.5 text-[var(--neutral-strong-950)]'
+        }
+      >
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function compareByDirection(left: string | number, right: string | number, direction: SortDirection): number {
+  const comparison =
+    typeof left === 'number' && typeof right === 'number'
+      ? left - right
+      : compareText(String(left), String(right));
+
+  return direction === 'asc' ? comparison : -comparison;
+}
+
+function blastRadiusSortValue(action: SessionAction): number {
+  const value = (readBlastRadius(action) || '').toLowerCase();
+  if (value === 'low') return 1;
+  if (value === 'medium') return 2;
+  if (value === 'high') return 3;
+  if (value === 'critical') return 4;
+  return 0;
+}
+
 function MetricStripCell({
   label,
   value,
@@ -583,15 +880,15 @@ function MetricStripCell({
   dot?: string;
 }) {
   return (
-    <motion.div variants={fadeUp} className="px-6 py-4">
+    <div className="px-6 py-4">
       <div className="flex items-center gap-2">
-        {dot && (
+        {dot ? (
           <span
             className="inline-block h-[7px] w-[7px] shrink-0 rounded-full"
             style={{ backgroundColor: dot }}
             aria-hidden
           />
-        )}
+        ) : null}
         <p className="text-[10.5px] font-semibold uppercase tracking-[0.07em] text-[var(--neutral-soft-400)]">
           {label}
         </p>
@@ -599,6 +896,6 @@ function MetricStripCell({
       <p className="mt-1.5 text-[26px] font-semibold leading-none tracking-[-0.04em] tabular-nums text-[var(--neutral-strong-950)]">
         {value.toLocaleString()}
       </p>
-    </motion.div>
+    </div>
   );
 }

@@ -17,8 +17,8 @@ interface TopbarProps {
   onRefresh?: () => void;
   /** When true, the notification bell is hidden (useful for settings pages). */
   minimal?: boolean;
-  /** Optional unread notification count — when > 0, a dot appears on the bell. */
-  unreadCount?: number;
+  /** Optional pending approval count surfaced in the user menu quick stat. */
+  pendingApprovalsCount?: number;
   /**
    * Render the date-range picker. Default false. Opt in only on pages
    * where time-windowed data is the primary surface (Dashboard, Runs,
@@ -47,7 +47,7 @@ export default function Topbar({
   lastUpdated,
   onRefresh,
   minimal = false,
-  unreadCount = 0,
+  pendingApprovalsCount = 0,
   showDateRange = false,
   dateRangeValue,
   onDateRangeChange,
@@ -86,7 +86,12 @@ export default function Topbar({
     if (lastUpdated && lastUpdated !== lastUpdatedRef.current) {
       lastUpdatedRef.current = lastUpdated;
       // Only stop if no min-spin timer is queued.
-      if (!minSpinTimerRef.current) setRefreshing(false);
+      if (!minSpinTimerRef.current) {
+        const timer = window.setTimeout(() => {
+          setRefreshing(false);
+        }, 0);
+        return () => window.clearTimeout(timer);
+      }
     }
   }, [lastUpdated]);
 
@@ -216,9 +221,9 @@ export default function Topbar({
           </button>
         )}
 
-        {!minimal && <NotificationsPanel unreadCount={unreadCount} />}
+        {!minimal && <NotificationsPanel />}
 
-        <UserMenu pendingApprovals={unreadCount} />
+        <UserMenu pendingApprovals={pendingApprovalsCount} />
       </div>
     </header>
   );

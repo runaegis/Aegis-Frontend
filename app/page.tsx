@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
-import { apiFetch } from '@/lib/api';
+import { AuthError, api } from '@/lib/api';
 
 export default function Home() {
   const router = useRouter();
@@ -11,42 +11,24 @@ export default function Home() {
   useEffect(() => {
     const bootstrap = async () => {
       try {
-        const res = await apiFetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/auth/onboarding-step`,
-          {
-            method: 'GET',
-            credentials: 'include',
-          }
-        );
+        const user = await api.getUserDetails();
+        const onboardingStatus =
+          typeof user.onboarding_status === 'boolean'
+            ? user.onboarding_status
+            : (await api.getOnboardingStatus()).onboarding_status;
 
-        // not authenticated
-        if (!res.ok) {
+        router.replace(onboardingStatus ? '/dashboard' : '/onboarding');
+
+      } catch (err) {
+        if (err instanceof AuthError) {
           router.replace('/auth');
           return;
         }
-
-        const data = await res.json();
-
-        const onboardingStep =
-          data.onboarding_step;
-
-        // incomplete onboarding
-        if (
-          onboardingStep >= 0 &&
-          onboardingStep < 4
-        ) {
-          router.replace('/onboarding');
-          return;
-        }
-
-        // fully onboarded
-        router.replace('/dashboard');
-
-      } catch (err) {
         console.error(
           'BOOTSTRAP ERROR:',
           err
         );
+        router.replace('/auth');
       }
     };
 

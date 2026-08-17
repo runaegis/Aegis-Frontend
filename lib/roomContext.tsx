@@ -34,15 +34,16 @@ import {
 import { api } from '@/lib/api';
 import { useUser } from '@/lib/hooks';
 import type { RoomDetails, RoomMember } from '@/lib/types';
+import { getRoomRoleLabel } from '@/lib/utils';
 
 interface RoomContextValue {
   roomId: string;
   room: RoomDetails | null;
   members: RoomMember[];
-  /** The current user's role within this room. Falls back to
-   *  DEVELOPER if no membership found (shouldn't happen in practice
-   *  but stays safe). */
+  /** Human-readable role label for the current user in this room. */
   role: string;
+  /** Numeric authority source for room RBAC. Lower rank means more authority. */
+  roleRank: number | null;
   loading: boolean;
   error: string | null;
   /** Manually re-fetch room + members. Use after a successful
@@ -63,6 +64,8 @@ export function RoomProvider({
   const { user } = useUser();
   const [room, setRoom] = useState<RoomDetails | null>(null);
   const [members, setMembers] = useState<RoomMember[]>([]);
+  const [membershipRole, setMembershipRole] = useState<string | null>(null);
+  const [membershipRoleRank, setMembershipRoleRank] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -70,24 +73,15 @@ export function RoomProvider({
     if (!roomId) return;
     setLoading(true);
     try {
-      // We fetch getMyRooms alongside getRoomDetails because the
-      // detail endpoint doesn't always echo the caller's role,
-      // but the list endpoint does (it's server-derived from
-      // membership). Merging the two means we always have a role
-      // that matches what shows on the rooms-index list — no more
-      // creator-sees-themself-as-DEVELOPER mismatches.
-      const [roomData, memberData, myRoomsList] = await Promise.all([
+      const [roomData, memberData, membershipData] = await Promise.all([
         api.getRoomDetails(roomId),
         api.getRoomMembers(roomId),
-        api.getMyRooms(),
+        api.getMyRoomMembership(roomId).catch(() => null),
       ]);
-      const myRow = myRoomsList.find(
-        (r) => String(r.id || r.room_id || '') === String(roomId),
-      );
-      // Merge the role from the list (authoritative) into the
-      // detail payload so consumers can read room.role uniformly.
-      setRoom({ ...roomData, role: myRow?.role ?? roomData.role });
+      setRoom(roomData);
       setMembers(memberData);
+      setMembershipRole(membershipData?.role ?? null);
+      setMembershipRoleRank(membershipData?.role_rank ?? null);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load room');
@@ -100,23 +94,34 @@ export function RoomProvider({
     void refresh();
   }, [refresh]);
 
-  // Role resolution — three tiers:
-  //   1. room.role from getMyRooms (most reliable, server-derived
-  //      from auth + membership)
-  //   2. members.find() — works when the backend keys members by
-  //      the same username string we have on the user object
-  //   3. 'DEVELOPER' — defensive default; rare in practice once
-  //      tier 1 lands.
-  const role = useMemo(() => {
-    if (room?.role) return room.role;
-    const me = members.find((m) => m.username === user?.username);
-    if (me?.role) return me.role;
-    return 'DEVELOPER';
-  }, [room?.role, members, user?.username]);
+  const me = useMemo(
+    () =>
+      members.find(
+        (member) =>
+          member.user_id === user?.id || member.username === user?.username,
+      ) ?? null,
+    [members, user?.id, user?.username],
+  );
+
+  const roleRank = useMemo(() => {
+    if (typeof membershipRoleRank === 'number') return membershipRoleRank;
+    if (typeof me?.role_rank === 'number') return me.role_rank;
+    if (typeof room?.role_rank === 'number') return room.role_rank;
+    return null;
+  }, [membershipRoleRank, me?.role_rank, room?.role_rank]);
+
+  const role = useMemo(
+    () =>
+      getRoomRoleLabel(
+        membershipRole ?? me?.role ?? room?.role ?? null,
+        roleRank,
+      ),
+    [membershipRole, me?.role, room?.role, roleRank],
+  );
 
   const value = useMemo<RoomContextValue>(
-    () => ({ roomId, room, members, role, loading, error, refresh }),
-    [roomId, room, members, role, loading, error, refresh],
+    () => ({ roomId, room, members, role, roleRank, loading, error, refresh }),
+    [roomId, room, members, role, roleRank, loading, error, refresh],
   );
 
   return <RoomContext.Provider value={value}>{children}</RoomContext.Provider>;

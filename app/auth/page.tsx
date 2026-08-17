@@ -40,12 +40,11 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { useUser, useEmail } from '@/lib/hooks';
-import { User } from '@/lib/types';
 import { AegisLogo } from '@/components/ui/AegisLogo';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { fadeUp, staggerContainer } from '@/lib/motion';
-import { api, apiFetch } from '@/lib/api';
+import { api, getApiErrorCode, getApiErrorMessage } from '@/lib/api';
 
 type AuthMode = 'signin' | 'signup' | 'forgot';
 
@@ -110,6 +109,7 @@ export default function AuthPage() {
   // Success states
   const [signupSuccess, setSignupSuccess] = useState(false);
   const [signupEmail, setSignupEmail] = useState('');
+  const [verificationEmail, setVerificationEmail] = useState('');
   const [forgotSuccess, setForgotSuccess] = useState(false);
   const [forgotEmail, setForgotEmail] = useState('');
   const [loggingIn, setLoggingIn] = useState(false);
@@ -130,6 +130,7 @@ export default function AuthPage() {
     setShowConfirmPassword(false);
     setSignupSuccess(false);
     setForgotSuccess(false);
+    setVerificationEmail('');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
 
@@ -200,15 +201,15 @@ export default function AuthPage() {
 
   const handleResendEmail = async () => {
     if (resendCooldown > 0) return;
+    const targetEmail = verificationEmail || signupEmail || email;
+    if (!targetEmail) {
+      setResendMessage('Enter your email first');
+      return;
+    }
     setResendCooldown(30);
     try {
-      const res = await apiFetch(`${BACKEND_URL}/auth/resend-verification`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ email: signupEmail }),
-      });
-      setResendMessage(res.ok ? 'Email resent' : 'Failed to resend');
+      await api.resendVerification(targetEmail);
+      setResendMessage('Email resent');
     } catch {
       setResendMessage('Failed to resend');
     }
@@ -219,209 +220,91 @@ export default function AuthPage() {
     setLoading(true);
     setErrors({});
     try {
-      const res = await apiFetch(`${BACKEND_URL}/auth/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ name, email, password }),
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        if (data.detail || data.message) {
-          throw data.detail || {
-            code: 'UNKNOWN_ERROR',
-            message: 'Signup failed',
-          };
-        }
-        throw new Error('Signup failed');
-      }
+      await api.registerEmail({ name: name.trim(), email, password });
       setSignupEmail(email);
+      setVerificationEmail(email);
       setSignupSuccess(true);
-    } catch (err: any) {
-        const detail = err?.detail || err;
-
-        switch (detail.code) {
-          case 'ACCOUNT_EXISTS':
-            setErrors({ form: 'email_exists' });
-            break;
-
-          case 'SIGNUP_FAILED':
-            setErrors({
-              form: 'Could not create account. Please try again.',
-            });
-            break;
-
-          default:
-            setErrors({
-              form: detail.message || 'Something went wrong.',
-            });
-        }
-      } finally {
+    } catch (err: unknown) {
+      switch (getApiErrorCode(err)) {
+        case 'ACCOUNT_EXISTS':
+          setErrors({ form: 'email_exists' });
+          break;
+        case 'EMAIL_DELIVERY_FAILED':
+          setSignupEmail(email);
+          setVerificationEmail(email);
+          setSignupSuccess(true);
+          setResendMessage('Verification email could not be sent. Try resend.');
+          break;
+        default:
+          setErrors({
+            form: getApiErrorMessage(err, 'Could not create account. Please try again.'),
+          });
+      }
+    } finally {
       setLoading(false);
     }
   };
 
   const handleLogin = async () => {
-  if (!validateForm()) return;
+    if (!validateForm()) return;
 
-  setLoading(true);
-  setErrors({});
+    setLoading(true);
+    setErrors({});
 
-  try {
-    const res = await apiFetch(`${BACKEND_URL}/auth/login`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        email,
-        password,
-      }),
-      credentials: 'include',
-      redirect: 'manual',
-    });
-
-    /**
-     * IMPORTANT:
-     * Backend returns 307 RedirectResponse
-     * fetch() with redirect: 'manual'
-     * prevents CORS redirect failure
-     */
-
-    if (
-      res.type === 'opaqueredirect' ||
-      res.status === 307
-    ) {
-      const onboardingRes = await apiFetch(
-        `${BACKEND_URL}/auth/onboarding-step`,
-        {
-          method: 'GET',
-          credentials: 'include',
-        }
-      );
-
-      if (!onboardingRes.ok) {
-        throw new Error('Failed to fetch onboarding step');
-      }
-
-      const onboardingData = await onboardingRes.json();
-      const onboardingStep = onboardingData.onboarding_step; 
+    try {
+      await api.loginEmail({ email, password });
+      let userData: Awaited<ReturnType<typeof api.getUserDetails>>;
       try {
-        const userData = await api.getUserDetails();
-        setUser(userData);
+        userData = await api.getUserDetails();
       } catch {
-        // Allow the next screen to bootstrap from the session cookie.
+        await api.logOut();
+        throw new Error('Could not load your account profile. Please log in again.');
       }
+      setUser(userData);
+
+      const onboardingStatus =
+        typeof userData.onboarding_status === 'boolean'
+          ? userData.onboarding_status
+          : (await api.getOnboardingStatus()).onboarding_status;
 
       setLoggingIn(true);
 
       setTimeout(() => {
-        if (
-          onboardingStep >= 0 &&
-          onboardingStep < 4
-        ) {
-          router.push('/onboarding');
-        } else {
+        if (onboardingStatus) {
           router.push('/dashboard');
+        } else {
+          router.push('/onboarding');
         }
       }, 1000);
-
-      return;
+    } catch (err: unknown) {
+      switch (getApiErrorCode(err)) {
+        case 'INVALID_CREDENTIALS':
+        case 'ACCOUNT_NOT_FOUND':
+        case 'INVALID_PASSWORD':
+          setErrors({
+            form: 'Email or password is incorrect.',
+          });
+          break;
+        case 'EMAIL_NOT_VERIFIED':
+          setVerificationEmail(email);
+          setErrors({
+            form: 'unverified',
+          });
+          break;
+        case 'ACCOUNT_LINK_REQUIRED':
+          setErrors({
+            form: 'This email is linked to another sign-in method. Use the provider you used before.',
+          });
+          break;
+        default:
+          setErrors({
+            form: getApiErrorMessage(err, 'Something went wrong. Please try again.'),
+          });
+      }
+    } finally {
+      setLoading(false);
     }
-
-    /**
-     * Error response handling
-     */
-
-    let data: any = {};
-
-    try {
-      data = await res.json();
-    } catch {
-      data = {};
-    }
-
-    if (!res.ok) {
-      throw data;
-    }
-
-    /**
-     * Optional success path
-     * if backend sometimes returns 200 JSON
-     */
-
-    try {
-      const userData = await api.getUserDetails();
-      setUser(userData);
-    } catch {
-      const userData: User = {
-        email,
-        github_user_id: data.github_user_id || 0,
-        username: data.username || '',
-        access_token: data.access_token || '',
-        github_pat: data.access_token || '',
-        postgres_connection_string: null,
-        jira_url: null,
-        jira_username: null,
-        jira_api_token: null,
-        mongodb_connection_string: null,
-        linear_api_key: null,
-        terraform_api_token: null,
-        terraform_url: null,
-      };
-
-      setUser(userData);
-    }
-
-    setLoggingIn(true);
-
-    setTimeout(() => {
-      router.push('/onboarding');
-    }, 1000);
-
-  } catch (err: any) {
-    console.log('LOGIN ERROR:', err);
-
-    const detail =
-      err?.detail ||
-      err;
-
-    /**
-     * Backend structured errors
-     */
-
-    switch (detail?.code) {
-      case 'ACCOUNT_NOT_FOUND':
-        setErrors({
-          form: 'Account not found.',
-        });
-        break;
-
-      case 'INVALID_PASSWORD':
-        setErrors({
-          form: 'Incorrect password.',
-        });
-        break;
-
-      case 'EMAIL_NOT_VERIFIED':
-        setErrors({
-          form: 'Please verify your email first.',
-        });
-        break;
-
-      default:
-        setErrors({
-          form:
-            detail?.message ||
-            detail?.detail ||
-            err?.message ||
-            'Something went wrong. Please try again.',
-        });
-    }
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   const handleForgotPassword = async () => {
     const newErrors: FormErrors = {};
@@ -437,16 +320,11 @@ export default function AuthPage() {
     setLoading(true);
     setErrors({});
     try {
-      await apiFetch(`${BACKEND_URL}/auth/forgot-password`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
-        credentials: 'include',
-      });
+      await api.forgotPassword(email);
       setForgotEmail(email);
       setForgotSuccess(true);
-    } catch {
-      setErrors({ form: 'Something went wrong. Please try again.' });
+    } catch (err: unknown) {
+      setErrors({ form: getApiErrorMessage(err, 'Something went wrong. Please try again.') });
     } finally {
       setLoading(false);
     }
