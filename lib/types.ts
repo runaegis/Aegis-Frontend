@@ -8,6 +8,39 @@ export interface Memory {
   updated_at?: string | null;
 }
 
+export type MemoryShareStatus = "pending" | "revoked" | "expired" | "exhausted";
+
+export interface MemoryShare {
+  id: string;
+  memory_id: string;
+  share_code: string;
+  share_url: string;
+  status?: MemoryShareStatus;
+  expires_at?: string | null;
+  max_uses?: number | null;
+  used_count?: number;
+  created_at?: string | null;
+}
+
+export interface MemoryShareCreatePayload {
+  expires_in_hours?: number;
+  max_uses?: number | null;
+}
+
+export interface MemorySharePreview {
+  title: string;
+  status: MemoryShareStatus;
+  already_owned: boolean;
+  already_redeemed: boolean;
+  redeemed_memory_id?: string | null;
+}
+
+export interface MemoryShareRedeemResponse {
+  already_redeemed: boolean;
+  share_id?: string;
+  memory?: Memory | null;
+}
+
 export interface UserPrompt {
   id: string;
   user_id: string;

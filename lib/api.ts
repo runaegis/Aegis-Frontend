@@ -15,6 +15,11 @@ import {
   RoomSessionAction,
   PaginatedResponse,
   Memory,
+  MemoryShare,
+  MemoryShareCreatePayload,
+  MemorySharePreview,
+  MemoryShareRedeemResponse,
+  MemoryShareStatus,
   SlackIntegrationStatus,
   UserPrompt,
   UserPromptListResponse,
@@ -49,6 +54,11 @@ import {
   type ActionDateFilters,
 } from "./dashboardDateRange";
 import { normalizeApiTimestamp, normalizeDecision } from "./utils";
+import {
+  buildMemoryShareUrl,
+  isSafePostAuthPath,
+  storePostAuthRedirect,
+} from "./authRedirect";
 
 type SaveUserPayload = Record<string, unknown>;
 
@@ -281,7 +291,13 @@ export async function apiFetch(
     clearStoredAuthState();
 
     if (typeof window !== "undefined") {
-      window.location.href = "/auth";
+      const currentPath = window.location.pathname;
+      if (isSafePostAuthPath(currentPath)) {
+        storePostAuthRedirect(currentPath);
+        window.location.href = `/auth?next=${encodeURIComponent(currentPath)}`;
+      } else {
+        window.location.href = "/auth";
+      }
     }
 
     throw new AuthError();
@@ -428,6 +444,97 @@ export function getApiErrorMessage(error: unknown, fallback = "Request failed"):
 export function getApiErrorCode(error: unknown): string | undefined {
   if (error instanceof ApiError) return error.code;
   return parseErrorPayload(error).code;
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object"
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function pickShareStatus(value: unknown): MemoryShareStatus | undefined {
+  if (
+    value === "pending" ||
+    value === "revoked" ||
+    value === "expired" ||
+    value === "exhausted"
+  ) {
+    return value;
+  }
+  return undefined;
+}
+
+function normalizeMemoryShare(raw: unknown, memoryId: string): MemoryShare {
+  const row = asRecord(raw);
+  const nested = asRecord(row.share);
+  const source = nested.id || nested.share_code ? nested : row;
+  const shareCode = String(
+    source.share_code ?? source.code ?? "",
+  );
+  const shareUrl =
+    pickString(source.share_url) ??
+    (shareCode ? buildMemoryShareUrl(shareCode) : "");
+  const used =
+    typeof source.used_count === "number"
+      ? source.used_count
+      : typeof source.redeemed_count === "number"
+        ? source.redeemed_count
+        : typeof source.use_count === "number"
+          ? source.use_count
+          : 0;
+  const maxUses =
+    source.max_uses === null || source.max_redemptions === null
+      ? null
+      : typeof source.max_uses === "number"
+        ? source.max_uses
+        : typeof source.max_redemptions === "number"
+          ? source.max_redemptions
+          : null;
+
+  return {
+    id: String(source.id ?? source.share_id ?? ""),
+    memory_id: String(source.memory_id ?? memoryId),
+    share_code: shareCode,
+    share_url: shareUrl,
+    status: pickShareStatus(source.status),
+    expires_at:
+      typeof source.expires_at === "string" ? source.expires_at : null,
+    max_uses: maxUses,
+    used_count: used,
+    created_at:
+      typeof source.created_at === "string" ? source.created_at : null,
+  };
+}
+
+function normalizeMemorySharePreview(raw: unknown): MemorySharePreview {
+  const row = asRecord(raw);
+  return {
+    title: pickString(row.title) ?? "Shared memory",
+    status: pickShareStatus(row.status) ?? "pending",
+    already_owned: row.already_owned === true,
+    already_redeemed: row.already_redeemed === true,
+    redeemed_memory_id:
+      typeof row.redeemed_memory_id === "string"
+        ? row.redeemed_memory_id
+        : null,
+  };
+}
+
+function normalizeMemoryShareRedeem(
+  raw: unknown,
+): MemoryShareRedeemResponse {
+  const row = asRecord(raw);
+  const memoryRaw = row.memory;
+  const memory =
+    memoryRaw && typeof memoryRaw === "object"
+      ? (memoryRaw as Memory)
+      : null;
+  return {
+    already_redeemed: row.already_redeemed === true,
+    share_id:
+      typeof row.share_id === "string" ? row.share_id : undefined,
+    memory,
+  };
 }
 
 async function authRequest<T>(
@@ -3003,6 +3110,78 @@ export const api = {
     if (!res.ok) {
       throw new Error(`Failed to delete memory: ${await readErrorMessage(res)}`);
     }
+  },
+
+  createMemoryShare: async (
+    memoryId: string,
+    payload: MemoryShareCreatePayload = {
+      expires_in_hours: 168,
+      max_uses: null,
+    },
+  ): Promise<MemoryShare> => {
+    const res = await apiFetch(
+      `${API_BASE}/api/v3/memory/${encodeURIComponent(memoryId)}/share`,
+      {
+        method: "POST",
+        headers: getJsonHeaders(),
+        body: JSON.stringify(payload),
+      },
+    );
+    if (!res.ok) {
+      throw await readApiError(res);
+    }
+    return normalizeMemoryShare(await res.json(), memoryId);
+  },
+
+  getMemoryShares: async (memoryId: string): Promise<MemoryShare[]> => {
+    const res = await apiFetch(
+      `${API_BASE}/api/v3/memory/${encodeURIComponent(memoryId)}/shares`,
+    );
+    if (!res.ok) {
+      throw await readApiError(res);
+    }
+    const data = await res.json();
+    const rows = Array.isArray(data)
+      ? data
+      : data && Array.isArray(data.shares)
+        ? data.shares
+        : [];
+    return rows.map((row: unknown) => normalizeMemoryShare(row, memoryId));
+  },
+
+  revokeMemoryShare: async (shareId: string): Promise<void> => {
+    const res = await apiFetch(
+      `${API_BASE}/api/v3/memory/shares/${encodeURIComponent(shareId)}`,
+      { method: "DELETE" },
+    );
+    if (!res.ok) {
+      throw await readApiError(res);
+    }
+  },
+
+  getMemorySharePreview: async (
+    shareCode: string,
+  ): Promise<MemorySharePreview> => {
+    const res = await apiFetch(
+      `${API_BASE}/api/v3/memory/share/${encodeURIComponent(shareCode)}`,
+    );
+    if (!res.ok) {
+      throw await readApiError(res);
+    }
+    return normalizeMemorySharePreview(await res.json());
+  },
+
+  redeemMemoryShare: async (
+    shareCode: string,
+  ): Promise<MemoryShareRedeemResponse> => {
+    const res = await apiFetch(
+      `${API_BASE}/api/v3/memory/share/${encodeURIComponent(shareCode)}/redeem`,
+      { method: "POST" },
+    );
+    if (!res.ok) {
+      throw await readApiError(res);
+    }
+    return normalizeMemoryShareRedeem(await res.json());
   },
 
   getUserPrompts: async (): Promise<UserPrompt[]> => {

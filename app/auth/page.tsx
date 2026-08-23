@@ -45,6 +45,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { fadeUp, staggerContainer } from '@/lib/motion';
 import { api, getApiErrorCode, getApiErrorMessage } from '@/lib/api';
+import { consumePostAuthRedirect, storePostAuthRedirect } from '@/lib/authRedirect';
 
 type AuthMode = 'signin' | 'signup' | 'forgot';
 
@@ -118,6 +119,12 @@ export default function AuthPage() {
   const [resendCooldown, setResendCooldown] = useState(0);
   const [resendMessage, setResendMessage] = useState('');
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const next = new URLSearchParams(window.location.search).get('next');
+    if (next) storePostAuthRedirect(next);
+  }, []);
+
   // Clear form on mode change
   useEffect(() => {
     setName('');
@@ -190,6 +197,8 @@ export default function AuthPage() {
     setOauthLoading(provider);
     setOauthError({});
     try {
+      const next = new URLSearchParams(window.location.search).get('next');
+      if (next) storePostAuthRedirect(next);
       window.location.href = `${BACKEND_URL}/auth/login/${provider}`;
     } catch {
       setOauthError({
@@ -270,6 +279,11 @@ export default function AuthPage() {
       setLoggingIn(true);
 
       setTimeout(() => {
+        const next = consumePostAuthRedirect();
+        if (next) {
+          router.push(next);
+          return;
+        }
         if (onboardingStatus) {
           router.push('/dashboard');
         } else {

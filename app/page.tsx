@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { AuthError, api } from '@/lib/api';
+import { consumePostAuthRedirect } from '@/lib/authRedirect';
 
 export default function Home() {
   const router = useRouter();
@@ -17,7 +18,8 @@ export default function Home() {
             ? user.onboarding_status
             : (await api.getOnboardingStatus()).onboarding_status;
 
-        router.replace(onboardingStatus ? '/dashboard' : '/onboarding');
+        const next = consumePostAuthRedirect();
+        router.replace(next ?? (onboardingStatus ? '/dashboard' : '/onboarding'));
 
       } catch (err) {
         if (err instanceof AuthError) {

@@ -5,7 +5,8 @@
  * paths are untouched unless `aegis_preview` is on.
  */
 
-import { api } from './api';
+import { ApiError, api } from './api';
+import { buildMemoryShareUrl } from './authRedirect';
 import {
   buildDefaultNotificationPreferences,
   isNotificationTypeEnabled,
@@ -20,6 +21,9 @@ import type {
   ConnectorCatalogItem,
   MCPApproval,
   Memory,
+  MemoryShare,
+  MemorySharePreview,
+  MemoryShareRedeemResponse,
   Metrics,
   NotificationPreferences,
   PaginatedResponse,
@@ -1794,6 +1798,9 @@ const PREVIEW_USER_PROMPTS: UserPrompt[] = [
   },
 ];
 
+const PREVIEW_MEMORY_SHARES: MemoryShare[] = [];
+const PREVIEW_REDEEMED_SHARE_CODES = new Set<string>();
+
 const PREVIEW_MEMORIES: Memory[] = [
   {
     id: 'mem_1',
@@ -2493,6 +2500,84 @@ export function installPreviewApi() {
   api.deleteMemory = async (memoryId: string, userId: string) => {
     const idx = PREVIEW_MEMORIES.findIndex((m) => m.id === memoryId && m.user_id === userId);
     if (idx >= 0) PREVIEW_MEMORIES.splice(idx, 1);
+  };
+  api.createMemoryShare = async (memoryId, payload = { expires_in_hours: 168, max_uses: null }) => {
+    const memory = PREVIEW_MEMORIES.find((m) => m.id === memoryId);
+    if (!memory) throw new Error('Memory not found');
+    const shareCode = `demo_${memoryId}_${PREVIEW_MEMORY_SHARES.length + 1}`;
+    const expiresAt = new Date(
+      Date.now() + (payload.expires_in_hours ?? 168) * 60 * 60 * 1000,
+    ).toISOString();
+    const share: MemoryShare = {
+      id: `share_${shareCode}`,
+      memory_id: memoryId,
+      share_code: shareCode,
+      share_url: buildMemoryShareUrl(shareCode),
+      status: 'pending',
+      expires_at: expiresAt,
+      max_uses: payload.max_uses ?? null,
+      used_count: 0,
+      created_at: new Date().toISOString(),
+    };
+    PREVIEW_MEMORY_SHARES.unshift(share);
+    return share;
+  };
+  api.getMemoryShares = async (memoryId) =>
+    PREVIEW_MEMORY_SHARES.filter((share) => share.memory_id === memoryId);
+  api.revokeMemoryShare = async (shareId) => {
+    const share = PREVIEW_MEMORY_SHARES.find((row) => row.id === shareId);
+    if (share) share.status = 'revoked';
+  };
+  api.getMemorySharePreview = async (shareCode): Promise<MemorySharePreview> => {
+    const share = PREVIEW_MEMORY_SHARES.find((row) => row.share_code === shareCode);
+    if (!share) {
+      throw new ApiError({ status: 404, code: 'MEMORY_SHARE_NOT_FOUND', message: 'Share link not found' });
+    }
+    const memory = PREVIEW_MEMORIES.find((row) => row.id === share.memory_id);
+    const alreadyRedeemed = PREVIEW_REDEEMED_SHARE_CODES.has(shareCode);
+    return {
+      title: memory?.title ?? 'Shared memory',
+      status: share.status ?? 'pending',
+      already_owned: memory?.user_id === 'preview-user',
+      already_redeemed: alreadyRedeemed,
+      redeemed_memory_id: alreadyRedeemed ? `copy_${shareCode}` : null,
+    };
+  };
+  api.redeemMemoryShare = async (shareCode): Promise<MemoryShareRedeemResponse> => {
+    const share = PREVIEW_MEMORY_SHARES.find((row) => row.share_code === shareCode);
+    if (!share) {
+      throw new ApiError({ status: 404, code: 'MEMORY_SHARE_NOT_FOUND', message: 'Share link not found' });
+    }
+    if (share.status === 'revoked') {
+      throw new ApiError({ status: 410, code: 'MEMORY_SHARE_REVOKED', message: 'This share link was revoked' });
+    }
+    const source = PREVIEW_MEMORIES.find((row) => row.id === share.memory_id);
+    if (!source) {
+      throw new ApiError({ status: 404, code: 'MEMORY_NOT_FOUND', message: 'Memory not found' });
+    }
+    if (source.user_id === 'preview-user') {
+      throw new ApiError({
+        status: 400,
+        code: 'MEMORY_SHARE_OWN',
+        message: 'You cannot redeem your own share link',
+      });
+    }
+    if (PREVIEW_REDEEMED_SHARE_CODES.has(shareCode)) {
+      const existing = PREVIEW_MEMORIES.find((row) => row.id === `copy_${shareCode}`);
+      return { already_redeemed: true, share_id: share.id, memory: existing ?? null };
+    }
+    const copy: Memory = {
+      ...source,
+      id: `copy_${shareCode}`,
+      user_id: 'preview-user',
+      is_pinned: false,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    PREVIEW_MEMORIES.unshift(copy);
+    PREVIEW_REDEEMED_SHARE_CODES.add(shareCode);
+    share.used_count = (share.used_count ?? 0) + 1;
+    return { already_redeemed: false, share_id: share.id, memory: copy };
   };
 
   api.saveUser = async (u) => {

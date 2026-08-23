@@ -1,12 +1,11 @@
 {
     "mcpServers": {
       "aegis_local_frontend": {
-        "transport": "sse",
-        "url": "http://localhost:8082/sse",
+        "transport": "mcp",
+        "url": "https://mcp.runaegis.co/mcp",
         "headers": {
-          "X-User-ID": "a4006c5c-04e9-402b-823a-cf7dd71fb758",
-          "X-Room-ID": "b15b7d62-4231-47da-b883-2d4a0208ef88",
-          "X-Agent-Key": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0eXAiOiJhZWdpc19hZ2VudF9rZXkiLCJ3b3Jrc3BhY2VfaWQiOiI1ZTFlMWVlNS00NDdjLTRkMmItODY0MC03YjE3ZjgxMGEzMDYiLCJhZ2VudF9pZCI6IjUwMWEzZTUzLWUxNDAtNDE2YS1hNWNhLWY4YmQwZDk2Y2IwMiIsImhhbmRsZSI6ImZyb250ZW5kIiwiaWF0IjoxNzg0NTY3OTc4LCJub25jZSI6ImswTGlxNTBWS0NuakJxcmsxM25JbXcifQ.HuNEmgrAb4NvpXhm7thjo14be6FHu7Su-kIjJVP1jds"
+       
+          "X-Agent-Key": "2ufXR6yv086CtPKhfoZoT-4eOebp-9yXDjEvEyAwrUi2cJetMAxk6sagDP26lqw9"
         }
       }
     }

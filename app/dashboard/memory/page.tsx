@@ -13,6 +13,7 @@ import {
   ArrowUpRight,
   Pin,
   PinOff,
+  Share2,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { Memory } from '@/lib/types';
@@ -25,6 +26,7 @@ import { RelativeTime } from '@/components/ui/RelativeTime';
 import { useToast } from '@/components/ui/Toast';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { MarkdownContent } from '@/components/ui/MarkdownContent';
+import { ShareMemoryDialog } from '@/components/memory/ShareMemoryDialog';
 import { cn } from '@/lib/utils';
 import { DUR, EASE, fadeUp, staggerContainer } from '@/lib/motion';
 
@@ -69,6 +71,9 @@ export default function MemoryPage() {
 
   // Pin state
   const [pinningId, setPinningId] = useState<string | null>(null);
+
+  // Share state
+  const [shareMemory, setShareMemory] = useState<Memory | null>(null);
 
   const fetchData = useCallback(async () => {
     if (!effectiveUserId) {
@@ -275,8 +280,8 @@ export default function MemoryPage() {
             variants={fadeUp}
             className="mt-3 max-w-[500px] text-[14px] leading-[1.6] text-[var(--neutral-sub-600)]"
           >
-            Persisted context that agents carry between sessions — edit or remove
-            entries to steer their behavior.
+            Persisted context that agents carry between sessions — edit, share,
+            or remove entries to steer their behavior.
           </motion.p>
         </motion.header>
 
@@ -349,6 +354,7 @@ export default function MemoryPage() {
                 onSave={() => handleSave(memory)}
                 onDelete={() => setPendingDelete(memory)}
                 onPin={() => handlePin(memory)}
+                onShare={() => setShareMemory(memory)}
               />
             ))}
           </motion.div>
@@ -388,6 +394,7 @@ export default function MemoryPage() {
           if (detailMemory) setPendingDelete(detailMemory);
         }}
         onPin={() => detailMemory && handlePin(detailMemory)}
+        onShare={() => detailMemory && setShareMemory(detailMemory)}
       />
 
       {/* ─── Delete confirm ─────────────────────────────────────── */}
@@ -414,6 +421,14 @@ export default function MemoryPage() {
         loading={!!deletingId}
         onConfirm={handleDelete}
       />
+
+      <ShareMemoryDialog
+        memory={shareMemory}
+        open={shareMemory !== null}
+        onOpenChange={(next) => {
+          if (!next) setShareMemory(null);
+        }}
+      />
     </>
   );
 }
@@ -435,6 +450,7 @@ function MemoryCard({
   onSave,
   onDelete,
   onPin,
+  onShare,
 }: {
   memory: Memory;
   isEditing: boolean;
@@ -451,6 +467,7 @@ function MemoryCard({
   onSave: () => void;
   onDelete: () => void;
   onPin: () => void;
+  onShare: () => void;
 }) {
   const isTruncated = memory.memory.length > 220;
 
@@ -522,6 +539,13 @@ function MemoryCard({
                 ) : (
                   <Pin className="h-3.5 w-3.5" strokeWidth={2} />
                 )}
+              </button>
+              <button
+                onClick={onShare}
+                aria-label="Share memory"
+                className="flex h-7 w-7 items-center justify-center rounded-[7px] text-[var(--neutral-soft-400)] transition-colors hover:bg-[var(--neutral-weak-50)] hover:text-[var(--neutral-strong-950)]"
+              >
+                <Share2 className="h-3.5 w-3.5" strokeWidth={2} />
               </button>
               <button
                 onClick={onEdit}
@@ -647,6 +671,7 @@ function MemorySlideOver({
   onSave,
   onDelete,
   onPin,
+  onShare,
 }: {
   memory: Memory | null;
   isEditing: boolean;
@@ -662,6 +687,7 @@ function MemorySlideOver({
   onSave: () => void;
   onDelete: () => void;
   onPin: () => void;
+  onShare: () => void;
 }) {
   const reduce = useReducedMotion();
   const panelRef = useRef<HTMLDivElement>(null);
@@ -748,6 +774,14 @@ function MemorySlideOver({
                       }
                     >
                       {memory.is_pinned ? 'Unpin' : 'Pin'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={onShare}
+                      leadingIcon={<Share2 className="h-3.5 w-3.5" strokeWidth={2} />}
+                    >
+                      Share
                     </Button>
                     <Button
                       size="sm"
