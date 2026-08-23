@@ -13,13 +13,11 @@ const nextConfig: NextConfig = {
         destination: "/workspaces/:id",
         permanent: false,
       },
-      // /dashboard/integrations was retired — agent connection now happens
-      // per-Room (each Room has its own Connect tab that auto-fills the
-      // real MCP URL). Send stale bookmarks to the Rooms list so users
-      // land where they can actually pick a Room and connect.
+      // /dashboard/integrations was retired. Send stale bookmarks to the
+      // workspaces list where users can manage agent connections.
       {
         source: "/dashboard/integrations",
-        destination: "/dashboard/rooms",
+        destination: "/dashboard/workspaces",
         permanent: true,
       },
     ];

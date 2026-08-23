@@ -204,6 +204,7 @@ export interface ConnectorCatalogItem {
 export interface PrivateConnectorCredentialStatus {
   connector_key: string;
   configured: boolean;
+  is_enabled?: boolean;
   configured_keys: string[];
   credential_metadata?: Record<string, unknown> | null;
   created_at?: string | null;

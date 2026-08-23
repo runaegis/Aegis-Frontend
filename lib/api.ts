@@ -720,7 +720,7 @@ async function getUserActions(
   const cached = _cache.get(cacheKey);
   if (cached && now - cached.time < CACHE_TTL) return cached.data;
 
-  const url = new URL(`${API_BASE}/sessions`);
+  const url = new URL(`${API_BASE}/api/v3/runs`);
   url.searchParams.set("page", String(page));
   url.searchParams.set("page_size", String(page_size));
   appendActionDateFilters(url, filters);
@@ -1054,6 +1054,8 @@ function normalizePrivateCredentialStatus(
       typeof raw.configured === "boolean"
         ? raw.configured
         : configuredKeys.length > 0,
+    is_enabled:
+      typeof raw.is_enabled === "boolean" ? raw.is_enabled : true,
     configured_keys: configuredKeys,
     credential_metadata:
       raw.credential_metadata && typeof raw.credential_metadata === "object"
@@ -1557,7 +1559,7 @@ export const api = {
   getConnectorCatalog: async (
     activeOnly = true,
   ): Promise<ConnectorCatalogItem[]> => {
-    const url = new URL(`${API_BASE}/connectors/catalog`);
+    const url = new URL(`${API_BASE}/api/v3/connectors/catalog`);
     if (activeOnly) url.searchParams.set("active_only", "true");
 
     const res = await apiFetch(url.toString());
@@ -1577,7 +1579,7 @@ export const api = {
   getPrivateConnectorCredentials: async (): Promise<
     PrivateConnectorCredentialStatus[]
   > => {
-    const res = await apiFetch(`${API_BASE}/connectors/private`);
+    const res = await apiFetch(`${API_BASE}/api/v3/connectors/setup`);
     if (!res.ok) throw await readApiError(res);
 
     const payload = await res.json();
@@ -1599,13 +1601,14 @@ export const api = {
     credentialMetadata: Record<string, unknown> = {},
   ): Promise<PrivateConnectorCredentialStatus> => {
     const res = await apiFetch(
-      `${API_BASE}/connectors/private/${encodeURIComponent(connectorKey)}`,
+      `${API_BASE}/api/v3/connectors/setup/${encodeURIComponent(connectorKey)}`,
       {
         method: "PUT",
         headers: getJsonHeaders(),
         body: JSON.stringify({
           credentials,
           credential_metadata: credentialMetadata,
+          is_enabled: true,
         }),
       },
     );
@@ -1618,6 +1621,37 @@ export const api = {
     }
 
     return status;
+  },
+
+  setConnectorEnabled: async (
+    connectorKey: string,
+    isEnabled: boolean,
+  ): Promise<PrivateConnectorCredentialStatus> => {
+    const res = await apiFetch(
+      `${API_BASE}/api/v3/connectors/setup/${encodeURIComponent(connectorKey)}`,
+      {
+        method: "PATCH",
+        headers: getJsonHeaders(),
+        body: JSON.stringify({ is_enabled: isEnabled }),
+      },
+    );
+
+    if (!res.ok) throw await readApiError(res);
+
+    const status = normalizePrivateCredentialStatus(await res.json());
+    if (!status) {
+      throw new Error("Server returned an invalid connector setup status.");
+    }
+
+    return status;
+  },
+
+  deleteConnectorSetup: async (connectorKey: string): Promise<void> => {
+    const res = await apiFetch(
+      `${API_BASE}/api/v3/connectors/setup/${encodeURIComponent(connectorKey)}`,
+      { method: "DELETE" },
+    );
+    if (!res.ok) throw await readApiError(res);
   },
 
   logOut: async () => {
@@ -1797,16 +1831,33 @@ export const api = {
     userId: string,
     filters: ActionDateFilters = {},
   ): Promise<Metrics> => {
-    const url = new URL(`${API_BASE}/metrics`);
-    appendActionDateFilters(url, filters);
-
-    const res = await apiFetch(url.toString());
+    void userId;
+    void filters;
+    const res = await apiFetch(`${API_BASE}/api/v3/dashboard/metrics`);
 
     if (!res.ok) {
       throw new Error(`Failed to fetch metrics`);
     }
 
-    return res.json();
+    const payload = await res.json();
+    const data =
+      payload && typeof payload === "object" && "metrics" in payload
+        ? (payload.metrics as Record<string, unknown>)
+        : (payload as Record<string, unknown>);
+    const allows = Number(data.allows ?? data.completed ?? 0);
+    const denies = Number(
+      data.denies ?? Number(data.failed ?? 0) + Number(data.cancelled ?? 0),
+    );
+    const rewrites = Number(data.rewrites ?? data.running ?? 0);
+    const approvals = Number(data.approvals ?? data.queued ?? 0);
+
+    return {
+      total: Number(data.total ?? allows + denies + rewrites + approvals),
+      allows,
+      denies,
+      rewrites,
+      approvals,
+    };
   },
   getApprovals: async (userId?: string): Promise<SessionAction[]> => {
     if (!userId) return [];
@@ -2911,9 +2962,8 @@ export const api = {
   },
 
   getMemories: async (userId: string): Promise<Memory[]> => {
-    const res = await apiFetch(
-      `${API_BASE}/memory/user/${encodeURIComponent(userId)}`,
-    );
+    void userId;
+    const res = await apiFetch(`${API_BASE}/api/v3/memory`);
     if (!res.ok) {
       throw new Error(`Failed to load memories: ${await readErrorMessage(res)}`);
     }
@@ -2929,12 +2979,13 @@ export const api = {
     userId: string,
     payload: Partial<Pick<Memory, 'title' | 'memory' | 'is_pinned'>>,
   ): Promise<Memory> => {
+    void userId;
     const res = await apiFetch(
-      `${API_BASE}/memory/${encodeURIComponent(memoryId)}`,
+      `${API_BASE}/api/v3/memory/${encodeURIComponent(memoryId)}`,
       {
-        method: "PUT",
+        method: "PATCH",
         headers: getJsonHeaders(),
-        body: JSON.stringify({ user_id: userId, ...payload }),
+        body: JSON.stringify(payload),
       },
     );
     if (!res.ok) {
@@ -2944,8 +2995,9 @@ export const api = {
   },
 
   deleteMemory: async (memoryId: string, userId: string): Promise<void> => {
+    void userId;
     const res = await apiFetch(
-      `${API_BASE}/memory/${encodeURIComponent(memoryId)}?user_id=${encodeURIComponent(userId)}`,
+      `${API_BASE}/api/v3/memory/${encodeURIComponent(memoryId)}`,
       { method: "DELETE" },
     );
     if (!res.ok) {

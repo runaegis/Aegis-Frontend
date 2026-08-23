@@ -1501,16 +1501,6 @@ function PoliciesPreview({ reduce }: { reduce: boolean }) {
         <SettingsCard
           title="Active policies"
           description="A snapshot of the rules currently evaluating every agent action."
-          action={
-            <Link href="/dashboard/policies">
-              <Button
-                variant="secondary"
-                trailingIcon={<ArrowUpRight className="h-3.5 w-3.5" strokeWidth={2} />}
-              >
-                Manage all
-              </Button>
-            </Link>
-          }
         >
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {[

@@ -26,7 +26,6 @@ import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import {
   Activity,
   ArrowRight,
-  Bell,
   BookOpen,
   Boxes,
   BrainCircuit,
@@ -36,7 +35,6 @@ import {
   FileText,
   HelpCircle,
   LayoutDashboard,
-  Layers,
   LogOut,
   Moon,
   PanelLeftClose,
@@ -46,7 +44,6 @@ import {
   ScrollText,
   Settings,
   Sun,
-  Users,
   X,
   type LucideIcon,
 } from 'lucide-react';
@@ -149,17 +146,12 @@ export function CommandPalette() {
     }> = [
       { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, keywords: ['home', 'overview'] },
       { label: 'Runs', href: '/dashboard/runs', icon: Activity, keywords: ['actions', 'history', 'log'] },
-      { label: 'Sessions', href: '/dashboard/sessions', icon: Layers, keywords: ['conversations', 'agents'] },
-      { label: 'Rooms', href: '/dashboard/rooms', icon: Users, keywords: ['workspaces', 'teams'] },
-      { label: 'Approvals', href: '/dashboard/approvals', icon: Bell, keywords: ['pending', 'review'] },
-      { label: 'Policies', href: '/dashboard/policies', icon: BookOpen, keywords: ['rules', 'governance'] },
       { label: 'Audit Trail', href: '/dashboard/audit', icon: FileText, keywords: ['events', 'log', 'history'] },
       { label: 'Freeze Windows', href: '/dashboard/freeze-window', icon: Clock, keywords: ['schedule', 'pause'] },
       { label: 'Connectors', href: '/dashboard/connectors', icon: Boxes, keywords: ['integrations', 'catalog', 'slack', 'linear', 'jira', 'terraform', 'postgres', 'roadmap'] },
       { label: 'Analytics', href: '/dashboard/token-spenditure', icon: Coins, keywords: ['usage', 'cost', 'billing', 'token spenditure', 'token spend'] },
       { label: 'Memory', href: '/dashboard/memory', icon: BrainCircuit, keywords: ['context', 'remember', 'agent'] },
       { label: 'Prompts', href: '/dashboard/prompts', icon: ScrollText, keywords: ['instructions', 'daily', 'reusable', 'agent'] },
-      { label: 'Connect agent', href: '/dashboard/rooms', icon: Plug, keywords: ['cursor', 'vscode', 'claude code', 'mcp', 'connect', 'integration', 'integrations'] },
       { label: 'Settings', href: '/dashboard/settings', icon: Settings, keywords: ['account', 'preferences'] },
     ];
 

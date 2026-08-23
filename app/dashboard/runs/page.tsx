@@ -8,20 +8,16 @@ import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import Topbar from '@/components/layout/Topbar';
 import { AgentMark } from '@/components/ui/AgentMark';
 import { Badge } from '@/components/ui/Badge';
-import { BlastRadiusChip } from '@/components/ui/BlastRadiusChip';
 import { Button } from '@/components/ui/Button';
 import { CodeChip } from '@/components/ui/CodeChip';
 import { CONNECTORS, ConnectorMark } from '@/components/ui/ConnectorMark';
-import DecisionBadge, { decisionColor } from '@/components/ui/DecisionBadge';
+import { decisionColor } from '@/components/ui/DecisionBadge';
 import EmptyState from '@/components/ui/EmptyState';
 import ErrorBanner from '@/components/ui/ErrorBanner';
 import { FilterChip } from '@/components/ui/FilterChip';
 import { Input } from '@/components/ui/Input';
 import JsonViewer from '@/components/ui/JsonViewer';
 import { RunsSkeleton } from '@/components/ui/PageSkeletons';
-import { PolicyChip } from '@/components/ui/PolicyChip';
-import { PullRequestLink } from '@/components/ui/PullRequestLink';
-import { RelativeTime } from '@/components/ui/RelativeTime';
 import {
   Table,
   TBody,
@@ -42,7 +38,7 @@ import { useDashboardData } from '@/lib/dashboardDataContext';
 import { useUser } from '@/lib/hooks';
 import { DUR, EASE, fadeUp, staggerContainer } from '@/lib/motion';
 import { buildRunActivityFilterOptions, buildRunActivityViewModel, filterRunActivity, summarizeRunActivity, type RunActivityViewModel } from '@/lib/runActivity';
-import { extractPullRequestUrl, formatExecutionTimeMs, formatFullTimestamp, readBlastRadius } from '@/lib/utils';
+import { formatExecutionTimeMs, formatFullTimestamp, readBlastRadius } from '@/lib/utils';
 import type { Metrics, PaginatedResponse, SessionAction } from '@/lib/types';
 
 const PAGE_SIZE = 20;
@@ -598,24 +594,6 @@ export default function RunsPage() {
                     <TH sortable sortDirection={dirFor('target')} onSort={() => onSort('target')}>
                       Target
                     </TH>
-                    <TH>Summary</TH>
-                    <TH sortable sortDirection={dirFor('policy')} onSort={() => onSort('policy')}>
-                      Policy
-                    </TH>
-                    <TH sortable sortDirection={dirFor('risk')} onSort={() => onSort('risk')}>
-                      Blast Radius
-                    </TH>
-                    <TH sortable sortDirection={dirFor('decision')} onSort={() => onSort('decision')}>
-                      Decision
-                    </TH>
-                    <TH
-                      sortable
-                      sortDirection={dirFor('time')}
-                      onSort={() => onSort('time')}
-                      className="text-right"
-                    >
-                      Time
-                    </TH>
                     <TH aria-label="Expand" className="w-8" />
                   </tr>
                 </THead>
@@ -693,11 +671,6 @@ function RunRow({
   onToggle: () => void;
 }) {
   const action = item.action;
-  const prUrl = extractPullRequestUrl({
-    action_pointers: action.action_pointers,
-    result: action.result,
-    arguments: action.arguments,
-  });
 
   return (
     <>
@@ -741,34 +714,6 @@ function RunRow({
             <span className="text-[12px] italic text-[var(--neutral-soft-400)]">No target</span>
           )}
         </TD>
-        <TD className="max-w-[320px] text-[12.5px] text-[var(--neutral-sub-600)]">
-          <span className="block truncate" title={action.action_summary}>
-            {action.action_summary || 'No summary provided'}
-          </span>
-        </TD>
-        <TD className="whitespace-nowrap">
-          <PolicyChip policy={action.policy} />
-        </TD>
-        <TD className="whitespace-nowrap">
-          <BlastRadiusChip value={readBlastRadius(action)} />
-        </TD>
-        <TD className="whitespace-nowrap">
-          <div className="flex flex-col items-start gap-1">
-            <DecisionBadge decision={action.decision} />
-            {prUrl ? <PullRequestLink url={prUrl} variant="chip" /> : null}
-          </div>
-        </TD>
-        <TD className="whitespace-nowrap text-right tabular-nums">
-          <div className="flex flex-col items-end gap-1">
-            <RelativeTime
-              timestamp={action.timestamp}
-              className="whitespace-nowrap text-[12px] text-[var(--neutral-soft-400)]"
-            />
-            {action.execution_time !== undefined && action.execution_time !== null ? (
-              <CodeChip>{formatExecutionTimeMs(action.execution_time)}</CodeChip>
-            ) : null}
-          </div>
-        </TD>
         <TD className="w-8 text-right">
           <ChevronRight
             className={`ml-auto h-3.5 w-3.5 text-[var(--neutral-soft-400)] transition-transform duration-150 group-hover:translate-x-0.5 group-hover:text-[var(--neutral-strong-950)] ${
@@ -780,7 +725,7 @@ function RunRow({
       </TR>
       <AnimatePresence initial={false}>
         {isExpanded ? (
-          <TRExpanded key="expanded" colSpan={10}>
+          <TRExpanded key="expanded" colSpan={5}>
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(320px,0.9fr)]">
               <div>
                 <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.05em] text-[var(--neutral-soft-400)]">

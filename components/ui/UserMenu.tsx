@@ -170,28 +170,6 @@ export function UserMenu({ pendingApprovals = 0, className }: UserMenuProps) {
               </Badge>
             </div>
 
-            {/* Quick stat — only when there's something to surface */}
-            {pendingApprovals > 0 && (
-              <Link
-                href="/dashboard/approvals"
-                onClick={() => setOpen(false)}
-                role="menuitem"
-                className="flex items-center justify-between gap-2 border-b border-[var(--stroke-soft-200)] bg-[var(--primary-lighter)] px-3 py-2.5 transition-colors hover:bg-[var(--primary-alpha-16)]"
-              >
-                <span className="inline-flex items-center gap-2 text-[12.5px] font-medium text-[var(--primary-dark)]">
-                  <Sparkles
-                    className="h-3.5 w-3.5"
-                    style={{ color: 'var(--primary-base)' }}
-                    strokeWidth={2}
-                  />
-                  {pendingApprovals} pending {pendingApprovals === 1 ? 'approval' : 'approvals'}
-                </span>
-                <span className="text-[10.5px] font-semibold uppercase tracking-[0.07em] text-[var(--primary-base)]">
-                  Review →
-                </span>
-              </Link>
-            )}
-
             {/* Menu group 1 */}
             <div className="p-1">
               <Item

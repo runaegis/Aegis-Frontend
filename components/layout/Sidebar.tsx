@@ -6,10 +6,6 @@ import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard,
   Activity,
-  Layers,
-  Users,
-  Bell,
-  BookOpen,
   FileText,
   Clock,
   Coins,
@@ -95,16 +91,12 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
       { name: 'Runs', href: '/dashboard/runs', icon: Activity },
-      { name: 'Sessions', href: '/dashboard/sessions', icon: Layers },
-      { name: 'Rooms', href: '/dashboard/rooms', icon: Users },
       { name: 'Workspaces', href: '/dashboard/workspaces', icon: MessagesSquare },
     ],
   },
   {
     label: 'Governance',
     items: [
-      { name: 'Approvals', href: '/dashboard/approvals', icon: Bell },
-      { name: 'Policies', href: '/dashboard/policies', icon: BookOpen },
       { name: 'Audit Trail', href: '/dashboard/audit', icon: FileText },
       { name: 'Freeze Windows', href: '/dashboard/freeze-window', icon: Clock },
       { name: 'Connectors', href: '/dashboard/connectors', icon: Boxes },

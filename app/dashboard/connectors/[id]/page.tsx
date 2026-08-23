@@ -225,9 +225,9 @@ export default function ConnectorDetailPage() {
               <p className="mt-2 text-[12.5px] leading-[1.55] text-[var(--neutral-sub-600)]">
                 Connectors are enabled per room. Open a room&rsquo;s <span className="font-medium text-[var(--neutral-strong-950)]">Connectors</span> tab to wire {def.name} to its room-scoped resource (repo, database, project, or workspace) and the <span className="font-medium text-[var(--neutral-strong-950)]">Tools</span> tab to tune the role allowlist.
               </p>
-              <Link href="/dashboard/rooms" className="mt-4 block">
+              <Link href="/dashboard/workspaces" className="mt-4 block">
                 <Button variant="primary" size="md" className="w-full justify-center" trailingIcon={<ArrowUpRight className="h-3.5 w-3.5" strokeWidth={2.25} />}>
-                  {status === 'live' ? 'Enable in a room' : 'View rooms'}
+                  {status === 'live' ? 'Open workspaces' : 'View workspaces'}
                 </Button>
               </Link>
             </motion.div>

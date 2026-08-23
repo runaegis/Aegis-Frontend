@@ -496,10 +496,10 @@ export default function DashboardHomePage() {
                 <EmptyState
                   icon={<Shield className="h-5 w-5" />}
                   title="No agent activity yet"
-                  description="Create a Room, then wire up your agent from its Connect tab."
+                  description="Create a workspace, then connect your agent from the workspace view."
                   action={
-                    <Link href="/dashboard/rooms">
-                      <Button variant="primary">Go to Rooms</Button>
+                    <Link href="/dashboard/workspaces">
+                      <Button variant="primary">Go to Workspaces</Button>
                     </Link>
                   }
                   compact
@@ -536,16 +536,6 @@ export default function DashboardHomePage() {
                   </span>
                 )}
               </div>
-              <Link
-                href="/dashboard/approvals"
-                className="group inline-flex items-center gap-1 text-[12.5px] font-medium text-[var(--neutral-sub-600)] transition-colors hover:text-[var(--primary-base)]"
-              >
-                All
-                <ArrowUpRight
-                  className="h-3 w-3 transition-transform group-hover:-translate-y-px group-hover:translate-x-px"
-                  strokeWidth={2}
-                />
-              </Link>
             </div>
 
             {pendingItems.length === 0 ? (
