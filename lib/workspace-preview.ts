@@ -12,11 +12,16 @@
  */
 
 import {
+  ApiError,
   api,
   type WorkspaceAgent,
   type WorkspaceAgentKeyResponse,
   type WorkspaceAgentStatus,
   type WorkspaceDetail,
+  type WorkspaceInvite,
+  type WorkspaceInviteCreatePayload,
+  type WorkspaceInvitePreview,
+  type WorkspaceJoinResponse,
   type WorkspaceMessage,
   type WorkspacePointerStatus,
   type WorkspaceRecord,
@@ -24,6 +29,7 @@ import {
   type WorkspaceTaskPointer,
   type WorkspaceFileRef,
 } from '@/lib/api';
+import { buildWorkspaceJoinUrl } from '@/lib/authRedirect';
 
 const DEMO_USER_ID = 'a4006c5c-04e9-402b-823a-cf7dd71fb758';
 
@@ -55,9 +61,18 @@ type Store = {
   agents: WorkspaceAgent[];
   messages: WorkspaceMessage[];
   pointers: WorkspaceTaskPointer[];
+  invites: WorkspaceInvite[];
+  joinedInviteCodes: Set<string>;
 };
 
-const store: Store = { workspaces: [], agents: [], messages: [], pointers: [] };
+const store: Store = {
+  workspaces: [],
+  agents: [],
+  messages: [],
+  pointers: [],
+  invites: [],
+  joinedInviteCodes: new Set(),
+};
 
 function agent(
   workspaceId: string,
@@ -124,6 +139,8 @@ function seed() {
   store.agents = [];
   store.messages = [];
   store.pointers = [];
+  store.invites = [];
+  store.joinedInviteCodes = new Set();
 
   // ---- Workspace 1: the flagship scenario -------------------------------
   const ws1: WorkspaceRecord = {
@@ -444,6 +461,169 @@ export function installWorkspacePreviewApi() {
     if (index >= 0) store.pointers.splice(index, 1);
     // Mirror the real endpoint's response shape, not just its behaviour.
     return wait({ detail: 'Pointer deleted', pointer_id: pointerId });
+  };
+
+  api.createWorkspaceInvite = async (
+    workspaceId: string,
+    payload: WorkspaceInviteCreatePayload = { expires_in_hours: 72, max_uses: null },
+  ) => {
+    const workspace = store.workspaces.find((w) => w.id === workspaceId);
+    if (!workspace) {
+      throw new ApiError({
+        status: 404,
+        code: 'WORKSPACE_NOT_FOUND',
+        message: 'Workspace not found',
+      });
+    }
+    const directed = Boolean(payload.invited_email || payload.invited_user_id);
+    const inviteCode = `aeg-${Math.random().toString(36).slice(2, 10)}`;
+    const invite: WorkspaceInvite = {
+      id: uid('inv'),
+      workspace_id: workspaceId,
+      invite_code: inviteCode,
+      invite_url: buildWorkspaceJoinUrl(inviteCode),
+      status: 'pending',
+      is_directed: directed,
+      invited_user_id: payload.invited_user_id ?? null,
+      invited_email: payload.invited_email ?? null,
+      invited_name: null,
+      suggested_handle: payload.suggested_handle ?? null,
+      role_label: payload.role_label ?? null,
+      max_uses: directed ? (payload.max_uses ?? 1) : (payload.max_uses ?? null),
+      used_count: 0,
+      expires_at: new Date(
+        Date.now() + (payload.expires_in_hours ?? 72) * 60 * 60 * 1000,
+      ).toISOString(),
+      created_at: new Date().toISOString(),
+      workspace_title: workspace.title,
+    };
+    store.invites.unshift(invite);
+    return wait(clone(invite));
+  };
+
+  api.getWorkspaceInvites = async (workspaceId: string) =>
+    wait(clone(store.invites.filter((invite) => invite.workspace_id === workspaceId)));
+
+  api.revokeWorkspaceInvite = async (inviteId: string) => {
+    const invite = store.invites.find((row) => row.id === inviteId);
+    if (invite) invite.status = 'revoked';
+    return wait(undefined);
+  };
+
+  api.getWorkspaceInviteInbox = async () =>
+    wait(
+      clone(
+        store.invites.filter(
+          (invite) => invite.is_directed && invite.status === 'pending',
+        ),
+      ),
+    );
+
+  api.getWorkspaceInvitePreview = async (
+    inviteCode: string,
+  ): Promise<WorkspaceInvitePreview> => {
+    const invite = store.invites.find((row) => row.invite_code === inviteCode);
+    if (!invite) {
+      throw new ApiError({
+        status: 404,
+        code: 'WORKSPACE_INVITE_NOT_FOUND',
+        message: 'Invite link not found',
+      });
+    }
+    if (invite.status === 'revoked') {
+      throw new ApiError({
+        status: 410,
+        code: 'WORKSPACE_INVITE_REVOKED',
+        message: 'This invite was revoked',
+      });
+    }
+    const workspace = store.workspaces.find((w) => w.id === invite.workspace_id);
+    return wait({
+      invite_id: invite.id,
+      workspace_id: invite.workspace_id,
+      workspace_title: workspace?.title ?? 'Workspace',
+      workspace_task: workspace?.task ?? null,
+      status: invite.status,
+      suggested_handle: invite.suggested_handle,
+      role_label: invite.role_label,
+      is_directed: invite.is_directed,
+      already_member: store.joinedInviteCodes.has(inviteCode),
+      already_joined: store.joinedInviteCodes.has(inviteCode),
+      is_owner: false,
+      expires_at: invite.expires_at,
+    });
+  };
+
+  api.joinWorkspace = async (payload: {
+    invite_code: string;
+    handle?: string;
+    role_label?: string | null;
+  }): Promise<WorkspaceJoinResponse> => {
+    const invite = store.invites.find((row) => row.invite_code === payload.invite_code);
+    if (!invite) {
+      throw new ApiError({
+        status: 404,
+        code: 'WORKSPACE_INVITE_NOT_FOUND',
+        message: 'Invite link not found',
+      });
+    }
+    if (invite.status === 'revoked') {
+      throw new ApiError({
+        status: 410,
+        code: 'WORKSPACE_INVITE_REVOKED',
+        message: 'This invite was revoked',
+      });
+    }
+    if (store.joinedInviteCodes.has(payload.invite_code)) {
+      const existing = store.agents.find(
+        (a) => a.workspace_id === invite.workspace_id && a.user_id === DEMO_USER_ID,
+      );
+      return wait({
+        already_joined: true,
+        agent: existing ? clone(existing) : null,
+        agent_key: null,
+        mcp_config_snippet: null,
+      });
+    }
+    const handle = (payload.handle || invite.suggested_handle || '').replace(/^@/, '');
+    if (!handle) {
+      throw new ApiError({
+        status: 400,
+        code: 'WORKSPACE_HANDLE_REQUIRED',
+        message: 'Handle is required',
+      });
+    }
+    const duplicate = store.agents.some(
+      (a) =>
+        a.workspace_id === invite.workspace_id &&
+        a.status === 'active' &&
+        a.handle.toLowerCase() === handle.toLowerCase(),
+    );
+    if (duplicate) {
+      throw new ApiError({
+        status: 409,
+        message: 'handle already exists in workspace',
+      });
+    }
+    const created: WorkspaceAgent = {
+      id: uid('agent'),
+      workspace_id: invite.workspace_id,
+      user_id: DEMO_USER_ID,
+      handle,
+      role_label: payload.role_label ?? invite.role_label,
+      status: 'active',
+      created_at: new Date().toISOString(),
+    };
+    store.agents.push(created);
+    store.joinedInviteCodes.add(payload.invite_code);
+    invite.used_count += 1;
+    const issued = keyResponse(created);
+    return wait({
+      already_joined: false,
+      agent: clone(created),
+      agent_key: issued.agent_key,
+      mcp_config_snippet: issued.mcp_config_snippet,
+    });
   };
 }
 

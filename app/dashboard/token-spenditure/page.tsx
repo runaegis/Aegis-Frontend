@@ -39,9 +39,7 @@ import { api } from '@/lib/api';
 import { useAutoRefresh, useUser } from '@/lib/hooks';
 import { DUR, EASE, fadeUp, staggerContainer } from '@/lib/motion';
 import type {
-  PaginatedResponse,
   TokenAnalyticsResponse,
-  TokenMeterResponse,
   TokenUsageChartItem,
   TokenUsageSessionItem,
 } from '@/lib/types';
@@ -51,7 +49,8 @@ type UsageRange = 'today' | '7d' | '30d' | '90d' | 'all';
 
 type SessionChartRow = {
   label: string;
-  sessionId: string;
+  runId: string;
+  workspaceName: string | null;
   input: number;
   output: number;
   total: number;
@@ -100,14 +99,7 @@ const PIE_COLORS = [
   'var(--warning)',
   'var(--neutral-sub-300)',
 ];
-const TOKEN_ROWS_PAGE_SIZE = 20;
-const EMPTY_TOKEN_ROWS: PaginatedResponse<TokenMeterResponse> = {
-  items: [],
-  total: 0,
-  page: 1,
-  page_size: TOKEN_ROWS_PAGE_SIZE,
-  pages: 0,
-};
+const RUNS_TABLE_LIMIT = 50;
 
 const emptyAnalytics: TokenAnalyticsResponse = {
   user_id: '',
@@ -255,63 +247,28 @@ function buildDistributionData(
 
 function buildSessionChartRows(
   sessions: TokenUsageSessionItem[],
-  rows: TokenMeterResponse[],
 ): SessionChartRow[] {
-  if (sessions.length > 0) {
-    return [...sessions]
-      .sort((left, right) => toNumber(right.total_tokens) - toNumber(left.total_tokens))
-      .slice(0, 8)
-      .map((session, index) => ({
-        label: `S${index + 1}`,
-        sessionId: session.session_id || 'unknown',
-        input: toNumber(session.input_tokens),
-        output: toNumber(session.output_tokens),
-        total: toNumber(session.total_tokens),
-        calls: toNumber(session.tool_call_count),
-      }));
-  }
-
-  const grouped = new Map<string, Omit<SessionChartRow, 'label'>>();
-  for (const row of rows) {
-    const sessionId = row.session_id || 'unknown';
-    const input = toNumber(row.input_token);
-    const output = toNumber(row.output_token);
-    const existing = grouped.get(sessionId);
-    if (existing) {
-      existing.input += input;
-      existing.output += output;
-      existing.total += input + output;
-      existing.calls += 1;
-      continue;
-    }
-    grouped.set(sessionId, {
-      sessionId,
-      input,
-      output,
-      total: input + output,
-      calls: 1,
-    });
-  }
-
-  return Array.from(grouped.values())
-    .sort((left, right) => right.total - left.total)
+  return [...sessions]
+    .sort((left, right) => toNumber(right.total_tokens) - toNumber(left.total_tokens))
     .slice(0, 8)
     .map((session, index) => ({
-      label: `S${index + 1}`,
-      ...session,
+      label: `R${index + 1}`,
+      runId: session.run_id || session.session_id || 'unknown',
+      workspaceName: session.workspace_name || session.workspace_title || null,
+      input: toNumber(session.input_tokens),
+      output: toNumber(session.output_tokens),
+      total: toNumber(session.total_tokens),
+      calls: toNumber(session.tool_call_count),
     }));
 }
 
-function sessionLabel(sessionId: string, labels: Map<string, string>): string {
-  return labels.get(sessionId) ?? sessionId.slice(0, 8);
+function runLabel(runId: string, labels: Map<string, string>): string {
+  return labels.get(runId) ?? runId.slice(0, 8);
 }
 
 export default function TokenSpenditurePage() {
   const { user, isLoading: userLoading } = useUser();
   const reduceMotion = useReducedMotion();
-  const [rows, setRows] = useState<TokenMeterResponse[]>([]);
-  const [rowsMeta, setRowsMeta] = useState<PaginatedResponse<TokenMeterResponse>>(EMPTY_TOKEN_ROWS);
-  const [rowsPage, setRowsPage] = useState(1);
   const [analytics, setAnalytics] = useState<TokenAnalyticsResponse>(emptyAnalytics);
   const [tokenSessions, setTokenSessions] = useState<TokenUsageSessionItem[]>([]);
   const [usageRange, setUsageRange] = useState<UsageRange>('today');
@@ -321,8 +278,6 @@ export default function TokenSpenditurePage() {
   const fetchData = useCallback(async () => {
     if (!user?.id) {
       if (!userLoading) {
-        setRows([]);
-        setRowsMeta(EMPTY_TOKEN_ROWS);
         setAnalytics(emptyAnalytics);
         setTokenSessions([]);
         setLoading(false);
@@ -332,28 +287,17 @@ export default function TokenSpenditurePage() {
 
     setLoading(true);
     try {
-      const [tokenRows, tokenAnalytics, sessions] = await Promise.all([
-        api.getUserTokenUsage(user.id, rowsPage, TOKEN_ROWS_PAGE_SIZE),
+      const [tokenAnalytics, sessions] = await Promise.all([
         api.getTokenUsageAnalytics(user.id, {
           date_range: usageRange,
           allocation: 'both',
         }),
         api.getTokenUsageSessions(user.id, {
           date_range: usageRange,
-          limit: 500,
+          limit: RUNS_TABLE_LIMIT,
         }),
       ]);
 
-      const sortedRows = Array.isArray(tokenRows.items)
-        ? [...tokenRows.items].sort((left, right) => {
-            const leftTime = parseApiUtcTimestamp(left.timestamp ?? left.created_at ?? '').getTime();
-            const rightTime = parseApiUtcTimestamp(right.timestamp ?? right.created_at ?? '').getTime();
-            return rightTime - leftTime;
-          })
-        : [];
-
-      setRows(sortedRows);
-      setRowsMeta(tokenRows);
       setAnalytics(tokenAnalytics);
       setTokenSessions(Array.isArray(sessions) ? sessions : []);
       setError(null);
@@ -362,7 +306,7 @@ export default function TokenSpenditurePage() {
     } finally {
       setLoading(false);
     }
-  }, [rowsPage, usageRange, user?.id, userLoading]);
+  }, [usageRange, user?.id, userLoading]);
 
   useEffect(() => {
     if (user?.id) {
@@ -370,28 +314,22 @@ export default function TokenSpenditurePage() {
       return;
     }
     if (!userLoading) {
-      setRows([]);
-      setRowsMeta(EMPTY_TOKEN_ROWS);
       setAnalytics(emptyAnalytics);
       setTokenSessions([]);
       setLoading(false);
     }
   }, [fetchData, user?.id, userLoading]);
 
-  useEffect(() => {
-    setRowsPage(1);
-  }, [usageRange]);
-
   const { lastUpdated } = useAutoRefresh(fetchData, 30000);
   const summary = analytics.summary;
 
   const sessionRows = useMemo(
-    () => buildSessionChartRows(tokenSessions, rows),
-    [rows, tokenSessions],
+    () => buildSessionChartRows(tokenSessions),
+    [tokenSessions],
   );
 
   const sessionLabels = useMemo(() => {
-    return new Map(sessionRows.map((row) => [row.sessionId, row.label]));
+    return new Map(sessionRows.map((row) => [row.runId, row.label]));
   }, [sessionRows]);
 
   const categoryData = useMemo(
@@ -406,10 +344,14 @@ export default function TokenSpenditurePage() {
 
   const topCategory = categoryData[0] ?? null;
   const topTool = toolData[0] ?? null;
-  const averagePerSession = tokenSessions.length
+  const averagePerRun = tokenSessions.length
     ? Math.round(summary.total_tokens / tokenSessions.length)
     : 0;
-  const latestRecord = rows[0] ?? null;
+  const latestRecord = [...tokenSessions].sort((left, right) => {
+    const leftTime = parseApiUtcTimestamp(left.last_seen_at ?? left.first_seen_at ?? '').getTime();
+    const rightTime = parseApiUtcTimestamp(right.last_seen_at ?? right.first_seen_at ?? '').getTime();
+    return rightTime - leftTime;
+  })[0] ?? null;
   const noData =
     summary.total_tokens === 0 &&
     sessionRows.length === 0 &&
@@ -458,7 +400,7 @@ export default function TokenSpenditurePage() {
                 Tracked usage
               </Badge>
               <Badge tone="neutral">{rangeSummaryLabel(usageRange)}</Badge>
-              <Badge tone="feature">{tokenSessions.length.toLocaleString()} sessions</Badge>
+              <Badge tone="feature">{tokenSessions.length.toLocaleString()} runs</Badge>
             </motion.div>
             <motion.h1
               variants={fadeUp}
@@ -470,7 +412,7 @@ export default function TokenSpenditurePage() {
               variants={fadeUp}
               className="mt-3 max-w-[760px] text-[13px] leading-[1.6] text-[var(--neutral-sub-600)]"
             >
-              Tracks raw token rows, session rollups, and category and tool analytics for the selected
+              Tracks run-backed token usage, workspace rollups, and category and tool analytics for the selected
               window.
             </motion.p>
           </div>
@@ -530,7 +472,7 @@ export default function TokenSpenditurePage() {
               <MetricCard
                 label="Total tokens"
                 value={summary.total_tokens}
-                meta={`${tokenSessions.length.toLocaleString()} sessions in scope`}
+                meta={`${tokenSessions.length.toLocaleString()} runs in scope`}
               />
               <MetricCard
                 label="Input tokens"
@@ -545,7 +487,7 @@ export default function TokenSpenditurePage() {
               <MetricCard
                 label="Tool calls"
                 value={summary.tool_call_count}
-                meta={`${rowsMeta.total.toLocaleString()} raw rows available`}
+                meta={`${summary.tool_call_count.toLocaleString()} recorded tool calls`}
               />
             </motion.section>
 
@@ -558,8 +500,8 @@ export default function TokenSpenditurePage() {
               <Card>
                 <CardHeader>
                   <div className="min-w-0">
-                    <CardEyebrow>Session usage</CardEyebrow>
-                    <CardTitle>Input and output by session</CardTitle>
+                    <CardEyebrow>Run usage</CardEyebrow>
+                    <CardTitle>Input and output by run</CardTitle>
                   </div>
                   <Badge tone="neutral">{sessionRows.length} shown</Badge>
                 </CardHeader>
@@ -568,8 +510,8 @@ export default function TokenSpenditurePage() {
                     <EmptyState
                       compact
                       icon={<BarChart3 className="h-4 w-4" />}
-                      title="No sessions in this window"
-                      description="Session rollups appear here once token usage is recorded."
+                      title="No runs in this window"
+                      description="Run rollups appear here once token usage is recorded."
                     />
                   ) : (
                     <div className="h-[320px]">
@@ -629,20 +571,20 @@ export default function TokenSpenditurePage() {
                   />
                   <InsightRow
                     icon={<BarChart3 className="h-4 w-4" />}
-                    label="Average per session"
-                    value={averagePerSession.toLocaleString()}
-                    meta={tokenSessions.length ? `${tokenSessions.length.toLocaleString()} sessions reported` : 'No session rollups yet'}
+                    label="Average per run"
+                    value={averagePerRun.toLocaleString()}
+                    meta={tokenSessions.length ? `${tokenSessions.length.toLocaleString()} runs reported` : 'No run rollups yet'}
                   />
                   <InsightRow
                     icon={<Clock3 className="h-4 w-4" />}
                     label="Latest record"
-                    value={latestRecord ? formatDateTimeIST(latestRecord.timestamp ?? latestRecord.created_at) : 'Unavailable'}
-                    meta={latestRecord ? formatTimeIST(latestRecord.timestamp ?? latestRecord.created_at) : 'No recent row loaded'}
+                    value={latestRecord ? formatDateTimeIST(latestRecord.last_seen_at ?? latestRecord.first_seen_at) : 'Unavailable'}
+                    meta={latestRecord ? formatTimeIST(latestRecord.last_seen_at ?? latestRecord.first_seen_at) : 'No recent run loaded'}
                   />
                 </CardBody>
                 <CardFooter className="text-[11.5px] text-[var(--neutral-soft-400)]">
                   <span>Refreshes every 30 seconds.</span>
-                  <span>{rowsMeta.total.toLocaleString()} paginated token meter rows</span>
+                  <span>{tokenSessions.length.toLocaleString()} run drill-down rows</span>
                 </CardFooter>
               </Card>
             </motion.section>
@@ -656,14 +598,14 @@ export default function TokenSpenditurePage() {
               <DistributionCard
                 eyebrow="Category breakdown"
                 title="Tokens by connector category"
-                subtitle="Grouped from /analytics/token-usage category_chart."
+                subtitle="Grouped from /api/v3/analytics/token-usage category_chart."
                 data={categoryData}
                 emptyDescription="Category splits appear once usage has been categorized."
               />
               <DistributionCard
                 eyebrow="Tool breakdown"
                 title="Tokens by tool"
-                subtitle="Grouped from /analytics/token-usage tool_chart."
+                subtitle="Grouped from /api/v3/analytics/token-usage tool_chart."
                 data={toolData}
                 emptyDescription="Tool splits appear once usage has been categorized."
               />
@@ -677,22 +619,21 @@ export default function TokenSpenditurePage() {
               <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <h2 className="text-[14px] font-semibold tracking-[-0.01em] text-[var(--neutral-strong-950)]">
-                    Recent token meter records
+                    Recent runs
                   </h2>
                   <p className="mt-1 text-[12px] text-[var(--neutral-soft-400)]">
-                    Showing paginated raw rows from the token meter endpoint.
+                    Run-backed usage for the selected window. Each row is a run with workspace name and token totals.
                   </p>
                 </div>
-                <Badge tone="neutral">
-                  Page {rowsMeta.page} of {Math.max(rowsMeta.pages, 1)}
-                </Badge>
+                <Badge tone="neutral">{tokenSessions.length.toLocaleString()} runs</Badge>
               </div>
 
               <Table scrollX>
                 <THead>
                   <tr>
-                    <TH>Time (IST)</TH>
-                    <TH>Session</TH>
+                    <TH>Last seen (IST)</TH>
+                    <TH>Run</TH>
+                    <TH>Workspace</TH>
                     <TH>Tool</TH>
                     <TH className="text-right">Input</TH>
                     <TH className="text-right">Output</TH>
@@ -700,73 +641,44 @@ export default function TokenSpenditurePage() {
                   </tr>
                 </THead>
                 <TBody>
-                  {rows.map((row) => {
-                    const input = toNumber(row.input_token);
-                    const output = toNumber(row.output_token);
-                    const timestamp = row.timestamp ?? row.created_at;
+                  {tokenSessions.map((row) => {
+                    const runId = row.run_id || row.session_id;
+                    const workspace =
+                      row.workspace_name || row.workspace_title || 'Unscoped';
                     const rawTool = row.tool_name ?? '';
                     const toolLabel = rawTool ? displayToolName(rawTool) : 'Unknown';
                     return (
-                      <TR key={row.id}>
+                      <TR key={runId}>
                         <TD className="whitespace-nowrap text-[12px] text-[var(--neutral-sub-600)]">
-                          {formatDateTimeIST(timestamp)}
+                          {formatDateTimeIST(row.last_seen_at ?? row.first_seen_at)}
                         </TD>
                         <TD>
-                          <CodeChip title={row.session_id || ''}>
-                            {row.session_id ? sessionLabel(row.session_id, sessionLabels) : 'Unavailable'}
+                          <CodeChip title={runId || ''}>
+                            {runId ? runLabel(runId, sessionLabels) : 'Unavailable'}
                           </CodeChip>
+                        </TD>
+                        <TD>
+                          <span className="text-[12.5px] text-[var(--neutral-strong-950)]">
+                            {workspace}
+                          </span>
                         </TD>
                         <TD>
                           <CodeChip title={toolLabel}>{toolLabel}</CodeChip>
                         </TD>
-                        <TD className="text-right tabular-nums">{input.toLocaleString()}</TD>
-                        <TD className="text-right tabular-nums">{output.toLocaleString()}</TD>
+                        <TD className="text-right tabular-nums">
+                          {toNumber(row.input_tokens).toLocaleString()}
+                        </TD>
+                        <TD className="text-right tabular-nums">
+                          {toNumber(row.output_tokens).toLocaleString()}
+                        </TD>
                         <TD className="text-right font-semibold tabular-nums">
-                          {(input + output).toLocaleString()}
+                          {toNumber(row.total_tokens).toLocaleString()}
                         </TD>
                       </TR>
                     );
                   })}
                 </TBody>
               </Table>
-              <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-[12px] border border-[var(--stroke-soft-200)] bg-white px-4 py-3 shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
-                <p className="text-xs text-[var(--neutral-soft-400)]">
-                  Showing{' '}
-                  <span className="font-medium text-[var(--neutral-strong-950)]">
-                    {rowsMeta.total === 0 ? 0 : (rowsMeta.page - 1) * rowsMeta.page_size + 1}
-                    {' '}to{' '}
-                    {Math.min(rowsMeta.page * rowsMeta.page_size, rowsMeta.total)}
-                  </span>{' '}
-                  of{' '}
-                  <span className="font-medium text-[var(--neutral-strong-950)]">
-                    {rowsMeta.total.toLocaleString()}
-                  </span>{' '}
-                  raw rows
-                </p>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    disabled={rowsPage <= 1}
-                    onClick={() => setRowsPage((current) => Math.max(1, current - 1))}
-                  >
-                    Previous
-                  </Button>
-                  <span className="text-[12px] text-[var(--neutral-soft-400)]">
-                    Page {rowsMeta.page} of {Math.max(rowsMeta.pages, 1)}
-                  </span>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    disabled={rowsMeta.pages <= 1 || rowsPage >= rowsMeta.pages}
-                    onClick={() =>
-                      setRowsPage((current) => Math.min(Math.max(rowsMeta.pages, 1), current + 1))
-                    }
-                  >
-                    Next
-                  </Button>
-                </div>
-              </div>
             </motion.section>
           </>
         )}
@@ -851,12 +763,15 @@ function SessionChartTooltip({
   return (
     <div className="min-w-[200px] rounded-[10px] border border-[var(--stroke-soft-200)] bg-white p-3 shadow-[0_8px_24px_rgba(23,23,23,0.08)]">
       <p className="text-[10.5px] font-semibold uppercase tracking-[0.07em] text-[var(--neutral-soft-400)]">
-        Session
+        Run
       </p>
       <div className="mt-1 flex items-center gap-2">
         <CodeChip>{row.label}</CodeChip>
-        <CodeChip title={row.sessionId}>{row.sessionId}</CodeChip>
+        <CodeChip title={row.runId}>{row.runId}</CodeChip>
       </div>
+      {row.workspaceName ? (
+        <p className="mt-1 text-[11.5px] text-[var(--neutral-sub-600)]">{row.workspaceName}</p>
+      ) : null}
       <div className="mt-3 space-y-1.5 text-[12px]">
         {payload.map((item) => (
           <div key={`${item.dataKey}`} className="flex items-center justify-between gap-4">

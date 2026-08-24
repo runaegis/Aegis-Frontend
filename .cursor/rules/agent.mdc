@@ -1,0 +1,154 @@
+---
+alwaysApply: true
+---
+
+# Aegis Agent Workspace Rules
+
+This repository uses the Aegis Workspace for collaboration, memory, and task coordination.
+
+Follow these rules on **every conversation**.
+
+---
+
+# 1. Memory Handling (User Conversations)
+
+When a new conversation starts:
+
+- Ask the user whether they want to load any saved Aegis memory before beginning work.
+- Do not assume which memory they need.
+- If the user mentions a memory name or description:
+  1. Call `list_memory`.
+  2. Find the closest matching memory.
+  3. Load it using the appropriate memory tool.
+  4. Use the loaded memory as additional context for the rest of the conversation.
+
+Never automatically load memories without user confirmation.
+
+---
+
+# 2. Workspace Initialization
+
+At the beginning of every session:
+
+Call:
+
+- `workspace_get_context`
+- also get pointers as well... pointer are task which is assinged in group. fron mcp aegis_frontend
+
+Use it to retrieve:
+
+- workspace summary
+- active members
+- recent activity
+- open tasks
+- pending pointers
+
+This call is mandatory.
+
+---
+
+# 3. Mention Polling
+
+At the end of every assistant turn:
+
+Call:
+
+- `workspace_check_mentions`
+
+This should be treated as a lightweight polling operation.
+
+If no mentions exist:
+
+- Continue normally.
+
+If mention IDs are returned:
+
+1. Fetch the message using:
+   - `workspace_get_messages`
+   or
+   - `workspace_get_context`
+
+2. Process the request.
+
+3. Respond using:
+
+- `workspace_post`
+
+Always acknowledge new mentions.
+
+---
+
+# 4. Workspace Replies
+
+When replying inside the workspace:
+
+- Use `@username` to mention teammates.
+- Never mention yourself.
+- Keep replies concise.
+- Include enough context so another agent can continue the task.
+
+---
+
+# 5. Task Completion
+
+Whenever finishing work on any workspace task:
+
+Update the pointer using:
+
+- `workspace_update_pointer`
+
+Allowed statuses:
+
+- pending
+- review
+- done
+
+Status guidance:
+
+- `pending` → work has started but is incomplete.
+- `review` → implementation is complete and awaiting review.
+- `done` → task is fully completed.
+
+Never finish a task without updating its pointer.
+
+---
+
+# 6. Silent Workspace Operations
+
+Workspace synchronization should happen automatically.
+
+Never ask users questions such as:
+
+- "Should I check the workspace?"
+- "Do you want me to poll mentions?"
+- "Should I update the pointer?"
+
+Perform these operations silently.
+
+Only involve the user when additional information is genuinely required.
+
+---
+
+# 7. Error Handling
+
+If a workspace operation fails:
+
+- Continue helping the user whenever possible.
+- Briefly note that workspace synchronization could not be completed.
+- Do not repeatedly retry the same failed operation during the same turn.
+
+---
+
+# 8. Priority Order
+
+Always follow this execution order:
+
+1. Ask whether the user wants to load Aegis memory.
+2. Load requested memory (if any).
+3. `workspace_get_context`
+4. Perform the user's request.
+5. `workspace_check_mentions`
+6. Respond to new mentions (if any).
+7. `workspace_update_pointer` (if task status changed).
+
+These rules take precedence over normal conversation flow whenever workspace functionality is available.

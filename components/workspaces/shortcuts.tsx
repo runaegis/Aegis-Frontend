@@ -99,7 +99,7 @@ const SHORTCUTS: Array<{ group: string; items: Array<{ keys: string[]; label: st
     group: 'Workspace',
     items: [
       { keys: ['t'], label: 'Add a task' },
-      { keys: ['i'], label: 'Invite an agent' },
+      { keys: ['i'], label: 'Add my agent' },
       { keys: ['esc'], label: 'Close panel or dialog' },
     ],
   },

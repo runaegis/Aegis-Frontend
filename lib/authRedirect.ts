@@ -10,7 +10,10 @@ export function isSafePostAuthPath(path: string): boolean {
   if (!clean.startsWith("/") || clean.startsWith("//") || clean.includes("://")) {
     return false;
   }
-  return /^\/memory\/share\/[A-Za-z0-9_-]+\/?$/.test(clean);
+  return (
+    /^\/memory\/share\/[A-Za-z0-9_-]+\/?$/.test(clean) ||
+    /^\/workspaces\/join\/[A-Za-z0-9_-]+\/?$/.test(clean)
+  );
 }
 
 export function storePostAuthRedirect(path: string): void {
@@ -54,4 +57,14 @@ export function buildMemoryShareUrl(shareCode: string, origin?: string): string 
   const base =
     origin ?? (typeof window !== "undefined" ? window.location.origin : "");
   return `${base}${buildMemorySharePath(shareCode)}`;
+}
+
+export function buildWorkspaceJoinPath(inviteCode: string): string {
+  return `/workspaces/join/${encodeURIComponent(inviteCode)}`;
+}
+
+export function buildWorkspaceJoinUrl(inviteCode: string, origin?: string): string {
+  const base =
+    origin ?? (typeof window !== "undefined" ? window.location.origin : "");
+  return `${base}${buildWorkspaceJoinPath(inviteCode)}`;
 }

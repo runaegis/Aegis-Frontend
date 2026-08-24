@@ -335,7 +335,13 @@ export interface TokenAnalyticsResponse {
 }
 
 export interface TokenUsageSessionItem {
+  run_id: string;
   session_id: string;
+  workspace_id: string | null;
+  workspace_name: string | null;
+  workspace_title: string | null;
+  agent_name: string | null;
+  tool_name: string | null;
   input_tokens: number;
   output_tokens: number;
   total_tokens: number;

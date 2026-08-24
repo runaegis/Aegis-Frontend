@@ -56,6 +56,7 @@ import {
 import { normalizeApiTimestamp, normalizeDecision } from "./utils";
 import {
   buildMemoryShareUrl,
+  buildWorkspaceJoinUrl,
   isSafePostAuthPath,
   storePostAuthRedirect,
 } from "./authRedirect";
@@ -98,12 +99,16 @@ type TokenAnalyticsFilters = {
   allocation?: TokenAnalyticsAllocation;
   categories?: string | string[];
   tool_names?: string | string[];
+  connector_keys?: string | string[];
+  workspace_id?: string;
+  run_id?: string;
 };
 
 type TokenUsageSessionFilters = {
   date_range?: TokenAnalyticsDateRange;
   start_date?: string;
   end_date?: string;
+  workspace_id?: string;
   limit?: number;
 };
 
@@ -193,6 +198,63 @@ export type WorkspaceAgentKeyResponse = {
       };
     };
   };
+};
+
+export type WorkspaceInviteStatus =
+  | "pending"
+  | "accepted"
+  | "revoked"
+  | "expired"
+  | "exhausted";
+
+export type WorkspaceInvite = {
+  id: string;
+  workspace_id: string;
+  invite_code: string;
+  invite_url: string;
+  status: WorkspaceInviteStatus;
+  is_directed: boolean;
+  invited_user_id: string | null;
+  invited_email: string | null;
+  invited_name: string | null;
+  suggested_handle: string | null;
+  role_label: string | null;
+  max_uses: number | null;
+  used_count: number;
+  expires_at: string | null;
+  created_at: string | null;
+  workspace_title?: string | null;
+};
+
+export type WorkspaceInviteCreatePayload = {
+  expires_in_hours?: number;
+  max_uses?: number | null;
+  invited_user_id?: string | null;
+  invited_email?: string | null;
+  suggested_handle?: string | null;
+  role_label?: string | null;
+};
+
+export type WorkspaceInvitePreview = {
+  invite_id: string;
+  workspace_id: string;
+  workspace_title: string;
+  workspace_task: string | null;
+  status: WorkspaceInviteStatus;
+  suggested_handle: string | null;
+  role_label: string | null;
+  is_directed: boolean;
+  already_member: boolean;
+  already_joined: boolean;
+  is_owner: boolean;
+  expires_at: string | null;
+};
+
+export type WorkspaceJoinResponse = {
+  already_joined: boolean;
+  agent: WorkspaceAgent | null;
+  agent_key: string | null;
+  mcp_config_snippet: WorkspaceAgentKeyResponse["mcp_config_snippet"] | null;
 };
 
 function getAPIBase(): string {
@@ -462,6 +524,107 @@ function pickShareStatus(value: unknown): MemoryShareStatus | undefined {
     return value;
   }
   return undefined;
+}
+
+function pickInviteStatus(value: unknown): WorkspaceInviteStatus | undefined {
+  if (
+    value === "pending" ||
+    value === "accepted" ||
+    value === "revoked" ||
+    value === "expired" ||
+    value === "exhausted"
+  ) {
+    return value;
+  }
+  return undefined;
+}
+
+function nullableString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function normalizeWorkspaceInvite(
+  raw: unknown,
+  workspaceId?: string,
+): WorkspaceInvite {
+  const row = asRecord(raw);
+  const nested = asRecord(row.invite);
+  const source = nested.id || nested.invite_code ? nested : row;
+  const inviteCode = String(source.invite_code ?? source.code ?? "");
+  const resolvedWorkspaceId = String(
+    source.workspace_id ?? workspaceId ?? "",
+  );
+  const used =
+    typeof source.used_count === "number"
+      ? source.used_count
+      : typeof source.redeemed_count === "number"
+        ? source.redeemed_count
+        : 0;
+  const maxUses =
+    source.max_uses === null
+      ? null
+      : typeof source.max_uses === "number"
+        ? source.max_uses
+        : null;
+
+  return {
+    id: String(source.id ?? source.invite_id ?? ""),
+    workspace_id: resolvedWorkspaceId,
+    invite_code: inviteCode,
+    invite_url:
+      pickString(source.invite_url) ??
+      (inviteCode ? buildWorkspaceJoinUrl(inviteCode) : ""),
+    status: pickInviteStatus(source.status) ?? "pending",
+    is_directed: source.is_directed === true,
+    invited_user_id: nullableString(source.invited_user_id),
+    invited_email: nullableString(source.invited_email),
+    invited_name: nullableString(source.invited_name),
+    suggested_handle: nullableString(source.suggested_handle),
+    role_label: nullableString(source.role_label),
+    max_uses: maxUses,
+    used_count: used,
+    expires_at: typeof source.expires_at === "string" ? source.expires_at : null,
+    created_at: typeof source.created_at === "string" ? source.created_at : null,
+    workspace_title: nullableString(source.workspace_title),
+  };
+}
+
+function normalizeWorkspaceInvitePreview(raw: unknown): WorkspaceInvitePreview {
+  const row = asRecord(raw);
+  return {
+    invite_id: String(row.invite_id ?? row.id ?? ""),
+    workspace_id: String(row.workspace_id ?? ""),
+    workspace_title: pickString(row.workspace_title) ?? "Workspace",
+    workspace_task: nullableString(row.workspace_task),
+    status: pickInviteStatus(row.status) ?? "pending",
+    suggested_handle: nullableString(row.suggested_handle),
+    role_label: nullableString(row.role_label),
+    is_directed: row.is_directed === true,
+    already_member: row.already_member === true,
+    already_joined: row.already_joined === true,
+    is_owner: row.is_owner === true,
+    expires_at: typeof row.expires_at === "string" ? row.expires_at : null,
+  };
+}
+
+function normalizeWorkspaceJoinResponse(raw: unknown): WorkspaceJoinResponse {
+  const row = asRecord(raw);
+  const agentRaw = row.agent;
+  const agent =
+    agentRaw && typeof agentRaw === "object"
+      ? (parseRow(agentRaw) as WorkspaceAgent)
+      : null;
+  const snippetRaw = row.mcp_config_snippet;
+  const snippet =
+    snippetRaw && typeof snippetRaw === "object"
+      ? (snippetRaw as WorkspaceAgentKeyResponse["mcp_config_snippet"])
+      : null;
+  return {
+    already_joined: row.already_joined === true,
+    agent,
+    agent_key: nullableString(row.agent_key),
+    mcp_config_snippet: snippet,
+  };
 }
 
 function normalizeMemoryShare(raw: unknown, memoryId: string): MemoryShare {
@@ -1024,7 +1187,10 @@ function appendTokenAnalyticsFilters(
   if (filters.start_date) url.searchParams.set("start_date", filters.start_date);
   if (filters.end_date) url.searchParams.set("end_date", filters.end_date);
 
-  const appendMany = (key: "categories" | "tool_names", value?: string | string[]) => {
+  const appendMany = (
+    key: "categories" | "tool_names" | "connector_keys",
+    value?: string | string[],
+  ) => {
     if (!value) return;
     const items = Array.isArray(value) ? value : value.split(",");
     for (const item of items) {
@@ -1035,6 +1201,9 @@ function appendTokenAnalyticsFilters(
 
   appendMany("categories", filters.categories);
   appendMany("tool_names", filters.tool_names);
+  appendMany("connector_keys", filters.connector_keys);
+  if (filters.workspace_id) url.searchParams.set("workspace_id", filters.workspace_id);
+  if (filters.run_id) url.searchParams.set("run_id", filters.run_id);
 }
 
 function emptyTokenAnalyticsResponse(
@@ -1065,6 +1234,7 @@ function appendTokenUsageSessionFilters(
   url.searchParams.set("date_range", filters.date_range ?? "30d");
   if (filters.start_date) url.searchParams.set("start_date", filters.start_date);
   if (filters.end_date) url.searchParams.set("end_date", filters.end_date);
+  if (filters.workspace_id) url.searchParams.set("workspace_id", filters.workspace_id);
   if (typeof filters.limit === "number") {
     const limit = Math.min(Math.max(Math.trunc(filters.limit), 1), 500);
     url.searchParams.set("limit", String(limit));
@@ -1072,15 +1242,27 @@ function appendTokenUsageSessionFilters(
 }
 
 function normalizeTokenUsageSessionItem(row: unknown): TokenUsageSessionItem {
-  const item = parseRow(row) as Partial<TokenUsageSessionItem>;
+  const item = parseRow(row) as Partial<TokenUsageSessionItem> &
+    Record<string, unknown>;
+  const runId = String(item.run_id ?? item.session_id ?? "unknown");
+  const workspaceName =
+    pickString(item.workspace_name) ?? pickString(item.workspace_title) ?? null;
   return {
-    session_id: String(item.session_id ?? "unknown"),
+    run_id: runId,
+    session_id: runId,
+    workspace_id: pickString(item.workspace_id) ?? null,
+    workspace_name: workspaceName,
+    workspace_title: pickString(item.workspace_title) ?? workspaceName,
+    agent_name: pickString(item.agent_name) ?? null,
+    tool_name: pickString(item.tool_name) ?? null,
     input_tokens: Number(item.input_tokens ?? 0),
     output_tokens: Number(item.output_tokens ?? 0),
     total_tokens: Number(item.total_tokens ?? 0),
     tool_call_count: Number(item.tool_call_count ?? 0),
-    first_seen_at: item.first_seen_at ?? null,
-    last_seen_at: item.last_seen_at ?? null,
+    first_seen_at:
+      typeof item.first_seen_at === "string" ? item.first_seen_at : null,
+    last_seen_at:
+      typeof item.last_seen_at === "string" ? item.last_seen_at : null,
   };
 }
 
@@ -2183,28 +2365,30 @@ export const api = {
   ): Promise<TokenAnalyticsResponse> => {
     if (!userId) return emptyTokenAnalyticsResponse("", filters);
 
-    const url = new URL(
-      `${API_BASE}/analytics/token-usage/${encodeURIComponent(userId)}`,
-    );
+    const url = new URL(`${API_BASE}/api/v3/analytics/token-usage`);
     appendTokenAnalyticsFilters(url, filters);
 
     const res = await apiFetch(url.toString());
     if (!res.ok) {
-      throw new Error(`Failed to fetch token analytics: ${await readErrorMessage(res)}`);
+      throw await readApiError(res);
     }
 
     const payload = await res.json();
+    const body =
+      payload && typeof payload === "object" && payload.data && typeof payload.data === "object"
+        ? payload.data
+        : payload;
     return {
       ...emptyTokenAnalyticsResponse(userId, filters),
-      ...payload,
+      ...body,
       summary: {
         ...emptyTokenAnalyticsResponse(userId, filters).summary,
-        ...(payload?.summary ?? {}),
+        ...(body?.summary ?? {}),
       },
-      category_chart: Array.isArray(payload?.category_chart)
-        ? payload.category_chart
+      category_chart: Array.isArray(body?.category_chart)
+        ? body.category_chart
         : [],
-      tool_chart: Array.isArray(payload?.tool_chart) ? payload.tool_chart : [],
+      tool_chart: Array.isArray(body?.tool_chart) ? body.tool_chart : [],
     };
   },
 
@@ -2214,24 +2398,24 @@ export const api = {
   ): Promise<TokenUsageSessionItem[]> => {
     if (!userId) return [];
 
-    const url = new URL(
-      `${API_BASE}/analytics/token-usage/${encodeURIComponent(userId)}/sessions`,
-    );
+    const url = new URL(`${API_BASE}/api/v3/analytics/token-usage/runs`);
     appendTokenUsageSessionFilters(url, filters);
 
     const res = await apiFetch(url.toString());
     if (!res.ok) {
-      throw new Error(`Failed to fetch token usage sessions: ${await readErrorMessage(res)}`);
+      throw await readApiError(res);
     }
 
     const payload = await res.json();
     const rows = Array.isArray(payload)
       ? payload
-      : Array.isArray(payload?.sessions)
-        ? payload.sessions
+      : Array.isArray(payload?.runs)
+        ? payload.runs
         : Array.isArray(payload?.items)
           ? payload.items
-          : [];
+          : Array.isArray(payload?.sessions)
+            ? payload.sessions
+            : [];
 
     return rows.map(normalizeTokenUsageSessionItem);
   },
@@ -3470,5 +3654,103 @@ export const api = {
       throw new Error(`Failed to delete task pointer: ${await readErrorMessage(res)}`);
     }
     return res.json();
+  },
+
+  createWorkspaceInvite: async (
+    workspaceId: string,
+    payload: WorkspaceInviteCreatePayload = {
+      expires_in_hours: 72,
+      max_uses: null,
+    },
+  ): Promise<WorkspaceInvite> => {
+    const res = await apiFetch(
+      `${API_BASE}/api/workspaces/${encodeURIComponent(workspaceId)}/invites`,
+      {
+        method: "POST",
+        headers: getJsonHeaders(),
+        body: JSON.stringify(payload),
+      },
+    );
+    if (!res.ok) {
+      throw await readApiError(res);
+    }
+    return normalizeWorkspaceInvite(await res.json(), workspaceId);
+  },
+
+  getWorkspaceInvites: async (
+    workspaceId: string,
+  ): Promise<WorkspaceInvite[]> => {
+    const res = await apiFetch(
+      `${API_BASE}/api/workspaces/${encodeURIComponent(workspaceId)}/invites`,
+    );
+    if (!res.ok) {
+      throw await readApiError(res);
+    }
+    const data = await res.json();
+    const rows = Array.isArray(data)
+      ? data
+      : data && Array.isArray(data.invites)
+        ? data.invites
+        : [];
+    return rows.map((row: unknown) =>
+      normalizeWorkspaceInvite(row, workspaceId),
+    );
+  },
+
+  revokeWorkspaceInvite: async (inviteId: string): Promise<void> => {
+    const res = await apiFetch(
+      `${API_BASE}/api/workspaces/invites/${encodeURIComponent(inviteId)}`,
+      { method: "DELETE" },
+    );
+    if (!res.ok) {
+      throw await readApiError(res);
+    }
+  },
+
+  getWorkspaceInviteInbox: async (): Promise<WorkspaceInvite[]> => {
+    const res = await apiFetch(`${API_BASE}/api/workspaces/invites/inbox`);
+    if (!res.ok) {
+      throw await readApiError(res);
+    }
+    const data = await res.json();
+    const rows = Array.isArray(data)
+      ? data
+      : data && Array.isArray(data.invites)
+        ? data.invites
+        : [];
+    return rows.map((row: unknown) => normalizeWorkspaceInvite(row));
+  },
+
+  getWorkspaceInvitePreview: async (
+    inviteCode: string,
+  ): Promise<WorkspaceInvitePreview> => {
+    const res = await apiFetch(
+      `${API_BASE}/api/workspaces/join/${encodeURIComponent(inviteCode)}`,
+    );
+    if (!res.ok) {
+      throw await readApiError(res);
+    }
+    return normalizeWorkspaceInvitePreview(await res.json());
+  },
+
+  joinWorkspace: async (payload: {
+    invite_code: string;
+    handle?: string;
+    role_label?: string | null;
+  }): Promise<WorkspaceJoinResponse> => {
+    const body: Record<string, unknown> = {
+      invite_code: payload.invite_code,
+    };
+    if (payload.handle) body.handle = payload.handle;
+    if (payload.role_label) body.role_label = payload.role_label;
+    const res = await apiFetch(`${API_BASE}/api/workspaces/join`, {
+      method: "POST",
+      headers: getJsonHeaders(),
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      throw await readApiError(res);
+    }
+    return normalizeWorkspaceJoinResponse(await res.json());
   },
 };

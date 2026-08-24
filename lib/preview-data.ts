@@ -811,11 +811,17 @@ function buildPreviewTokenUsageSessions(
   });
 
   for (const row of rows) {
-    const sessionId = row.session_id || 'unknown';
+    const runId = row.action_id || row.session_id || 'unknown';
     const timestamp = row.timestamp ?? row.created_at ?? null;
-    if (!map.has(sessionId)) {
-      map.set(sessionId, {
-        session_id: sessionId,
+    if (!map.has(runId)) {
+      map.set(runId, {
+        run_id: runId,
+        session_id: runId,
+        workspace_id: null,
+        workspace_name: 'Demo workspace',
+        workspace_title: 'Demo workspace',
+        agent_name: null,
+        tool_name: row.tool_name ?? null,
         input_tokens: 0,
         output_tokens: 0,
         total_tokens: 0,
@@ -825,7 +831,7 @@ function buildPreviewTokenUsageSessions(
       });
     }
 
-    const item = map.get(sessionId)!;
+    const item = map.get(runId)!;
     item.input_tokens += row.input_token;
     item.output_tokens += row.output_token;
     item.total_tokens += row.input_token + row.output_token;

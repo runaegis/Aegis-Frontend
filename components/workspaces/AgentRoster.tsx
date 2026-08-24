@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Bot, KeyRound, Plus, UserMinus, UserPlus } from 'lucide-react';
+import { Bot, KeyRound, Link2, Plus, UserMinus, UserPlus } from 'lucide-react';
 import type { WorkspaceAgent } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -10,14 +10,19 @@ import { cn } from '@/lib/utils';
 import { AgentGlyph, normalizeHandle } from './agent-visuals';
 import { RAIL_FOOTER } from './rail-footer';
 import { PanelEmpty } from './PanelEmpty';
+import { InviteWorkspaceDialog } from './InviteWorkspaceDialog';
 
 export function AgentRoster({
+  workspaceId,
+  workspaceTitle,
   agents,
   onInvite,
   onRotate,
   onRemove,
   openInviteSignal = 0,
 }: {
+  workspaceId: string;
+  workspaceTitle: string;
   agents: WorkspaceAgent[];
   onInvite: (handle: string, roleLabel: string) => Promise<void>;
   onRotate: (agentId: string) => Promise<void>;
@@ -26,6 +31,7 @@ export function AgentRoster({
   openInviteSignal?: number;
 }) {
   const [inviting, setInviting] = useState(false);
+  const [linkOpen, setLinkOpen] = useState(false);
 
   useEffect(() => {
     if (openInviteSignal > 0) setInviting(true);
@@ -109,7 +115,7 @@ export function AgentRoster({
           <PanelEmpty
             icon={Bot}
             title="No agents yet"
-            hint="Invite an agent to get a one-time key and the MCP config it needs to join."
+            hint="Add your own agent for a one-time key, or invite another user with a link."
           />
         )}
 
@@ -134,15 +140,26 @@ export function AgentRoster({
       <div className={cn(RAIL_FOOTER, inviting && 'items-stretch py-2')}>
         <div className="w-full">
         {!inviting ? (
-          <Button
-            variant="secondary"
-            size="md"
-            fullWidth
-            leadingIcon={<UserPlus size={13} />}
-            onClick={() => setInviting(true)}
-          >
-            Invite an agent
-          </Button>
+          <div className="space-y-1.5">
+            <Button
+              variant="secondary"
+              size="md"
+              fullWidth
+              leadingIcon={<UserPlus size={13} />}
+              onClick={() => setInviting(true)}
+            >
+              Add my agent
+            </Button>
+            <Button
+              variant="ghost"
+              size="md"
+              fullWidth
+              leadingIcon={<Link2 size={13} />}
+              onClick={() => setLinkOpen(true)}
+            >
+              Invite via link
+            </Button>
+          </div>
         ) : (
           <div className="space-y-2">
             <Input
@@ -204,6 +221,12 @@ export function AgentRoster({
           if (confirmRemove) await onRemove(confirmRemove.id);
           setConfirmRemove(null);
         }}
+      />
+      <InviteWorkspaceDialog
+        workspaceId={workspaceId}
+        workspaceTitle={workspaceTitle}
+        open={linkOpen}
+        onOpenChange={setLinkOpen}
       />
     </div>
   );

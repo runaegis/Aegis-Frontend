@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { motion, useReducedMotion } from 'motion/react';
 import { CheckCircle2, MessageSquareText, Plus, Users2, Boxes } from 'lucide-react';
-import { api, type WorkspaceSummary, type WorkspaceAgent } from '@/lib/api';
+import { api, type WorkspaceInvite, type WorkspaceSummary, type WorkspaceAgent } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import EmptyState from '@/components/ui/EmptyState';
 import ErrorBanner from '@/components/ui/ErrorBanner';
@@ -24,14 +24,19 @@ export function WorkspacesList() {
   const reduce = useReducedMotion();
   const [workspaces, setWorkspaces] = useState<WorkspaceSummary[] | null>(null);
   const [rosters, setRosters] = useState<RosterMap>({});
+  const [inbox, setInbox] = useState<WorkspaceInvite[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
     try {
-      const list = await api.getWorkspaces();
+      const [list, pendingInvites] = await Promise.all([
+        api.getWorkspaces(),
+        api.getWorkspaceInviteInbox().catch(() => [] as WorkspaceInvite[]),
+      ]);
       setWorkspaces(list);
+      setInbox(pendingInvites.filter((invite) => invite.status === 'pending'));
       // Fetch rosters so cards can show who is actually in each room.
       const entries = await Promise.all(
         list.map(async (w) => {
@@ -88,6 +93,35 @@ export function WorkspacesList() {
 
       {error && <ErrorBanner message={error} onDismiss={() => setError(null)} onRetry={load} />}
 
+      {inbox.length > 0 && (
+        <div className="mb-5 overflow-hidden rounded-xl border border-[var(--stroke-soft-200)] bg-[var(--bg-surface)]">
+          <div className="border-b border-[var(--stroke-soft-200)] px-3 py-1.5">
+            <span className="text-[11px] font-medium uppercase tracking-[0.04em] text-[var(--neutral-soft-400)]">
+              Invites for you
+            </span>
+          </div>
+          {inbox.map((invite) => (
+            <Link
+              key={invite.id || invite.invite_code}
+              href={`/workspaces/join/${encodeURIComponent(invite.invite_code)}`}
+              className="flex items-center justify-between gap-3 px-3 py-2.5 text-[13px] transition-colors hover:bg-[var(--neutral-weak-50)]"
+            >
+              <span className="min-w-0 truncate text-[var(--neutral-strong-950)]">
+                {invite.workspace_title || 'Workspace'}
+                {invite.suggested_handle ? (
+                  <span className="ml-2 font-mono text-[12px] text-[var(--neutral-sub-600)]">
+                    @{invite.suggested_handle}
+                  </span>
+                ) : null}
+              </span>
+              <span className="shrink-0 text-[12px] font-medium text-[var(--primary-base)]">
+                Join
+              </span>
+            </Link>
+          ))}
+        </div>
+      )}
+
       {/* Loading */}
       {!workspaces && (
         <div className="overflow-hidden rounded-xl border border-[var(--stroke-soft-200)] bg-[var(--bg-surface)] shadow-[0_1px_2px_rgba(23,23,23,0.04),0_8px_24px_-12px_rgba(23,23,23,0.12)]">
@@ -111,7 +145,7 @@ export function WorkspacesList() {
           <EmptyState
             icon={<Boxes size={20} />}
             title="No workspaces yet"
-            description="Create a room, invite your agents, and give them a goal to work on together."
+            description="Create a room, invite another user's agent with a link, and give them a goal to work on together."
             action={
               <Button variant="primary" size="md" leadingIcon={<Plus size={14} />} onClick={() => setCreating(true)}>
                 New workspace

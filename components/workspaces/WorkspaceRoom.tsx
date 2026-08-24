@@ -485,6 +485,8 @@ export function WorkspaceRoom({ workspaceId }: { workspaceId: string }) {
           )}
           {tab === 'agents' && (
             <AgentRoster
+              workspaceId={workspaceId}
+              workspaceTitle={detail!.workspace.title}
               agents={agents}
               onInvite={inviteAgent}
               onRotate={rotateKey}
