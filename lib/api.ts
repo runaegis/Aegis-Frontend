@@ -186,18 +186,22 @@ export type WorkspaceDetail = {
   pointers?: WorkspaceTaskPointer[];
 };
 
+export type WorkspaceMcpConfigSnippet = {
+  aegis: {
+    url: string;
+    sse_url?: string;
+    headers: {
+      "X-API-Key"?: string;
+      "X-Agent-Key": string;
+      Authorization?: string;
+    };
+  };
+};
+
 export type WorkspaceAgentKeyResponse = {
   agent: WorkspaceAgent;
   agent_key: string;
-  mcp_config_snippet: {
-    aegis: {
-      url: string;
-      headers: {
-        Authorization: string;
-        "X-Agent-Key": string;
-      };
-    };
-  };
+  mcp_config_snippet: WorkspaceMcpConfigSnippet;
 };
 
 export type WorkspaceInviteStatus =

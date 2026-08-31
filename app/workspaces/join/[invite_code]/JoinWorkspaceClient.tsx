@@ -297,8 +297,8 @@ export function JoinWorkspaceClient({ inviteCode }: { inviteCode: string }) {
                     placeholder="Optional role, e.g. Frontend agent"
                   />
                   <p className="text-[12px] text-[var(--neutral-sub-600)]">
-                    After you join, copy the one-time agent key into Cursor as{' '}
-                    <span className="font-mono">X-Agent-Key</span>.
+                    After you join, copy the Cursor URL (Streamable HTTP) or Claude URL
+                    (SSE). Header auth still works; dashboard REST stays cookie-only.
                   </p>
                 </div>
               )}

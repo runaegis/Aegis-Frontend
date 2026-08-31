@@ -33,6 +33,7 @@ import {
   type WorkspacePointerStatus,
   type WorkspaceTaskPointer,
 } from '@/lib/api';
+import { getMcpClaudeUrl, getMcpCursorUrl } from '@/lib/mcp-connect';
 import { cn } from '@/lib/utils';
 
 type AgentStatus = 'active' | 'removed';
@@ -1499,6 +1500,66 @@ export default function WorkspacesPage() {
                 <code className="block max-h-[120px] overflow-auto rounded-[12px] bg-[var(--neutral-weak-50)] p-3 font-mono text-[12px] leading-[1.5] text-[var(--neutral-strong-950)]">
                   {agentKeyResponse.agent_key}
                 </code>
+              </div>
+              <div>
+                <div className="mb-1.5 flex items-center justify-between gap-2">
+                  <label className="block text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--neutral-soft-400)]">
+                    Cursor URL
+                  </label>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() =>
+                      void copyText(
+                        getMcpCursorUrl(
+                          agentKeyResponse.mcp_config_snippet,
+                          agentKeyResponse.agent_key,
+                        ),
+                      )
+                    }
+                  >
+                    Copy Cursor URL
+                  </Button>
+                </div>
+                <code className="block overflow-auto rounded-[12px] bg-[var(--neutral-weak-50)] p-3 font-mono text-[12px] leading-[1.5] text-[var(--neutral-strong-950)]">
+                  {getMcpCursorUrl(
+                    agentKeyResponse.mcp_config_snippet,
+                    agentKeyResponse.agent_key,
+                  )}
+                </code>
+              </div>
+              <div>
+                <div className="mb-1.5 flex items-center justify-between gap-2">
+                  <label className="block text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--neutral-soft-400)]">
+                    Claude URL
+                  </label>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() =>
+                      void copyText(
+                        getMcpClaudeUrl(
+                          agentKeyResponse.mcp_config_snippet,
+                          agentKeyResponse.agent_key,
+                        ),
+                      )
+                    }
+                  >
+                    Copy Claude URL
+                  </Button>
+                </div>
+                <code className="block overflow-auto rounded-[12px] bg-[var(--neutral-weak-50)] p-3 font-mono text-[12px] leading-[1.5] text-[var(--neutral-strong-950)]">
+                  {getMcpClaudeUrl(
+                    agentKeyResponse.mcp_config_snippet,
+                    agentKeyResponse.agent_key,
+                  )}
+                </code>
+                <p className="mt-1.5 text-[12px] leading-[1.5] text-[var(--neutral-sub-600)]">
+                  Claude: paste the SSE URL and set Authentication to None. Header auth in the
+                  snippet still works for Cursor mcp.json.
+                </p>
               </div>
               <div>
                 <div className="mb-1.5 flex items-center justify-between gap-2">

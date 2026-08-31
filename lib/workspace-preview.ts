@@ -303,8 +303,12 @@ function keyResponse(a: WorkspaceAgent): WorkspaceAgentKeyResponse {
     agent_key: key,
     mcp_config_snippet: {
       aegis: {
-        url: 'https://mcp.runaegis.co/sse',
-        headers: { Authorization: 'Bearer <your-token>', 'X-Agent-Key': key },
+        url: `https://mcp.runaegis.co/mcp?api_key=${encodeURIComponent(key)}`,
+        sse_url: `https://mcp.runaegis.co/sse?api_key=${encodeURIComponent(key)}`,
+        headers: {
+          'X-API-Key': 'AEGIS_API_KEY',
+          'X-Agent-Key': key,
+        },
       },
     },
   };

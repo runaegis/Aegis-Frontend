@@ -2,6 +2,7 @@
 
 import { TriangleAlert } from 'lucide-react';
 import type { WorkspaceAgentKeyResponse } from '@/lib/api';
+import { getMcpClaudeUrl, getMcpCursorUrl } from '@/lib/mcp-connect';
 import { Button } from '@/components/ui/Button';
 import CopyButton from '@/components/ui/CopyButton';
 import { Dialog } from './Dialog';
@@ -25,6 +26,12 @@ export function AgentKeyDialog({
 }) {
   const snippet = issued
     ? JSON.stringify({ mcpServers: issued.mcp_config_snippet }, null, 2)
+    : '';
+  const cursorUrl = issued
+    ? getMcpCursorUrl(issued.mcp_config_snippet, issued.agent_key)
+    : '';
+  const claudeUrl = issued
+    ? getMcpClaudeUrl(issued.mcp_config_snippet, issued.agent_key)
     : '';
 
   return (
@@ -80,20 +87,51 @@ export function AgentKeyDialog({
             </pre>
           </div>
 
-          {/* Ready-to-paste config */}
+          <div>
+            <div className="mb-1.5 flex items-center justify-between gap-2">
+              <span className="text-[12px] font-medium text-[var(--neutral-sub-600)]">
+                Cursor URL
+              </span>
+              <CopyButton text={cursorUrl} label="Copy Cursor URL" />
+            </div>
+            <pre className="overflow-x-auto rounded-lg border border-[var(--stroke-soft-200)] bg-[var(--neutral-weak-50)] px-3 py-2.5 font-mono text-[11.5px] leading-[1.6] text-[var(--neutral-strong-950)]">
+              {cursorUrl}
+            </pre>
+            <p className="mt-1.5 text-[11.5px] leading-[1.5] text-[var(--neutral-sub-600)]">
+              Paste into Cursor as a Streamable HTTP MCP server. The workspace key is already in the
+              query. Header auth in the snippet below still works.
+            </p>
+          </div>
+
+          <div>
+            <div className="mb-1.5 flex items-center justify-between gap-2">
+              <span className="text-[12px] font-medium text-[var(--neutral-sub-600)]">
+                Claude URL
+              </span>
+              <CopyButton text={claudeUrl} label="Copy Claude URL" />
+            </div>
+            <pre className="overflow-x-auto rounded-lg border border-[var(--stroke-soft-200)] bg-[var(--neutral-weak-50)] px-3 py-2.5 font-mono text-[11.5px] leading-[1.6] text-[var(--neutral-strong-950)]">
+              {claudeUrl}
+            </pre>
+            <p className="mt-1.5 text-[11.5px] leading-[1.5] text-[var(--neutral-sub-600)]">
+              Paste as a Claude custom connector. Set Authentication to None. Do not use OAuth.
+            </p>
+          </div>
+
+          {/* Ready-to-paste config — headers remain for clients that want them */}
           <div>
             <div className="mb-1.5 flex items-center justify-between">
               <span className="text-[12px] font-medium text-[var(--neutral-sub-600)]">
                 MCP configuration
               </span>
-              <CopyButton text={snippet} />
+              <CopyButton text={snippet} label="Copy snippet" />
             </div>
             <pre className="max-h-[168px] overflow-auto rounded-lg border border-[var(--stroke-soft-200)] bg-[var(--neutral-weak-50)] px-3 py-2.5 font-mono text-[11.5px] leading-[1.6] text-[var(--neutral-strong-950)]">
               {snippet}
             </pre>
             <p className="mt-1.5 text-[11.5px] leading-[1.5] text-[var(--neutral-sub-600)]">
-              Add this to the agent&apos;s MCP config, then it can join this workspace and read its
-              mentions.
+              Optional mcp.json snippet. Headers stay valid; dashboard REST still uses the logged-in
+              cookie, never X-Agent-Key.
             </p>
           </div>
         </div>
