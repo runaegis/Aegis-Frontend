@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Sign in",
+  title: "Authentication",
   description:
-    "Sign in to Aegis to monitor and govern your AI agents across every repository.",
+    "Create an account or sign in to Aegis.",
 };
 
 export default function AuthLayout({
