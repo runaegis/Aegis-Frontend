@@ -1,27 +1,35 @@
 @import "tailwindcss";
 
 /* ─────────────────────────────────────────────────────────────────
-   AlignUI Design System — Orange theme, Light mode only
-   Tokens sourced from Figma-verified AlignUI specification.
+   AlignUI Design System — Linear blue primary, Light mode
+   Accent from Linear: solid #4F7BFF, text #93B2FF, on-accent #FFF.
+   Surfaces: #F4F4F6 / #FFFFFF. Feature purple: #6550B9.
+   Orange is reserved for attention status on workspace cards.
    ───────────────────────────────────────────────────────────────── */
 
 :root {
   /* Neutral scale */
   --white-0:           #ffffff;
-  --neutral-weak-50:   #f7f7f7;
+  --neutral-weak-50:   #f4f4f6;
   --neutral-soft-200:  #ebebeb;
   --neutral-sub-300:   #d1d1d1;
   --neutral-soft-400:  #a3a3a3;
   --neutral-sub-600:   #5c5c5c;
   --neutral-strong-950:#171717;
 
-  /* Orange theme — primary */
-  --primary-base:      #fa7319;
-  --primary-dark:      #ce5e12;
-  --primary-lighter:   #fff3eb;
-  --primary-alpha-10:  rgba(250, 115, 25, 0.10);
-  --primary-alpha-16:  rgba(250, 115, 25, 0.16);
-  --primary-alpha-24:  rgba(250, 115, 25, 0.24);
+  /* Blue theme — Linear accent/solid + accent/text */
+  --primary-base:      #4f7bff;
+  --primary-dark:      #3d63e8;
+  --primary-lighter:   #eef2ff;
+  --primary-alpha-10:  rgba(79, 123, 255, 0.10);
+  --primary-alpha-16:  rgba(79, 123, 255, 0.16);
+  --primary-alpha-24:  rgba(79, 123, 255, 0.24);
+  --text-on-accent:    #ffffff;
+
+  /* Attention — orange reserved for workspace card status */
+  --attention:         #fa7319;
+  --attention-dark:    #ce5e12;
+  --attention-lighter: #fff3eb;
 
   /* Semantic */
   --success:           #1fc16b;
@@ -36,9 +44,9 @@
   --warning-lighter:   #fffaeb;
   --warning-dark:      #624c18;
 
-  --feature:           #7d52f4;
-  --feature-lighter:   #efebff;
-  --feature-dark:      #351a75;
+  --feature:           #6550b9;
+  --feature-lighter:   #eee9f8;
+  --feature-dark:      #3d3180;
 
   /* Chart-only muted plum. Distinct from --feature (bright AlignUI
      purple, used in Rewrite badges) because chart fills need lower
@@ -64,9 +72,9 @@
      (Legend dots, Stat strip dots) so the palette stays in sync. */
   --chart-amber:       #F8A748;
 
-  --information:       #335cff;
-  --info-lighter:      #ebefff;
-  --info-dark:         #162060;
+  --information:       #4f7bff;
+  --info-lighter:      #eef2ff;
+  --info-dark:         #2a4ec4;
 
   /* Strokes */
   --stroke-soft-200:   #ebebeb;
@@ -96,7 +104,7 @@
   /* Table header surface — slightly lifted from card body. Dark mode
      overrides to a different shade for better separation against the
      dark card surface. */
-  --table-header-bg: #F7F7F7;
+  --table-header-bg: #F4F4F6;
 
   /* Keycap chips (kbd) — used in the command palette footer hints,
      tooltips, and anywhere we want a "press this key" affordance.
@@ -111,15 +119,13 @@
   --kbd-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.6),
                 0 1px 0 0 var(--stroke-soft-200);
 
-  /* Primary button — light-mode defaults (existing gradient). These are
-     overridden in [data-theme="dark"] to a muted treatment that
-     harmonizes with dark surfaces. */
-  --btn-primary-bg:        linear-gradient(180deg, #fb8939 0%, #fa7319 55%, #ed6a14 100%);
-  --btn-primary-bg-hover:  linear-gradient(180deg, #fa7d27 0%, #ed6a14 55%, #d75e10 100%);
-  --btn-primary-bg-active: linear-gradient(180deg, #ed6a14 0%, #d75e10 100%);
-  --btn-primary-border:    var(--primary-dark);
-  --btn-primary-shadow:    inset 0 1px 0 0 rgba(255, 255, 255, 0.18),
-                           0 1px 2px rgba(206, 94, 18, 0.30),
+  /* Primary button — Linear accent/solid, white text/on-accent. */
+  --btn-primary-bg:        #4f7bff;
+  --btn-primary-bg-hover:  #3d63e8;
+  --btn-primary-bg-active: #3356d4;
+  --btn-primary-border:    #3356d4;
+  --btn-primary-shadow:    inset 0 1px 0 0 rgba(255, 255, 255, 0.14),
+                           0 1px 2px rgba(61, 99, 232, 0.28),
                            0 1px 0 0 rgba(0, 0, 0, 0.04);
 }
 
@@ -154,14 +160,19 @@
   --stroke-soft-200:   #1d1d20;
   --stroke-sub-300:    #2a2a2f;
 
-  /* Brand orange — base unchanged. `--primary-dark` flips BRIGHT per
-     AlignUI dark spec, so hover-on-dark lifts instead of deepening. */
-  --primary-base:      #fa7319;
-  --primary-dark:      #ff8a3c;
-  --primary-lighter:   rgba(250, 115, 25, 0.14);
-  --primary-alpha-10:  rgba(250, 115, 25, 0.10);
-  --primary-alpha-16:  rgba(250, 115, 25, 0.18);
-  --primary-alpha-24:  rgba(250, 115, 25, 0.32);
+  /* Brand blue — solid stays Linear accent. `--primary-dark` flips to
+     accent/text so hover-on-dark and blue labels lift instead of deepen. */
+  --primary-base:      #4f7bff;
+  --primary-dark:      #93b2ff;
+  --primary-lighter:   rgba(79, 123, 255, 0.14);
+  --primary-alpha-10:  rgba(79, 123, 255, 0.10);
+  --primary-alpha-16:  rgba(79, 123, 255, 0.18);
+  --primary-alpha-24:  rgba(79, 123, 255, 0.32);
+  --text-on-accent:    #ffffff;
+
+  --attention:         #fa7319;
+  --attention-dark:    #ff8a3c;
+  --attention-lighter: rgba(250, 115, 25, 0.14);
 
   /* Semantic state — `*-dark` tokens flip to BRIGHT AlignUI dark-spec
      variants. Badge text (which uses `text-[var(--*-dark)]`) lands on
@@ -179,9 +190,9 @@
   --warning-lighter:   rgba(255, 210, 104, 0.14);
   --warning-dark:      #ffd268;
 
-  --feature:           #8c71f6;
-  --feature-lighter:   rgba(140, 113, 246, 0.14);
-  --feature-dark:      #a78bfa;  /* lifted lilac — REWRITE badge legibility */
+  --feature:           #7b68c9;
+  --feature-lighter:   rgba(101, 80, 185, 0.18);
+  --feature-dark:      #b5a6e8;  /* lifted lilac — REWRITE badge legibility */
 
   /* Dark-mode chart secondary — lighter periwinkle (one step brighter
      than light-mode's deep indigo #4338CA). Deep indigo on a dark page
@@ -192,9 +203,9 @@
      confident pop on the dark page bg. */
   --chart-amber:       #fa7319;
 
-  --information:       #4d82ff;
-  --info-lighter:      rgba(77, 130, 255, 0.14);
-  --info-dark:         #4d82ff;
+  --information:       #4f7bff;
+  --info-lighter:      rgba(79, 123, 255, 0.14);
+  --info-dark:         #93b2ff;
 
   /* Table header — slightly more visible shade in dark. Default
      `--neutral-weak-50` (#18181b) felt too close to the card body
@@ -217,14 +228,11 @@
   --kbd-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.04),
                 0 1px 0 0 rgba(0, 0, 0, 0.4);
 
-  /* Primary button — dialed in from feedback. First pass was too muted
-     (read as brown, lost brand identity). Light mode stops are
-     `#fb8939 → #fa7319 → #ed6a14`; these sit ~15-20% darker so the
-     orange still reads as orange but doesn't shout against near-black. */
-  --btn-primary-bg:        linear-gradient(180deg, #e2671a 0%, #cf5912 55%, #b34c0d 100%);
-  --btn-primary-bg-hover:  linear-gradient(180deg, #cf5912 0%, #b34c0d 55%, #964009 100%);
-  --btn-primary-bg-active: linear-gradient(180deg, #b34c0d 0%, #964009 100%);
-  --btn-primary-border:    #964009;
+  /* Primary button — Linear accent/solid against near-black. */
+  --btn-primary-bg:        #4f7bff;
+  --btn-primary-bg-hover:  #6b91ff;
+  --btn-primary-bg-active: #3d63e8;
+  --btn-primary-border:    #3d63e8;
   --btn-primary-shadow:    inset 0 1px 0 0 rgba(255, 255, 255, 0.10),
                            0 1px 2px rgba(0, 0, 0, 0.5);
 
@@ -355,6 +363,18 @@ body {
   letter-spacing: -0.01em;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Workspace room — Inter for UI, JetBrains Mono for handles/code.
+   Scoped so the dashboard can keep Geist. */
+.workspace-room {
+  --font-sans: var(--font-inter), var(--font-geist-sans), -apple-system,
+    BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: var(--font-jetbrains-mono), var(--font-geist-mono), ui-monospace,
+    'SF Mono', Menlo, monospace;
+  font-family: var(--font-sans);
+  font-feature-settings: 'cv11', 'ss01', 'calt';
+  letter-spacing: -0.011em;
 }
 
 /* Hide the document scrollbar so the topbar + content span the full

@@ -35,7 +35,7 @@ export default function EmptyState({
           className="absolute h-[88px] w-[88px] rounded-full"
           style={{
             background:
-              'radial-gradient(circle, rgba(250,115,25,0.08) 0%, rgba(250,115,25,0) 65%)',
+              'radial-gradient(circle, var(--primary-alpha-10) 0%, transparent 65%)',
           }}
         />
         <div className="absolute h-[64px] w-[64px] rounded-full border border-[var(--stroke-soft-200)]" />

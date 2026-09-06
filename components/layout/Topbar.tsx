@@ -6,12 +6,12 @@ import type { DateRange } from 'react-day-picker';
 import { cn } from '@/lib/utils';
 import { getDefaultDashboardDateRange } from '@/lib/dashboardDateRange';
 import { DateRangePicker } from '@/components/ui/DateRangePicker';
-import { CommandPaletteTrigger } from '@/components/ui/CommandPaletteTrigger';
 import { UserMenu } from '@/components/ui/UserMenu';
-import { NotificationsPanel } from '@/components/ui/NotificationsPanel';
 
 interface TopbarProps {
   title: string;
+  /** Optional leading breadcrumb crumb. Defaults to "Aegis". */
+  crumb?: string;
   subtitle?: string;
   lastUpdated?: Date;
   onRefresh?: () => void;
@@ -43,10 +43,9 @@ function formatRelative(d: Date) {
 
 export default function Topbar({
   title,
-  subtitle,
+  crumb = 'Aegis',
   lastUpdated,
   onRefresh,
-  minimal = false,
   pendingApprovalsCount = 0,
   showDateRange = false,
   dateRangeValue,
@@ -132,37 +131,27 @@ export default function Topbar({
     // Mobile: the Sidebar renders a 48px top bar with the hamburger.
     // The Topbar sticks BELOW it (top-12). On lg+, the sidebar moves to
     // the side and there's no mobile bar — Topbar sticks at top-0.
-    <header className="sticky top-12 z-20 flex h-[56px] items-center justify-between border-b border-[var(--stroke-soft-200)] bg-white px-4 sm:px-6 lg:top-0">
-      {/* Left — title + subtitle */}
-      <div className="flex min-w-0 items-center">
-        <h1 className="truncate text-[14px] font-semibold tracking-[-0.02em] text-[var(--neutral-strong-950)]">
+    <header className="sticky top-12 z-20 flex h-[56px] items-center justify-between border-b border-[var(--stroke-soft-200)] bg-[var(--bg-surface)] px-4 sm:px-6 lg:top-0">
+      {/* Left — breadcrumb: "Aegis · Workspaces" */}
+      <div className="flex min-w-0 items-center text-[14px] tracking-[-0.02em]">
+        <span className="truncate font-medium text-[var(--neutral-soft-400)]">
+          {crumb}
+        </span>
+        <span
+          className="mx-[7px] text-[var(--neutral-soft-400)]"
+          aria-hidden
+        >
+          ·
+        </span>
+        <h1 className="truncate font-semibold text-[var(--neutral-strong-950)]">
           {title}
         </h1>
-        {subtitle && (
-          <>
-            {/* Divider + subtitle hide on small screens — keeps the title
-                visible on mobile without clipping. */}
-            <span
-              className="mx-[10px] hidden h-[14px] w-px bg-[var(--stroke-soft-200)] sm:inline-block"
-              aria-hidden
-            />
-            <p className="hidden truncate text-[12.5px] text-[var(--neutral-soft-400)] sm:block">
-              {subtitle}
-            </p>
-          </>
-        )}
       </div>
 
-      {/* Right — controls */}
+      {/* Right — page-specific controls + account. Search and the
+          notification bell were dropped from this chrome; ⌘K still
+          opens the command palette. */}
       <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
-        {/* Command palette entry point. Placed first in the right
-            cluster so the search-bar look reads as the primary
-            navigation affordance — visually answers the "where do
-            I search?" question new users arrive with. Click opens
-            the palette via a custom event; ⌘K / Ctrl K also still
-            works (see CommandPalette's keydown listener). */}
-        <CommandPaletteTrigger />
-
         {/* Date filter — opt-in per page. Only renders when the page
             actually surfaces time-windowed data (Dashboard, Runs,
             Sessions, Token Spend). Hidden on mobile regardless
@@ -220,8 +209,6 @@ export default function Topbar({
             </span>
           </button>
         )}
-
-        {!minimal && <NotificationsPanel />}
 
         <UserMenu pendingApprovals={pendingApprovalsCount} />
       </div>

@@ -30,7 +30,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  ChevronsUpDown,
   LogOut,
   Settings as SettingsIcon,
 } from 'lucide-react';
@@ -110,11 +109,10 @@ export function WorkspaceSwitcher() {
   // row's footprint stable on mount.
   if (demoOn === null) {
     return (
-      <div className="flex h-[44px] items-center gap-2.5 px-2">
+      <div className="flex h-[40px] items-center gap-2.5 px-2">
         <div className="h-8 w-8 shrink-0 rounded-[8px] bg-[var(--neutral-weak-50)]" />
         <div className="min-w-0 flex-1" data-sidebar-hide>
           <div className="h-[10px] w-3/5 rounded bg-[var(--neutral-weak-50)]" />
-          <div className="mt-1 h-[8px] w-4/5 rounded bg-[var(--neutral-weak-50)]" />
         </div>
       </div>
     );
@@ -126,6 +124,7 @@ export function WorkspaceSwitcher() {
   const userSeed = user?.username || user?.email || 'user';
   const userTitle = user?.username ?? 'My workspace';
   const userSubtitle = user?.email ?? 'Personal';
+  const footerName = demoOn ? 'Demo' : (user?.name || user?.username || 'Account');
 
   // "Demo + no real account" detection. Real GitHub user IDs start at 1+,
   // so a 0/undefined id means the user is exploring the demo without
@@ -147,7 +146,6 @@ export function WorkspaceSwitcher() {
 
   // Active workspace state for the trigger button.
   const activeTitle = demoOn ? 'Demo workspace' : userTitle;
-  const activeSubtitle = demoOn ? 'Sample data' : userSubtitle;
 
   return (
     <div ref={containerRef} className="relative w-full">
@@ -175,18 +173,9 @@ export function WorkspaceSwitcher() {
         )}
         <div className="min-w-0 flex-1" data-sidebar-hide>
           <p className="truncate text-[12.5px] font-semibold leading-tight text-[var(--neutral-strong-950)]">
-            {activeTitle}
-          </p>
-          <p className="truncate text-[11px] leading-tight text-[var(--neutral-soft-400)]">
-            {activeSubtitle}
+            {footerName}
           </p>
         </div>
-        <ChevronsUpDown
-          className="h-3.5 w-3.5 shrink-0 text-[var(--neutral-soft-400)]"
-          strokeWidth={2}
-          data-sidebar-hide
-          aria-hidden
-        />
       </button>
 
       {/* Drop-up menu — anchored above the trigger. Sized at min 260px
@@ -279,12 +268,8 @@ function WorkspaceRow({
       className={cn(
         'flex w-full items-center gap-2.5 rounded-[8px] px-2 py-1.5 text-left',
         'transition-colors duration-200 ease-[cubic-bezier(0.2,0.8,0.2,1)]',
-        // Active: subtle brand-orange tint (--primary-alpha-10 is
-        // rgba(250,115,25,0.10)) — reads as "you are here" without
-        // screaming. Inactive rows hover to neutral-weak-50 so the
-        // tinted-vs-neutral contrast does the heavy lifting at idle.
         active
-          ? 'bg-[var(--primary-alpha-10)] hover:bg-[var(--primary-alpha-16)]'
+          ? 'bg-[var(--neutral-weak-50)]'
           : 'hover:bg-[var(--neutral-weak-50)]',
       )}
     >

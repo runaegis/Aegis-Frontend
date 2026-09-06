@@ -163,6 +163,11 @@ export type WorkspaceTaskPointer = {
   created_by_user_id: string;
   created_at: string;
   updated_at: string;
+  /** Assignee member. Null when unassigned. */
+  assignee_member_id?: string | null;
+  assignee_handle?: string | null;
+  /** True when the assignee is one of the current user's active agents. */
+  pointed_at_you?: boolean;
 };
 
 export type WorkspaceRecord = {
@@ -177,6 +182,35 @@ export type WorkspaceSummary = WorkspaceRecord & {
   agent_count: number;
   message_count: number;
   pointer_count?: number;
+  unread_mention_count?: number;
+  last_activity_at?: string | null;
+  run_count?: number;
+  total_tokens?: number;
+  /** Present only if the API ships it. Do not invent; no failed-run chip. */
+  failed_run_count?: number;
+};
+
+export type WorkspaceRunStatus = "success" | "failed" | "running" | "pending" | string;
+
+export type WorkspaceRun = {
+  id: string;
+  workspace_id?: string;
+  tool_name: string;
+  status: WorkspaceRunStatus;
+  execution_time_ms?: number | null;
+  agent_handle?: string | null;
+  arguments?: unknown;
+  result_payload?: unknown;
+  timestamp?: string | null;
+  /** Present only if the list/detail payload includes it. Do not invent. */
+  token_count?: number | null;
+};
+
+export type WorkspaceRunList = {
+  items: WorkspaceRun[];
+  total: number;
+  limit: number;
+  offset: number;
 };
 
 export type WorkspaceDetail = {
@@ -414,6 +448,7 @@ function parseRow(row: unknown, columns?: string[]): unknown {
     "first_seen_at",
     "last_seen_at",
     "last_used_at",
+    "last_activity_at",
   ];
   for (const field of datetimeFields) {
     if (obj[field]) obj[field] = parseDatetime(String(obj[field]));
@@ -422,6 +457,70 @@ function parseRow(row: unknown, columns?: string[]): unknown {
     obj.decision = normalizeDecision(obj.decision);
   }
   return obj;
+}
+
+function asFiniteNumber(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() !== "") {
+    const n = Number(value);
+    if (Number.isFinite(n)) return n;
+  }
+  return undefined;
+}
+
+function normalizeWorkspaceSummary(row: unknown): WorkspaceSummary {
+  const parsed = parseRow(row) as WorkspaceSummary;
+  return {
+    ...parsed,
+    agent_count: asFiniteNumber(parsed.agent_count) ?? 0,
+    message_count: asFiniteNumber(parsed.message_count) ?? 0,
+    pointer_count: asFiniteNumber(parsed.pointer_count),
+    unread_mention_count: asFiniteNumber(parsed.unread_mention_count),
+    run_count: asFiniteNumber(parsed.run_count),
+    total_tokens: asFiniteNumber(parsed.total_tokens),
+    failed_run_count: asFiniteNumber(parsed.failed_run_count),
+  };
+}
+
+function normalizeWorkspaceRun(row: unknown): WorkspaceRun {
+  const parsed = parseRow(row) as Record<string, unknown>;
+  const tool =
+    pickString(parsed.tool_name) ??
+    pickString(parsed.tool) ??
+    "unknown";
+  const handle =
+    pickString(parsed.agent_handle) ??
+    pickString(parsed.agent_name) ??
+    null;
+  const status =
+    pickString(parsed.status) ??
+    pickString(parsed.decision) ??
+    "unknown";
+  const duration =
+    asFiniteNumber(parsed.execution_time_ms) ??
+    asFiniteNumber(parsed.execution_time) ??
+    null;
+  const timestamp =
+    pickString(parsed.timestamp) ??
+    pickString(parsed.created_at) ??
+    pickString(parsed.started_at) ??
+    null;
+  return {
+    id: pickString(parsed.id) ?? pickString(parsed.run_id) ?? "",
+    workspace_id: pickString(parsed.workspace_id),
+    tool_name: tool,
+    status,
+    execution_time_ms: duration,
+    agent_handle: handle,
+    arguments: parsed.arguments ?? parsed.args ?? null,
+    result_payload: parsed.result_payload ?? parsed.result ?? null,
+    timestamp,
+    token_count:
+      asFiniteNumber(parsed.token_count) ??
+      asFiniteNumber(parsed.tokens) ??
+      asFiniteNumber(parsed.total_tokens) ??
+      null,
+  };
 }
 
 function getJsonHeaders(): HeadersInit {
@@ -3418,8 +3517,46 @@ export const api = {
     }
     const data = await res.json();
     return Array.isArray(data)
-      ? data.map((row: unknown) => parseRow(row) as WorkspaceSummary)
+      ? data.map((row: unknown) => normalizeWorkspaceSummary(row))
       : [];
+  },
+
+  getWorkspaceRuns: async (
+    workspaceId: string,
+    opts: { limit?: number; offset?: number } = {},
+  ): Promise<WorkspaceRunList> => {
+    const limit = opts.limit ?? 20;
+    const offset = opts.offset ?? 0;
+    const url = new URL(`${API_BASE}/api/v3/runs`);
+    url.searchParams.set("workspace_id", workspaceId);
+    url.searchParams.set("limit", String(limit));
+    url.searchParams.set("offset", String(offset));
+    const res = await apiFetch(url.toString());
+    if (!res.ok) {
+      throw new Error(`Failed to load runs: ${await readErrorMessage(res)}`);
+    }
+    const payload = await res.json();
+    const rawItems = Array.isArray(payload)
+      ? payload
+      : Array.isArray(payload?.items)
+        ? payload.items
+        : [];
+    return {
+      items: rawItems.map((row: unknown) => normalizeWorkspaceRun(row)),
+      total: asFiniteNumber(payload?.total) ?? rawItems.length,
+      limit: asFiniteNumber(payload?.limit) ?? limit,
+      offset: asFiniteNumber(payload?.offset) ?? offset,
+    };
+  },
+
+  getWorkspaceRun: async (runId: string): Promise<WorkspaceRun> => {
+    const res = await apiFetch(
+      `${API_BASE}/api/v3/runs/${encodeURIComponent(runId)}`,
+    );
+    if (!res.ok) {
+      throw new Error(`Failed to load run: ${await readErrorMessage(res)}`);
+    }
+    return normalizeWorkspaceRun(await res.json());
   },
 
   createWorkspace: async (payload: {
@@ -3604,6 +3741,7 @@ export const api = {
       status?: WorkspacePointerStatus;
       sort_order?: number;
       created_by_member_id?: string | null;
+      assignee_member_id?: string | null;
     },
   ): Promise<WorkspaceTaskPointer> => {
     const res = await apiFetch(
@@ -3628,6 +3766,7 @@ export const api = {
       description?: string | null;
       status?: WorkspacePointerStatus;
       sort_order?: number;
+      assignee_member_id?: string | null;
     },
   ): Promise<WorkspaceTaskPointer> => {
     const res = await apiFetch(

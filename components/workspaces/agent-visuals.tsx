@@ -22,6 +22,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { GenerativeAvatar } from '@/components/ui/GenerativeAvatar';
 
 export type AgentHue = 'feature' | 'info' | 'success' | 'warning' | 'primary';
 
@@ -150,9 +151,21 @@ export function normalizeHandle(value: string) {
     .replace(/[^a-z0-9_-]/g, '');
 }
 
+const GLYPH_SIZE = {
+  sm: { px: 20, radius: 6 },
+  md: { px: 28, radius: 7 },
+  lg: { px: 32, radius: 8 },
+} as const;
+
+/**
+ * Agent identity mark — same generative profile photo as the user
+ * avatar in the sidebar footer, seeded by handle so each agent is
+ * stable and distinct. roleLabel is accepted so existing call sites
+ * keep compiling; identity is the handle.
+ */
 export function AgentGlyph({
   handle,
-  roleLabel,
+  roleLabel: _roleLabel,
   size = 'md',
   className,
 }: {
@@ -161,23 +174,15 @@ export function AgentGlyph({
   size?: 'sm' | 'md' | 'lg';
   className?: string;
 }) {
-  const hue = useHueResolver()(handle);
-  const Icon = iconForHandle(handle, roleLabel);
-  const dims =
-    size === 'sm' ? 'size-5 rounded-[5px]' : size === 'lg' ? 'size-8 rounded-lg' : 'size-6 rounded-md';
-  const iconSize = size === 'sm' ? 11 : size === 'lg' ? 16 : 13;
+  const dims = GLYPH_SIZE[size];
   return (
-    <span
-      aria-hidden="true"
-      className={cn(
-        'inline-flex shrink-0 items-center justify-center border border-[var(--stroke-soft-200)] bg-[var(--bg-surface-alt)]',
-        HUE_STYLES[hue].glyph,
-        dims,
-        className,
-      )}
-    >
-      <Icon size={iconSize} strokeWidth={2} />
-    </span>
+    <GenerativeAvatar
+      seed={`agent:${handle.toLowerCase()}`}
+      variant="user"
+      size={dims.px}
+      radius={dims.radius}
+      className={className}
+    />
   );
 }
 
@@ -187,13 +192,26 @@ export function AgentGlyph({
  * Colour lives in the text, not a filled pill, so a message with four
  * mentions still reads as prose rather than as a row of badges.
  */
-export function MentionChip({ handle, known = true }: { handle: string; known?: boolean }) {
+export function MentionChip({
+  handle,
+  known = true,
+  tone = 'hue',
+}: {
+  handle: string;
+  known?: boolean;
+  tone?: 'hue' | 'primary';
+}) {
   const hue = useHueResolver()(handle);
   return (
     <span
       className={cn(
-        'font-mono text-[12.5px] font-medium',
-        known ? HUE_STYLES[hue].chip : 'text-[var(--neutral-soft-400)] line-through',
+        'font-medium',
+        tone === 'primary' ? 'text-[13.5px]' : 'font-mono text-[12.5px]',
+        !known
+          ? 'text-[var(--neutral-soft-400)] line-through'
+          : tone === 'primary'
+            ? 'text-[var(--primary-dark)]'
+            : HUE_STYLES[hue].chip,
       )}
     >
       @{handle}
@@ -220,10 +238,12 @@ export function MentionText({
   text,
   knownHandles,
   className,
+  tone = 'hue',
 }: {
   text: string;
   knownHandles: string[];
   className?: string;
+  tone?: 'hue' | 'primary';
 }) {
   const known = new Set(knownHandles.map((h) => h.toLowerCase()));
   const parts = text.split(/(@[a-z0-9_-]+)/gi);
@@ -232,7 +252,14 @@ export function MentionText({
       {parts.map((part, index) => {
         if (/^@[a-z0-9_-]+$/i.test(part)) {
           const handle = part.slice(1);
-          return <MentionChip key={index} handle={handle} known={known.has(handle.toLowerCase())} />;
+          return (
+            <MentionChip
+              key={index}
+              handle={handle}
+              known={known.has(handle.toLowerCase())}
+              tone={tone}
+            />
+          );
         }
         return <span key={index}>{part}</span>;
       })}

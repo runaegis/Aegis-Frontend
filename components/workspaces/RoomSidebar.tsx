@@ -116,7 +116,7 @@ function Row({
                   <span
                     key={a.id}
                     className={cn(
-                      'rounded-[5px] ring-2',
+                      'overflow-hidden rounded-[6px] ring-2',
                       current ? 'ring-[var(--bg-surface-alt)]' : 'ring-[var(--white-0)] group-hover:ring-[var(--neutral-weak-50)]',
                     )}
                     style={{ marginLeft: i === 0 ? 0 : -5, zIndex: shown.length - i }}

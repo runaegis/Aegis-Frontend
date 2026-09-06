@@ -1,54 +1,33 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { motion, useReducedMotion } from 'motion/react';
-import { CheckCircle2, MessageSquareText, Plus, Users2, Boxes } from 'lucide-react';
-import { api, type WorkspaceInvite, type WorkspaceSummary, type WorkspaceAgent } from '@/lib/api';
+import { Boxes, Inbox, Plus } from 'lucide-react';
+import { api, type WorkspaceSummary } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import EmptyState from '@/components/ui/EmptyState';
 import ErrorBanner from '@/components/ui/ErrorBanner';
 import { RelativeTime } from '@/components/ui/RelativeTime';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { DUR, EASE } from '@/lib/motion';
-import { cn } from '@/lib/utils';
-import { AgentGlyph, AgentHueProvider } from './agent-visuals';
+import { cn, formatCompactNumber, parseApiUtcTimestamp } from '@/lib/utils';
 import { CreateWorkspaceDialog } from './CreateWorkspaceDialog';
 import { SampleDataChip } from './WorkspaceDemoGate';
-
-type RosterMap = Record<string, WorkspaceAgent[]>;
 
 export function WorkspacesList() {
   const router = useRouter();
   const reduce = useReducedMotion();
   const [workspaces, setWorkspaces] = useState<WorkspaceSummary[] | null>(null);
-  const [rosters, setRosters] = useState<RosterMap>({});
-  const [inbox, setInbox] = useState<WorkspaceInvite[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
     try {
-      const [list, pendingInvites] = await Promise.all([
-        api.getWorkspaces(),
-        api.getWorkspaceInviteInbox().catch(() => [] as WorkspaceInvite[]),
-      ]);
+      const list = await api.getWorkspaces();
       setWorkspaces(list);
-      setInbox(pendingInvites.filter((invite) => invite.status === 'pending'));
-      // Fetch rosters so cards can show who is actually in each room.
-      const entries = await Promise.all(
-        list.map(async (w) => {
-          try {
-            const detail = await api.getWorkspace(w.id);
-            return [w.id, detail.agents.filter((a) => a.status === 'active')] as const;
-          } catch {
-            return [w.id, [] as WorkspaceAgent[]] as const;
-          }
-        }),
-      );
-      setRosters(Object.fromEntries(entries));
     } catch (e) {
       setWorkspaces([]);
       setError(e instanceof Error ? e.message : 'Could not load workspaces.');
@@ -63,7 +42,6 @@ export function WorkspacesList() {
 
   return (
     <div className="mx-auto w-full max-w-[1180px] px-6 py-6">
-      {/* Header */}
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
           <h1 className="text-[19px] font-semibold tracking-[-0.02em] text-[var(--neutral-strong-950)]">
@@ -93,53 +71,28 @@ export function WorkspacesList() {
 
       {error && <ErrorBanner message={error} onDismiss={() => setError(null)} onRetry={load} />}
 
-      {inbox.length > 0 && (
-        <div className="mb-5 overflow-hidden rounded-xl border border-[var(--stroke-soft-200)] bg-[var(--bg-surface)]">
-          <div className="border-b border-[var(--stroke-soft-200)] px-3 py-1.5">
-            <span className="text-[11px] font-medium uppercase tracking-[0.04em] text-[var(--neutral-soft-400)]">
-              Invites for you
-            </span>
-          </div>
-          {inbox.map((invite) => (
-            <Link
-              key={invite.id || invite.invite_code}
-              href={`/workspaces/join/${encodeURIComponent(invite.invite_code)}`}
-              className="flex items-center justify-between gap-3 px-3 py-2.5 text-[13px] transition-colors hover:bg-[var(--neutral-weak-50)]"
-            >
-              <span className="min-w-0 truncate text-[var(--neutral-strong-950)]">
-                {invite.workspace_title || 'Workspace'}
-                {invite.suggested_handle ? (
-                  <span className="ml-2 font-mono text-[12px] text-[var(--neutral-sub-600)]">
-                    @{invite.suggested_handle}
-                  </span>
-                ) : null}
-              </span>
-              <span className="shrink-0 text-[12px] font-medium text-[var(--primary-base)]">
-                Join
-              </span>
-            </Link>
-          ))}
-        </div>
-      )}
-
-      {/* Loading */}
       {!workspaces && (
-        <div className="overflow-hidden rounded-xl border border-[var(--stroke-soft-200)] bg-[var(--bg-surface)] shadow-[0_1px_2px_rgba(23,23,23,0.04),0_8px_24px_-12px_rgba(23,23,23,0.12)]">
+        <div className="flex flex-col gap-3">
           {Array.from({ length: 3 }).map((_, i) => (
             <div
               key={i}
-              className="flex items-center gap-3 border-b border-[var(--stroke-soft-200)] px-3 py-2.5 last:border-b-0"
+              className="rounded-xl border border-[var(--stroke-soft-200)] bg-[var(--bg-surface)] p-4"
             >
-              <Skeleton className="size-5 w-[58px] rounded-[5px]" />
-              <Skeleton className="h-3.5 w-40" />
-              <Skeleton className="hidden h-3 flex-1 sm:block" />
-              <Skeleton className="h-3 w-24" />
+              <div className="flex items-center gap-3">
+                <Skeleton className="h-4 w-40" />
+                <Skeleton className="h-3 w-24" />
+                <Skeleton className="ml-auto h-7 w-14 rounded-[8px]" />
+              </div>
+              <div className="mt-4 grid grid-cols-5 gap-2">
+                {Array.from({ length: 5 }).map((_, j) => (
+                  <Skeleton key={j} className="h-10 rounded-md" />
+                ))}
+              </div>
             </div>
           ))}
         </div>
       )}
 
-      {/* Empty */}
       {workspaces && workspaces.length === 0 && !error && (
         <div className="rounded-xl border border-[var(--stroke-soft-200)] bg-[var(--bg-surface)] py-6 shadow-[0_1px_2px_rgba(23,23,23,0.04),0_8px_24px_-12px_rgba(23,23,23,0.12)]">
           <EmptyState
@@ -155,28 +108,16 @@ export function WorkspacesList() {
         </div>
       )}
 
-      {/* Rows. Raised surface: the page canvas is tinted, so the list needs
-          its own white card and a soft shadow to read as the primary object
-          rather than dissolving into the background. */}
       {workspaces && workspaces.length > 0 && (
-        <div className="overflow-hidden rounded-xl border border-[var(--stroke-soft-200)] bg-[var(--bg-surface)] shadow-[0_1px_2px_rgba(23,23,23,0.04),0_8px_24px_-12px_rgba(23,23,23,0.12)]">
-          <div className="flex items-center gap-3 border-b border-[var(--stroke-soft-200)] px-3 py-1.5">
-            <span className="text-[11px] font-medium uppercase tracking-[0.04em] text-[var(--neutral-soft-400)]">
-              Workspace
-            </span>
-            <span className="ml-auto hidden font-mono text-[10.5px] uppercase tracking-[0.04em] text-[var(--neutral-soft-400)] sm:block">
-              tasks · agents · messages
-            </span>
-          </div>
+        <div className="flex flex-col gap-3">
           {workspaces.map((w, index) => (
             <motion.div
               key={w.id}
-              initial={reduce ? false : { opacity: 0, y: 4 }}
+              initial={reduce ? false : { opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: DUR.default, ease: EASE.out, delay: reduce ? 0 : index * 0.025 }}
-              className="border-b border-[var(--stroke-soft-200)] last:border-b-0"
+              transition={{ duration: DUR.default, ease: EASE.out, delay: reduce ? 0 : index * 0.03 }}
             >
-              <WorkspaceRow workspace={w} agents={rosters[w.id] ?? []} />
+              <WorkspaceCard workspace={w} />
             </motion.div>
           ))}
         </div>
@@ -191,85 +132,142 @@ export function WorkspacesList() {
   );
 }
 
-/**
- * Dense row, in the spirit of a Linear issue list: one line of identity,
- * one line of context, and quiet right-aligned metrics. Hover is a tonal
- * shift rather than a shadow lift, so the list stays flat and scannable.
- */
-function WorkspaceRow({
-  workspace,
-  agents,
-}: {
-  workspace: WorkspaceSummary;
-  agents: WorkspaceAgent[];
-}) {
-  const shown = agents.slice(0, 3);
-  const overflow = agents.length - shown.length;
+type CardBorderStatus = 'failed' | 'attention' | 'default';
+
+function workspaceBorderStatus(workspace: WorkspaceSummary): CardBorderStatus {
+  // Red takes priority. failed_run_count is optional until backend ships it;
+  // never invent a count, and never render a failed-run chip.
+  if ((workspace.failed_run_count ?? 0) > 0) return 'failed';
+  if ((workspace.unread_mention_count ?? 0) > 0) return 'attention';
+  return 'default';
+}
+
+function workspaceBorderColor(status: CardBorderStatus): string {
+  if (status === 'failed') return 'var(--error)';
+  if (status === 'attention') return 'var(--attention)';
+  return 'var(--stroke-sub-300)';
+}
+
+function hasRecordedActivity(workspace: WorkspaceSummary): boolean {
+  if ((workspace.message_count ?? 0) > 0 || (workspace.run_count ?? 0) > 0) return true;
+  if (!workspace.last_activity_at) return false;
+  return workspace.last_activity_at !== workspace.created_at;
+}
+
+function isUnusedWorkspace(workspace: WorkspaceSummary): boolean {
+  return (
+    workspace.agent_count === 0 &&
+    workspace.message_count === 0 &&
+    (workspace.pointer_count ?? 0) === 0 &&
+    (workspace.run_count ?? 0) === 0 &&
+    (workspace.total_tokens ?? 0) === 0
+  );
+}
+
+function CreatedDate({ timestamp }: { timestamp: string }) {
+  const parsed = parseApiUtcTimestamp(timestamp);
+  const isValid = !Number.isNaN(parsed.getTime());
+  const dateLabel = isValid
+    ? parsed.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+    : null;
+  return (
+    <span title={isValid ? parsed.toLocaleString() : undefined}>
+      {dateLabel ? `Created ${dateLabel}` : 'Created'}
+    </span>
+  );
+}
+
+function WorkspaceCard({ workspace }: { workspace: WorkspaceSummary }) {
+  const unread = workspace.unread_mention_count ?? 0;
+  const unused = isUnusedWorkspace(workspace);
+  const active = hasRecordedActivity(workspace);
+  const borderStatus = workspaceBorderStatus(workspace);
+  const stats = [
+    { label: 'Agents', value: workspace.agent_count },
+    { label: 'Messages', value: workspace.message_count },
+    { label: 'Task pointers', value: workspace.pointer_count ?? 0 },
+    { label: 'Runs', value: workspace.run_count ?? 0 },
+    { label: 'Tokens', value: workspace.total_tokens ?? 0 },
+  ];
 
   return (
     <Link
       href={`/workspaces/${workspace.id}`}
       className={cn(
-        'group flex items-center gap-3 px-3 py-2.5 transition-colors',
-        'hover:bg-[var(--neutral-weak-50)]',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[rgba(250,115,25,0.35)]',
+        'group relative block overflow-hidden rounded-xl border border-[var(--stroke-soft-200)] bg-[var(--bg-surface)] p-4 pl-5',
+        unused
+          ? 'shadow-none'
+          : 'shadow-[0_1px_2px_rgba(23,23,23,0.04),0_8px_24px_-12px_rgba(23,23,23,0.12)]',
+        'transition-colors hover:bg-[var(--neutral-weak-50)]',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--primary-alpha-16)]',
       )}
     >
-      {/* Roster stack. Same provider as the room, so an agent keeps its
-          colour between this list and the conversation. */}
-      <AgentHueProvider handles={agents.map((a) => a.handle)}>
-      <div className="flex w-[58px] shrink-0 items-center">
-        {shown.length > 0 ? (
-          <>
-            {shown.map((a, i) => (
-              <span
-                key={a.id}
-                className="rounded-[5px] ring-2 ring-[var(--white-0)] group-hover:ring-[var(--neutral-weak-50)]"
-                style={{ marginLeft: i === 0 ? 0 : -5, zIndex: shown.length - i }}
-                title={`@${a.handle}`}
-              >
-                <AgentGlyph handle={a.handle} roleLabel={a.role_label} size="sm" />
-              </span>
-            ))}
-            {overflow > 0 && (
-              <span className="ml-1 font-mono text-[10.5px] text-[var(--neutral-soft-400)]">
-                +{overflow}
+      <span
+        aria-hidden
+        className={cn('absolute inset-y-0 left-0 w-[3px]', unused && 'opacity-50')}
+        style={{ backgroundColor: workspaceBorderColor(borderStatus) }}
+      />
+
+      <div className={cn('flex items-start gap-3', unused && 'opacity-70')}>
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <span
+              className={cn(
+                'truncate text-[14.5px] font-semibold tracking-[-0.015em]',
+                unused
+                  ? 'text-[var(--neutral-sub-600)]'
+                  : 'text-[var(--neutral-strong-950)]',
+              )}
+            >
+              {workspace.title}
+            </span>
+            {unused && (
+              <span className="rounded-full border border-[var(--stroke-soft-200)] bg-[var(--neutral-weak-50)] px-1.5 py-0.5 text-[10.5px] font-medium uppercase tracking-[0.04em] text-[var(--neutral-soft-400)]">
+                Unused
               </span>
             )}
-          </>
-        ) : (
-          <span className="size-5 rounded-[5px] border border-dashed border-[var(--stroke-sub-300)]" />
+            {unread > 0 && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-[var(--attention-lighter)] px-1.5 py-0.5 text-[10.5px] font-semibold tabular-nums text-[var(--attention-dark)]">
+                <Inbox size={10} strokeWidth={2.5} />
+                {unread}
+              </span>
+            )}
+            <span className="text-[12px] text-[var(--neutral-soft-400)]">
+              {active && workspace.last_activity_at ? (
+                <RelativeTime timestamp={workspace.last_activity_at} />
+              ) : (
+                <CreatedDate timestamp={workspace.created_at} />
+              )}
+            </span>
+          </div>
+        </div>
+        <span
+          className={cn(
+            'inline-flex h-7 shrink-0 items-center rounded-[8px] border border-[var(--stroke-sub-300)] bg-[var(--bg-surface)] px-2.5 text-[12px] font-medium text-[var(--neutral-sub-600)]',
+            'shadow-[0_1px_2px_rgba(23,23,23,0.04)]',
+            'group-hover:border-[var(--primary-base)] group-hover:text-[var(--primary-base)]',
+          )}
+        >
+          Open
+        </span>
+      </div>
+
+      <div
+        className={cn(
+          'mt-3 grid grid-cols-2 gap-3 border-t border-[var(--stroke-soft-200)] pt-3 sm:grid-cols-5 sm:gap-2',
+          unused && 'opacity-55',
         )}
-      </div>
-      </AgentHueProvider>
-
-      {/* Identity + context */}
-      <div className="flex min-w-0 flex-1 items-baseline gap-2.5">
-        <span className="shrink-0 truncate text-[13.5px] font-medium tracking-[-0.011em] text-[var(--neutral-strong-950)]">
-          {workspace.title}
-        </span>
-        <span className="hidden min-w-0 truncate text-[12px] leading-[1.5] text-[var(--neutral-soft-400)] sm:block">
-          {workspace.task ?? 'No goal set'}
-        </span>
-      </div>
-
-      {/* Metrics */}
-      <div className="flex shrink-0 items-center gap-3.5 font-mono text-[11px] tabular-nums text-[var(--neutral-soft-400)]">
-        <span className="inline-flex items-center gap-1" title="Tasks">
-          <CheckCircle2 size={11.5} />
-          {workspace.pointer_count ?? 0}
-        </span>
-        <span className="inline-flex items-center gap-1" title="Agents">
-          <Users2 size={11.5} />
-          {workspace.agent_count}
-        </span>
-        <span className="inline-flex items-center gap-1" title="Messages">
-          <MessageSquareText size={11.5} />
-          {workspace.message_count}
-        </span>
-        <span className="hidden w-[72px] text-right md:block">
-          <RelativeTime timestamp={workspace.created_at} />
-        </span>
+      >
+        {stats.map((stat) => (
+          <div key={stat.label} className="min-w-0">
+            <div className="text-[18px] font-semibold leading-none tracking-[-0.03em] tabular-nums text-[var(--neutral-strong-950)]">
+              {formatCompactNumber(stat.value)}
+            </div>
+            <div className="mt-1 truncate text-[10.5px] font-medium uppercase tracking-[0.04em] text-[var(--neutral-soft-400)]">
+              {stat.label}
+            </div>
+          </div>
+        ))}
       </div>
     </Link>
   );

@@ -188,7 +188,7 @@ function ThemeCard({
       <div
         className="relative aspect-[16/9] w-full overflow-hidden rounded-[8px] border border-[var(--stroke-soft-200)]"
         style={{
-          backgroundColor: theme === 'light' ? '#f7f7f7' : '#08080a',
+          backgroundColor: theme === 'light' ? '#f4f4f6' : '#08080a',
         }}
         aria-hidden
       >

@@ -25,14 +25,10 @@ const sizeStyles: Record<Size, string> = {
 };
 
 const variantStyles: Record<Variant, string> = {
-  // Primary uses a subtle vertical gradient + 1px lighter top inset to create
-  // the soft 3D feel of premium product buttons (Stripe / Linear style).
-  //
-  // Gradient/border/shadow are sourced from CSS vars so dark themes can
-  // mute them — see [data-theme="dark"] / [data-theme="dark-pro"] in
-  // globals.css. Light mode defaults reproduce the original orange.
+  // Primary is a solid fill sourced from `--btn-primary-*` so the
+  // chrome accent (blue) can change independently of status orange.
   primary:
-    'text-white [background:var(--btn-primary-bg)] [box-shadow:var(--btn-primary-shadow)] border border-[var(--btn-primary-border)] hover:[background:var(--btn-primary-bg-hover)] active:[background:var(--btn-primary-bg-active)] disabled:opacity-60',
+    'text-white bg-[var(--btn-primary-bg)] shadow-[var(--btn-primary-shadow)] border border-[var(--btn-primary-border)] hover:bg-[var(--btn-primary-bg-hover)] active:bg-[var(--btn-primary-bg-active)] disabled:opacity-60',
   secondary:
     'border border-[var(--stroke-sub-300)] bg-white text-[var(--neutral-sub-600)] shadow-[0_1px_2px_rgba(23,23,23,0.04)] hover:bg-[var(--neutral-weak-50)] hover:text-[var(--neutral-strong-950)] active:bg-[var(--neutral-soft-200)]',
   ghost:

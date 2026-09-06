@@ -25,6 +25,8 @@ import {
   type WorkspaceMessage,
   type WorkspacePointerStatus,
   type WorkspaceRecord,
+  type WorkspaceRun,
+  type WorkspaceRunList,
   type WorkspaceSummary,
   type WorkspaceTaskPointer,
   type WorkspaceFileRef,
@@ -62,6 +64,7 @@ type Store = {
   messages: WorkspaceMessage[];
   pointers: WorkspaceTaskPointer[];
   invites: WorkspaceInvite[];
+  runs: WorkspaceRun[];
   joinedInviteCodes: Set<string>;
 };
 
@@ -71,8 +74,11 @@ const store: Store = {
   messages: [],
   pointers: [],
   invites: [],
+  runs: [],
   joinedInviteCodes: new Set(),
 };
+
+const OTHER_USER_ID = 'demo-other-user';
 
 function agent(
   workspaceId: string,
@@ -80,11 +86,12 @@ function agent(
   roleLabel: string,
   createdMinutes: number,
   status: WorkspaceAgentStatus = 'active',
+  userId: string = DEMO_USER_ID,
 ): WorkspaceAgent {
   return {
     id: uid('agent'),
     workspace_id: workspaceId,
-    user_id: DEMO_USER_ID,
+    user_id: userId,
     handle,
     role_label: roleLabel,
     status,
@@ -111,6 +118,21 @@ function message(
   };
 }
 
+function hydratePointer(p: WorkspaceTaskPointer): WorkspaceTaskPointer {
+  const assigneeId = p.assignee_member_id ?? null;
+  const assignee = assigneeId
+    ? store.agents.find((a) => a.id === assigneeId) ?? null
+    : null;
+  return {
+    ...p,
+    assignee_member_id: assigneeId,
+    assignee_handle: assignee?.handle ?? p.assignee_handle ?? null,
+    pointed_at_you: Boolean(
+      assignee && assignee.status === 'active' && assignee.user_id === DEMO_USER_ID,
+    ),
+  };
+}
+
 function pointer(
   workspaceId: string,
   title: string,
@@ -119,8 +141,12 @@ function pointer(
   sortOrder: number,
   createdBy: string | null,
   createdMinutes: number,
+  assigneeMemberId: string | null = null,
 ): WorkspaceTaskPointer {
-  return {
+  const assignee = assigneeMemberId
+    ? store.agents.find((a) => a.id === assigneeMemberId) ?? null
+    : null;
+  return hydratePointer({
     id: uid('ptr'),
     workspace_id: workspaceId,
     title,
@@ -131,7 +157,10 @@ function pointer(
     created_by_user_id: DEMO_USER_ID,
     created_at: minutesAgo(createdMinutes),
     updated_at: minutesAgo(Math.max(0, createdMinutes - 12)),
-  };
+    assignee_member_id: assigneeMemberId,
+    assignee_handle: assignee?.handle ?? null,
+    pointed_at_you: false,
+  });
 }
 
 function seed() {
@@ -140,6 +169,7 @@ function seed() {
   store.messages = [];
   store.pointers = [];
   store.invites = [];
+  store.runs = [];
   store.joinedInviteCodes = new Set();
 
   // ---- Workspace 1: the flagship scenario -------------------------------
@@ -152,10 +182,10 @@ function seed() {
       '@frontend consumes it in the dashboard, and @security signs off on the credential handling before release.',
     created_at: minutesAgo(60 * 26),
   };
-  const backend = agent(ws1.id, 'backend', 'Backend engineer agent', 60 * 26);
+  const backend = agent(ws1.id, 'backend', 'Backend engineer agent', 60 * 26, 'active', OTHER_USER_ID);
   const frontend = agent(ws1.id, 'frontend', 'Frontend product agent', 60 * 25);
-  const security = agent(ws1.id, 'security', 'Security reviewer agent', 60 * 20);
-  const devops = agent(ws1.id, 'devops', 'DevOps agent, external', 60 * 4, 'removed');
+  const security = agent(ws1.id, 'security', 'Security reviewer agent', 60 * 20, 'active', OTHER_USER_ID);
+  const devops = agent(ws1.id, 'devops', 'DevOps agent, external', 60 * 4, 'removed', OTHER_USER_ID);
 
   store.workspaces.push(ws1);
   store.agents.push(backend, frontend, security, devops);
@@ -220,9 +250,9 @@ function seed() {
 
   store.pointers.push(
     pointer(ws1.id, 'Define the aggregate response schema', 'Buckets with window bounds and a counts map.', 'done', 1, backend.id, 180),
-    pointer(ws1.id, 'Build the dashboard panel', 'Stable x axis, render empty buckets.', 'pending', 2, frontend.id, 170),
-    pointer(ws1.id, 'Move the ingestion key server side', 'No credential in the client bundle.', 'review', 3, security.id, 90),
-    pointer(ws1.id, 'Add rate limiting to the write path', null, 'pending', 4, backend.id, 60),
+    pointer(ws1.id, 'Build the dashboard panel', 'Stable x axis, render empty buckets.', 'pending', 2, frontend.id, 170, frontend.id),
+    pointer(ws1.id, 'Move the ingestion key server side', 'No credential in the client bundle.', 'review', 3, security.id, 90, security.id),
+    pointer(ws1.id, 'Add rate limiting to the write path', null, 'pending', 4, backend.id, 60, backend.id),
   );
 
   // ---- Workspace 2: a quieter, in-progress room -------------------------
@@ -234,7 +264,7 @@ function seed() {
     created_at: minutesAgo(60 * 8),
   };
   const perf = agent(ws2.id, 'perf', 'Performance agent', 60 * 8);
-  const data = agent(ws2.id, 'data', 'Data analysis agent', 60 * 7);
+  const data = agent(ws2.id, 'data', 'Data analysis agent', 60 * 7, 'active', OTHER_USER_ID);
   store.workspaces.push(ws2);
   store.agents.push(perf, data);
   store.messages.push(
@@ -249,7 +279,7 @@ function seed() {
   );
   store.pointers.push(
     pointer(ws2.id, 'Pull p95 by region', null, 'done', 1, data.id, 138),
-    pointer(ws2.id, 'Isolate the eu-west path', null, 'pending', 2, perf.id, 120),
+    pointer(ws2.id, 'Isolate the eu-west path', null, 'pending', 2, perf.id, 120, perf.id),
   );
 
   // ---- Workspace 3: brand new, exercises the empty room state -----------
@@ -261,14 +291,87 @@ function seed() {
     created_at: minutesAgo(24),
   };
   store.workspaces.push(ws3);
+
+  store.invites.push({
+    id: 'inv-inbox-demo',
+    workspace_id: 'ws-incident-response',
+    invite_code: 'aeg-demojoin',
+    invite_url: buildWorkspaceJoinUrl('aeg-demojoin'),
+    status: 'pending',
+    is_directed: true,
+    invited_user_id: DEMO_USER_ID,
+    invited_email: 'demo@runaegis.co',
+    invited_name: 'Demo',
+    suggested_handle: 'frontend',
+    role_label: 'Frontend agent',
+    max_uses: 1,
+    used_count: 0,
+    expires_at: minutesAgo(-60 * 48),
+    created_at: minutesAgo(180),
+    workspace_title: 'Incident response',
+  });
+
+  seedDemoRuns();
+}
+
+function seedDemoRuns() {
+  const tools = [
+    'postgres.query',
+    'github.get_file',
+    'linear.search_issues',
+    'jira.get_issue',
+  ];
+  const analyticsHandles = ['backend', 'frontend', 'security'];
+  for (let i = 0; i < 18; i += 1) {
+    const failed = i === 3 || i === 11;
+    store.runs.push({
+      id: uid('run'),
+      workspace_id: 'ws-analytics-api',
+      tool_name: tools[i % tools.length],
+      status: failed ? 'failed' : 'success',
+      execution_time_ms: 80 + i * 37,
+      agent_handle: analyticsHandles[i % analyticsHandles.length],
+      arguments: { limit: 20, offset: i },
+      result_payload: failed
+        ? { error: 'relation "events_q3" does not exist' }
+        : { rows: 12 + i, ok: true },
+      timestamp: minutesAgo(8 + i * 6),
+    });
+  }
+  const checkoutHandles = ['perf', 'data'];
+  for (let i = 0; i < 7; i += 1) {
+    store.runs.push({
+      id: uid('run'),
+      workspace_id: 'ws-checkout-latency',
+      tool_name: i % 2 === 0 ? 'postgres.query' : 'datadog.query',
+      status: i === 5 ? 'running' : 'success',
+      execution_time_ms: i === 5 ? null : 210 + i * 55,
+      agent_handle: checkoutHandles[i % checkoutHandles.length],
+      arguments: { region: 'eu-west', window_days: 14 },
+      result_payload: i === 5 ? null : { p95_ms: 840 + i * 12 },
+      timestamp: minutesAgo(12 + i * 9),
+    });
+  }
 }
 
 function summarize(record: WorkspaceRecord): WorkspaceSummary {
+  const messages = store.messages.filter((m) => m.workspace_id === record.id);
+  const lastMessage = [...messages].sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
+  const demoStats: Record<string, { unread: number; runs: number; tokens: number }> = {
+    'ws-analytics-api': { unread: 2, runs: 18, tokens: 482_110 },
+    'ws-checkout-latency': { unread: 1, runs: 7, tokens: 91_400 },
+    'ws-docs-refresh': { unread: 0, runs: 0, tokens: 0 },
+  };
+  const extra = demoStats[record.id] ?? { unread: 0, runs: 0, tokens: 0 };
   return {
     ...record,
     agent_count: store.agents.filter((a) => a.workspace_id === record.id && a.status === 'active').length,
-    message_count: store.messages.filter((m) => m.workspace_id === record.id).length,
+    message_count: messages.length,
     pointer_count: store.pointers.filter((p) => p.workspace_id === record.id).length,
+    unread_mention_count: extra.unread,
+    last_activity_at: lastMessage?.created_at ?? null,
+    run_count: extra.runs,
+    total_tokens: extra.tokens,
   };
 }
 
@@ -283,7 +386,8 @@ function detail(workspaceId: string): WorkspaceDetail {
       .sort((a, b) => a.created_at.localeCompare(b.created_at)),
     pointers: store.pointers
       .filter((p) => p.workspace_id === workspaceId)
-      .sort((a, b) => a.sort_order - b.sort_order),
+      .sort((a, b) => a.sort_order - b.sort_order)
+      .map(hydratePointer),
   });
 }
 
@@ -408,7 +512,8 @@ export function installWorkspacePreviewApi() {
       clone(
         store.pointers
           .filter((p) => p.workspace_id === workspaceId)
-          .sort((a, b) => a.sort_order - b.sort_order),
+          .sort((a, b) => a.sort_order - b.sort_order)
+          .map(hydratePointer),
       ),
     );
 
@@ -419,23 +524,37 @@ export function installWorkspacePreviewApi() {
       description?: string | null;
       status?: WorkspacePointerStatus;
       sort_order?: number;
+      created_by_member_id?: string | null;
+      assignee_member_id?: string | null;
     },
   ) => {
+    if (payload.assignee_member_id) {
+      const member = store.agents.find(
+        (a) =>
+          a.id === payload.assignee_member_id &&
+          a.workspace_id === workspaceId &&
+          a.status === 'active',
+      );
+      if (!member) throw new Error('Assignee must be an active member of this workspace');
+    }
     const siblings = store.pointers.filter((p) => p.workspace_id === workspaceId);
-    const created: WorkspaceTaskPointer = {
+    const created: WorkspaceTaskPointer = hydratePointer({
       id: uid('ptr'),
       workspace_id: workspaceId,
       title: payload.title,
       description: payload.description ?? null,
       status: payload.status ?? 'pending',
       sort_order: payload.sort_order ?? siblings.length + 1,
-      created_by_member_id: null,
+      created_by_member_id: payload.created_by_member_id ?? null,
       created_by_user_id: DEMO_USER_ID,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-    };
+      assignee_member_id: payload.assignee_member_id ?? null,
+      assignee_handle: null,
+      pointed_at_you: false,
+    });
     store.pointers.push(created);
-    return wait(clone(created));
+    return wait(clone(hydratePointer(created)));
   };
 
   api.updateWorkspacePointer = async (
@@ -446,6 +565,7 @@ export function installWorkspacePreviewApi() {
       description?: string | null;
       status?: WorkspacePointerStatus;
       sort_order?: number;
+      assignee_member_id?: string | null;
     },
   ) => {
     const found = store.pointers.find((p) => p.id === pointerId && p.workspace_id === workspaceId);
@@ -454,8 +574,22 @@ export function installWorkspacePreviewApi() {
     if (payload.description !== undefined) found.description = payload.description;
     if (payload.status !== undefined) found.status = payload.status;
     if (payload.sort_order !== undefined) found.sort_order = payload.sort_order;
+    if (payload.assignee_member_id !== undefined) {
+      if (payload.assignee_member_id !== null) {
+        const member = store.agents.find(
+          (a) =>
+            a.id === payload.assignee_member_id &&
+            a.workspace_id === workspaceId &&
+            a.status === 'active',
+        );
+        if (!member) throw new Error('Assignee must be an active member of this workspace');
+      }
+      found.assignee_member_id = payload.assignee_member_id;
+    }
     found.updated_at = new Date().toISOString();
-    return wait(clone(found));
+    const next = hydratePointer(found);
+    Object.assign(found, next);
+    return wait(clone(next));
   };
 
   api.deleteWorkspacePointer = async (workspaceId: string, pointerId: string) => {
@@ -628,6 +762,29 @@ export function installWorkspacePreviewApi() {
       agent_key: issued.agent_key,
       mcp_config_snippet: issued.mcp_config_snippet,
     });
+  };
+
+  api.getWorkspaceRuns = async (
+    workspaceId: string,
+    opts: { limit?: number; offset?: number } = {},
+  ): Promise<WorkspaceRunList> => {
+    const limit = opts.limit ?? 20;
+    const offset = opts.offset ?? 0;
+    const items = store.runs
+      .filter((row) => row.workspace_id === workspaceId)
+      .sort((a, b) => (b.timestamp ?? '').localeCompare(a.timestamp ?? ''));
+    return wait({
+      items: clone(items.slice(offset, offset + limit)),
+      total: items.length,
+      limit,
+      offset,
+    });
+  };
+
+  api.getWorkspaceRun = async (runId: string): Promise<WorkspaceRun> => {
+    const found = store.runs.find((row) => row.id === runId);
+    if (!found) throw new Error('Run not found');
+    return wait(clone(found));
   };
 }
 
