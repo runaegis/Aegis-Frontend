@@ -6,7 +6,18 @@ export const metadata: Metadata = {
   description: 'Create your Aegis account and start governing agent activity.',
 };
 
-export default function SignupPage() {
-  return <AuthPageClient mode="signup" />;
+function readSingleParam(
+  value: string | string[] | undefined,
+): string | null {
+  if (Array.isArray(value)) return value[0] ?? null;
+  return value ?? null;
 }
 
+export default async function SignupPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string | string[] }>;
+}) {
+  const params = await searchParams;
+  return <AuthPageClient mode="signup" nextParam={readSingleParam(params.next)} />;
+}

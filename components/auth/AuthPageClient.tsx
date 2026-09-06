@@ -3,12 +3,11 @@
 import Link from 'next/link';
 import {
   useEffect,
-  useMemo,
   useState,
   type CSSProperties,
   type ReactNode,
 } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { Eye, EyeOff, Loader2, MailCheck } from 'lucide-react';
 import AgentAvatar from '@/components/ui/AgentAvatar';
@@ -84,12 +83,13 @@ function deriveNameFromEmail(email: string): string {
 
 export default function AuthPageClient({
   mode,
+  nextParam,
 }: {
   mode: AuthMode;
+  nextParam?: string | null;
 }) {
   const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL!;
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { setUser } = useUser();
   const { email, setEmail } = useEmail();
 
@@ -109,8 +109,8 @@ export default function AuthPageClient({
   const [resendMessage, setResendMessage] = useState('');
   const [loggingIn, setLoggingIn] = useState(false);
 
-  const nextValue = searchParams.get('next');
-  const nextSuffix = useMemo(() => readNextParam(nextValue), [nextValue]);
+  const nextValue = nextParam ?? null;
+  const nextSuffix = readNextParam(nextValue);
 
   useEffect(() => {
     if (nextValue) {
@@ -1008,4 +1008,3 @@ function GitHubGlyph() {
     </svg>
   );
 }
-
