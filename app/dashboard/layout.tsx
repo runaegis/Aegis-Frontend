@@ -9,6 +9,7 @@ import { AppShellSkeleton } from '@/components/ui/PageSkeletons';
 import { CommandPalette } from '@/components/ui/CommandPalette';
 import { DemoWelcomeModal } from '@/components/ui/DemoWelcomeModal';
 import { installPreviewApi } from '@/lib/preview-data';
+import { installWorkspacePreviewApi } from '@/lib/workspace-preview';
 import { DashboardDataProvider } from '@/lib/dashboardDataContext';
 
 // Agentation widget is mounted once at the root layout
@@ -122,6 +123,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // production-safe `aegis_demo` flag.
   if (typeof window !== 'undefined' && isDemoMode()) {
     installPreviewApi();
+    installWorkspacePreviewApi();
   }
 
   // Apply dark theme on mount when flag is set; clean up on unmount so

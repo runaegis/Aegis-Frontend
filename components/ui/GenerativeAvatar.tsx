@@ -80,7 +80,7 @@ const BAYER_8x8: ReadonlyArray<ReadonlyArray<number>> = [
  * pattern reads clearly even at 28px.
  */
 const USER_PALETTE_PAIRS = [
-  { bg: '#1E40AF', fg: '#93C5FD' }, // cobalt
+  { bg: '#3D63E8', fg: '#93B2FF' }, // linear blue
   { bg: '#5B21B6', fg: '#C4B5FD' }, // violet
   { bg: '#0F766E', fg: '#5EEAD4' }, // teal
   { bg: '#9F1239', fg: '#FDA4AF' }, // rose
@@ -90,9 +90,8 @@ const USER_PALETTE_PAIRS = [
   { bg: '#831843', fg: '#F9A8D4' }, // magenta (a la the reference!)
 ] as const;
 
-/** DEMO workspace pair — locked to a brand-orange family so the
- *  demo identity is instantly recognisable across all users. */
-const DEMO_PAIR = { bg: '#9A3412', fg: '#FDBA74' };
+/** DEMO workspace pair — Linear accent, matching the primary chrome. */
+const DEMO_PAIR = { bg: '#3D63E8', fg: '#93B2FF' };
 
 /** Build the dither path string for a given seed + grid.
  *  Walks the grid row-by-row, emits `M<x> <y>h<run>` chunks for each

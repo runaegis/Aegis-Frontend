@@ -23,7 +23,7 @@ const tones: Record<BadgeTone, string> = {
   warning: 'bg-[rgba(246,181,30,0.20)]  text-[var(--warning-dark)]',
   feature: 'bg-[rgba(125,82,244,0.14)]  text-[var(--feature-dark)]',
   info:    'bg-[rgba(51,92,255,0.12)]   text-[var(--info-dark)]',
-  primary: 'bg-[rgba(250,115,25,0.14)]  text-[var(--primary-dark)]',
+  primary: 'bg-[rgba(79,123,255,0.14)]  text-[var(--primary-dark)]',
 };
 
 interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {

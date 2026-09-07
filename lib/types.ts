@@ -243,6 +243,8 @@ export interface PrivateConnectorCredentialStatus {
   created_at?: string | null;
   updated_at?: string | null;
   revoked_at?: string | null;
+  last_tested_at?: string | null;
+  last_error?: string | null;
 }
 
 export interface SlackIntegrationStatus {

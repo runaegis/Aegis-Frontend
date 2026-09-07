@@ -8,12 +8,14 @@ interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   trailingIcon?: ReactNode;
   /** Validation-error state — flips border + ring to error tones. */
   invalid?: boolean;
+  /** Attention/stale-credential state — orange, not hard error red. */
+  attention?: boolean;
 }
 
 // 36px height (AlignUI default), 8px radius, 12px horizontal padding,
 // 13px text, explicit states for hover / focus / disabled / error.
 const baseShell =
-  'h-9 w-full rounded-[8px] border bg-white px-3 text-[13px] text-[var(--neutral-strong-950)] placeholder:text-[var(--neutral-soft-400)]';
+  'h-9 w-full rounded-[8px] border bg-[var(--white-0)] px-3 text-[13px] text-[var(--neutral-strong-950)] placeholder:text-[var(--neutral-soft-400)]';
 
 const valid =
   'border-[var(--stroke-sub-300)] hover:border-[var(--neutral-soft-400)] focus:border-[var(--primary-base)] focus:outline-none focus:ring-[3px] focus:ring-[var(--primary-alpha-16)] disabled:cursor-not-allowed disabled:bg-[var(--neutral-weak-50)] disabled:text-[var(--neutral-soft-400)]';
@@ -21,16 +23,20 @@ const valid =
 const invalidStyles =
   'border-[var(--error)] focus:border-[var(--error)] focus:outline-none focus:ring-[3px] focus:ring-[var(--error-lighter)] disabled:cursor-not-allowed disabled:opacity-60';
 
+const attentionStyles =
+  'border-[var(--attention)] focus:border-[var(--attention)] focus:outline-none focus:ring-[3px] focus:ring-[var(--attention-lighter)] disabled:cursor-not-allowed disabled:opacity-60';
+
 export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
-  { className, leadingIcon, trailingIcon, invalid, disabled, ...props },
+  { className, leadingIcon, trailingIcon, invalid, attention, disabled, ...props },
   ref,
 ) {
+  const tone = invalid ? invalidStyles : attention ? attentionStyles : valid;
   if (!leadingIcon && !trailingIcon) {
     return (
       <input
         ref={ref}
         disabled={disabled}
-        className={cn(baseShell, invalid ? invalidStyles : valid, className)}
+        className={cn(baseShell, tone, className)}
         {...props}
       />
     );
@@ -40,10 +46,12 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
     <div
       data-input-shell
       className={cn(
-        'flex h-9 items-center gap-2 rounded-[8px] border bg-white px-3 transition-colors',
+        'flex h-9 items-center gap-2 rounded-[8px] border bg-[var(--white-0)] px-3 transition-colors',
         invalid
           ? 'border-[var(--error)] focus-within:border-[var(--error)] focus-within:ring-[3px] focus-within:ring-[var(--error-lighter)]'
-          : 'border-[var(--stroke-sub-300)] hover:border-[var(--neutral-soft-400)] focus-within:border-[var(--primary-base)] focus-within:ring-[3px] focus-within:ring-[var(--primary-alpha-16)]',
+          : attention
+            ? 'border-[var(--attention)] focus-within:border-[var(--attention)] focus-within:ring-[3px] focus-within:ring-[var(--attention-lighter)]'
+            : 'border-[var(--stroke-sub-300)] hover:border-[var(--neutral-soft-400)] focus-within:border-[var(--primary-base)] focus-within:ring-[3px] focus-within:ring-[var(--primary-alpha-16)]',
         disabled && 'cursor-not-allowed bg-[var(--neutral-weak-50)] opacity-60',
         className,
       )}
