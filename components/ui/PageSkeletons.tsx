@@ -454,68 +454,48 @@ export function FreezeWindowSkeleton() {
 export function TokenSpendSkeleton() {
   return (
     <div>
-      <PageHeader />
-
-      {/* Range tabs */}
-      <div className="mb-4 inline-flex rounded-[10px] border border-[var(--stroke-soft-200)] bg-[var(--neutral-weak-50)] p-1">
-        {[0, 1, 2, 3].map((i) => (
-          <Skeleton key={i} className="mx-0.5 h-7 w-[68px] rounded-[7px]" />
-        ))}
+      <div className="mb-6 flex items-end justify-between gap-3">
+        <div>
+          <Skeleton className="h-[22px] w-24 rounded-[6px]" />
+          <Skeleton className="mt-2 h-[14px] w-56 rounded-[4px]" />
+        </div>
+        <div className="flex gap-2">
+          <Skeleton className="h-8 w-32 rounded-[8px]" />
+          <Skeleton className="h-8 w-24 rounded-[8px]" />
+        </div>
       </div>
 
-      {/* 4-cell stat strip */}
-      <section className="mb-6 overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
-        <div className="grid grid-cols-2 divide-y divide-[var(--stroke-soft-200)] lg:grid-cols-4 lg:divide-x lg:divide-y-0">
-          {[0, 1, 2, 3].map((i) => (
-            <SkeletonStatCell key={i} />
+      <section className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {[0, 1, 2, 3].map((i) => (
+          <div
+            key={i}
+            className="rounded-[12px] border border-[var(--stroke-soft-200)] bg-[var(--white-0)] px-5 py-4"
+          >
+            <Skeleton className="h-[11px] w-20 rounded-[3px]" />
+            <Skeleton className="mt-3 h-[28px] w-24 rounded-[6px]" />
+            <Skeleton className="mt-2 h-[12px] w-32 rounded-[3px]" />
+          </div>
+        ))}
+      </section>
+
+      <section className="mb-6 overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-[var(--white-0)] p-5">
+        <Skeleton className="mb-4 h-[12px] w-56 rounded-[3px]" />
+        <ChartSkeleton height={220} />
+      </section>
+
+      <section className="overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-[var(--white-0)] p-5">
+        <Skeleton className="mb-4 h-[12px] w-64 rounded-[3px]" />
+        <div className="space-y-3">
+          {[0, 1, 2, 3, 4, 5].map((i) => (
+            <div key={i} className="flex items-center justify-between gap-4">
+              <Skeleton className="h-[13px] w-36 rounded-[3px]" />
+              <Skeleton className="h-[13px] w-16 rounded-[3px]" />
+              <Skeleton className="h-[13px] w-16 rounded-[3px]" />
+              <Skeleton className="h-1.5 w-24 rounded-full" />
+            </div>
           ))}
         </div>
       </section>
-
-      {/* Monetary savings tile */}
-      <section className="mb-6 overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
-        <div className="flex flex-col gap-3 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-3">
-            <Skeleton variant="circle" className="h-11 w-11" />
-            <div className="space-y-2">
-              <Skeleton className="h-[10px] w-32 rounded-[3px]" />
-              <Skeleton className="h-[28px] w-28 rounded-[6px]" />
-            </div>
-          </div>
-          <div className="flex items-center gap-2.5">
-            <div className="space-y-1.5 text-right">
-              <Skeleton className="ml-auto h-[10px] w-20 rounded-[3px]" />
-              <Skeleton className="ml-auto h-[14px] w-16 rounded-[4px]" />
-            </div>
-            <SkeletonBadge />
-          </div>
-        </div>
-      </section>
-
-      {/* Charts grid — bar (2 cols) + pie (1 col) */}
-      <div className="grid gap-6 xl:grid-cols-3">
-        <section className="overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white p-5 shadow-[0_1px_2px_rgba(23,23,23,0.04)] xl:col-span-2">
-          <Skeleton className="mb-4 h-[14px] w-40 rounded-[4px]" />
-          <ChartSkeleton height={220} />
-        </section>
-        <section className="overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white p-5 shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
-          <Skeleton className="mb-4 h-[14px] w-32 rounded-[4px]" />
-          {/* Pie placeholder */}
-          <div className="flex items-center justify-center py-6">
-            <Skeleton variant="circle" className="h-[160px] w-[160px]" />
-          </div>
-          <div className="mt-2 space-y-2">
-            <div className="flex items-center justify-between">
-              <Skeleton className="h-[12px] w-16 rounded-[3px]" />
-              <Skeleton className="h-[12px] w-12 rounded-[3px]" />
-            </div>
-            <div className="flex items-center justify-between">
-              <Skeleton className="h-[12px] w-20 rounded-[3px]" />
-              <Skeleton className="h-[12px] w-12 rounded-[3px]" />
-            </div>
-          </div>
-        </section>
-      </div>
     </div>
   );
 }

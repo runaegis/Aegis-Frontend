@@ -21,6 +21,7 @@ export function InlineEdit({
   className,
   readClassName,
   renderRead,
+  editSignal = 0,
 }: {
   value: string;
   onCommit: (next: string) => Promise<void> | void;
@@ -31,6 +32,8 @@ export function InlineEdit({
   readClassName?: string;
   /** Lets the read state render richer content, e.g. mention chips. */
   renderRead?: (value: string) => ReactNode;
+  /** Bumped by a parent (e.g. Rename) to enter edit mode. */
+  editSignal?: number;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
@@ -40,6 +43,10 @@ export function InlineEdit({
   useEffect(() => {
     if (!editing) setDraft(value);
   }, [value, editing]);
+
+  useEffect(() => {
+    if (editSignal > 0) setEditing(true);
+  }, [editSignal]);
 
   useEffect(() => {
     if (!editing) return;

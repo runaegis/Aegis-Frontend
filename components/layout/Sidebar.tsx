@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  LayoutDashboard,
   Activity,
   FileText,
   Clock,
@@ -18,9 +17,10 @@ import {
   BrainCircuit,
   ScrollText,
   MessagesSquare,
+  Inbox,
   type LucideIcon,
 } from 'lucide-react';
-import { useUser } from '@/lib/hooks';
+import { api } from '@/lib/api';
 import { AegisLogo } from '@/components/ui/AegisLogo';
 import { WorkspaceSwitcher } from '@/components/ui/WorkspaceSwitcher';
 
@@ -85,43 +85,77 @@ type NavGroup = {
   items: NavItem[];
 };
 
-const NAV_GROUPS: NavGroup[] = [
-  {
-    label: 'Workspace',
-    items: [
-      { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-      { name: 'Runs', href: '/dashboard/runs', icon: Activity },
-      { name: 'Workspaces', href: '/dashboard/workspaces', icon: MessagesSquare },
-    ],
-  },
-  {
-    label: 'Governance',
-    items: [
-      { name: 'Audit Trail', href: '/dashboard/audit', icon: FileText },
-      { name: 'Freeze Windows', href: '/dashboard/freeze-window', icon: Clock },
-      { name: 'Connectors', href: '/dashboard/connectors', icon: Boxes },
-    ],
-  },
-  {
-    label: 'Insights',
-    items: [
-      { name: 'Analytics', href: '/dashboard/token-spenditure', icon: Coins },
-      { name: 'Memory', href: '/dashboard/memory', icon: BrainCircuit },
-      { name: 'Prompts', href: '/dashboard/prompts', icon: ScrollText },
-    ],
-  },
-];
-
-const BOTTOM_ITEMS: NavItem[] = [
-  { name: 'Settings', href: '/dashboard/settings', icon: Settings },
-];
+function buildNavGroups(inboxCount: number): NavGroup[] {
+  return [
+    {
+      label: 'Work',
+      items: [
+        {
+          name: 'Inbox',
+          href: '/dashboard/inbox',
+          icon: Inbox,
+          badge:
+            inboxCount > 0 ? { value: inboxCount, tone: 'urgent' } : undefined,
+        },
+        { name: 'Workspaces', href: '/dashboard/workspaces', icon: MessagesSquare },
+      ],
+    },
+    {
+      label: 'Understand',
+      items: [
+        { name: 'Runs', href: '/dashboard/runs', icon: Activity },
+        { name: 'Usage', href: '/dashboard/token-spenditure', icon: Coins },
+        { name: 'Audit', href: '/dashboard/audit', icon: FileText },
+      ],
+    },
+    {
+      label: 'Library',
+      items: [
+        { name: 'Memory', href: '/dashboard/memory', icon: BrainCircuit },
+        { name: 'Prompts', href: '/dashboard/prompts', icon: ScrollText },
+      ],
+    },
+    {
+      label: 'Set up',
+      items: [
+        { name: 'Connectors', href: '/dashboard/connectors', icon: Boxes },
+        { name: 'Freeze Windows', href: '/dashboard/freeze-window', icon: Clock },
+        { name: 'Settings', href: '/dashboard/settings', icon: Settings },
+      ],
+    },
+  ];
+}
 
 export default function Sidebar() {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [inboxCount, setInboxCount] = useState(0);
   const { collapsed, toggle } = useSidebarCollapsed();
 
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .getWorkspaceInviteInbox()
+      .then((invites) => {
+        if (cancelled) return;
+        setInboxCount(invites.filter((invite) => invite.status === 'pending').length);
+      })
+      .catch(() => {
+        if (!cancelled) setInboxCount(0);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pathname]);
+
   const isActive = (href: string) => {
+    if (href === '/dashboard/workspaces') {
+      return (
+        pathname === href ||
+        pathname.startsWith(`${href}/`) ||
+        (pathname.startsWith('/workspaces/') && !pathname.startsWith('/workspaces/join/'))
+      );
+    }
     if (href === '/dashboard') return pathname === '/dashboard';
     return pathname === href || pathname.startsWith(`${href}/`);
   };
@@ -143,19 +177,11 @@ export default function Sidebar() {
         data-sidebar-center
         className={[
           'group relative flex h-8 items-center gap-2 rounded-[7px] px-2 text-[13px] font-medium tracking-[-0.01em]',
-          // Hover motion — 200ms emphasized-decel curve, the same
-          // family Linear/Cursor/Raycast use for sidebar nav. Explicit
-          // `transition-colors` instead of `transition-all` so only
-          // bg + text fade (no transform animation, which can feel
-          // jittery on rapid mouse-over). On hover, text also shifts
-          // from neutral-sub-600 → neutral-strong-950 for a subtle
-          // brightness lift that signals interactivity.
           'transition-colors duration-200 ease-[cubic-bezier(0.2,0.8,0.2,1)]',
           active
-            ? 'bg-[var(--primary-alpha-10)] text-[var(--primary-base)]'
+            ? 'bg-[var(--neutral-weak-50)] text-[var(--neutral-strong-950)]'
             : 'text-[var(--neutral-sub-600)] hover:bg-[var(--neutral-weak-50)] hover:text-[var(--neutral-strong-950)]',
         ].join(' ')}
-        style={active ? { backgroundColor: 'rgba(250, 115, 25, 0.10)' } : undefined}
       >
         <Icon
           className="h-3.5 w-3.5 shrink-0"
@@ -175,10 +201,6 @@ export default function Sidebar() {
             {item.badge.value}
           </span>
         )}
-        {/* Tiny dot indicator that surfaces only when the rail is
-            collapsed AND a badge exists — keeps "something needs your
-            attention" visible without the full pill. Positioned at the
-            icon's top-right corner. */}
         {item.badge && collapsed && (
           <span
             aria-hidden
@@ -195,23 +217,20 @@ export default function Sidebar() {
     );
   };
 
+  const navGroups = buildNavGroups(inboxCount);
+
   // The `desktop` flag tells NavContent which surface it's rendering
   // into. The mobile drawer always shows the expanded layout (no
   // need to collapse on a phone — the drawer is already off-canvas).
   // Desktop applies all the collapse-aware data attributes.
   const NavContent = ({ desktop = false }: { desktop?: boolean }) => (
     <>
-      {/* Logo + collapse toggle row. When collapsed (desktop only):
-          the logo is display:none via data-sidebar-hide, and the row
-          itself switches to justify-center via data-sidebar-center
-          so the lone toggle button lands centered in the rail instead
-          of flying to the start edge under justify-between. */}
       <div
         data-sidebar-center={desktop ? '' : undefined}
         className="flex h-[56px] items-center justify-between border-b border-[var(--stroke-soft-200)] px-4"
       >
         <Link
-          href="/dashboard"
+          href="/dashboard/workspaces"
           className="inline-flex items-center text-[var(--neutral-strong-950)] transition-opacity hover:opacity-80"
           aria-label="Aegis — Home"
           data-sidebar-hide={desktop ? '' : undefined}
@@ -225,12 +244,6 @@ export default function Sidebar() {
             aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             title={collapsed ? 'Expand sidebar (⌘\\)' : 'Collapse sidebar (⌘\\)'}
           >
-            {/* Lucide's panel-left toggle icons. Chevron direction
-                already baked into the asset:
-                  PanelLeftClose  — chevron points LEFT  ("close it")
-                  PanelLeftOpen   — chevron points RIGHT ("open it")
-                Switch based on current state so the icon visually
-                represents the ACTION the click will perform. */}
             {collapsed ? (
               <PanelLeftOpen className="h-4 w-4" strokeWidth={2} />
             ) : (
@@ -248,16 +261,8 @@ export default function Sidebar() {
         )}
       </div>
 
-      {/* Nav groups. Group LABELS fade out via data-sidebar-hide; in
-          collapsed state, explicit margin-top between group divs
-          (see globals.css) maintains the visual rhythm. All group
-          labels share `pt-3` (12px) — uniform breathing room from
-          brand row above + between groups.
-
-          `overflow-x-visible` is explicit so hover affordances on
-          collapsed nav rows can render past the rail's right edge. */}
       <nav className="flex-1 overflow-x-visible overflow-y-auto px-2 pb-3">
-        {NAV_GROUPS.map((group) => (
+        {navGroups.map((group) => (
           <div key={group.label}>
             <div
               data-sidebar-hide={desktop ? '' : undefined}
@@ -270,27 +275,8 @@ export default function Sidebar() {
             </div>
           </div>
         ))}
-
-        <div>
-          <div
-            data-sidebar-hide={desktop ? '' : undefined}
-            className="px-2 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-[0.07em] text-[var(--neutral-soft-400)]"
-          >
-            Admin
-          </div>
-          <div className="space-y-0.5">
-            {BOTTOM_ITEMS.map((item) => renderNavLink(item))}
-          </div>
-        </div>
       </nav>
 
-      {/* Workspace + account row.
-          The WorkspaceSwitcher consolidates what was previously two
-          separate concerns (workspace switching + user identity +
-          sign-out) into one bottom-anchored control. Click → drop-up
-          menu with workspace options + Settings + Sign out.
-          Collapsed sidebar shows only the 32px workspace mark
-          centered; the menu pops out rightward when clicked. */}
       <div className="border-t border-[var(--stroke-soft-200)] px-2 py-[10px]">
         <div
           data-sidebar-center={desktop ? '' : undefined}
@@ -304,10 +290,9 @@ export default function Sidebar() {
 
   return (
     <>
-      {/* Mobile top bar */}
-      <div className="fixed left-0 right-0 top-0 z-40 flex h-12 items-center justify-between border-b border-[var(--stroke-soft-200)] bg-white px-4 lg:hidden">
+      <div className="fixed left-0 right-0 top-0 z-40 flex h-12 items-center justify-between border-b border-[var(--stroke-soft-200)] bg-[var(--bg-surface)] px-4 lg:hidden">
         <Link
-          href="/dashboard"
+          href="/dashboard/workspaces"
           className="inline-flex items-center text-[var(--neutral-strong-950)]"
           aria-label="Aegis — Home"
         >
@@ -322,7 +307,6 @@ export default function Sidebar() {
         </button>
       </div>
 
-      {/* Mobile overlay */}
       {mobileOpen && (
         <div
           className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm lg:hidden"
@@ -330,11 +314,9 @@ export default function Sidebar() {
         />
       )}
 
-      {/* Mobile drawer — always full 220px wide (no collapse on mobile,
-          the drawer slides off-canvas instead). */}
       <aside
         className={[
-          'fixed left-0 top-0 z-50 flex h-dvh w-[220px] flex-col bg-white transition-transform duration-200 lg:hidden',
+          'fixed left-0 top-0 z-50 flex h-dvh w-[220px] flex-col bg-[var(--bg-surface)] transition-transform duration-200 lg:hidden',
           'border-r border-[var(--stroke-soft-200)]',
           mobileOpen ? 'translate-x-0' : '-translate-x-full',
         ].join(' ')}
@@ -342,12 +324,8 @@ export default function Sidebar() {
         <NavContent />
       </aside>
 
-      {/* Desktop sidebar — width driven by --sidebar-w (220px / 56px).
-          The width itself is the animated property; everything inside
-          (labels, group headers, user identity) responds via the
-          data-sidebar-hide / data-sidebar-center attributes. */}
       <aside
-        className="fixed left-0 top-0 z-30 hidden h-dvh flex-col border-r border-[var(--stroke-soft-200)] bg-white lg:flex"
+        className="fixed left-0 top-0 z-30 hidden h-dvh flex-col border-r border-[var(--stroke-soft-200)] bg-[var(--bg-surface)] lg:flex"
         style={{
           width: 'var(--sidebar-w)',
           transition: 'width var(--sidebar-transition)',

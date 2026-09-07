@@ -25,14 +25,10 @@ const sizeStyles: Record<Size, string> = {
 };
 
 const variantStyles: Record<Variant, string> = {
-  // Primary uses a subtle vertical gradient + 1px lighter top inset to create
-  // the soft 3D feel of premium product buttons (Stripe / Linear style).
-  //
-  // Gradient/border/shadow are sourced from CSS vars so dark themes can
-  // mute them — see [data-theme="dark"] / [data-theme="dark-pro"] in
-  // globals.css. Light mode defaults reproduce the original orange.
-  primary:
-    'text-white [background:var(--btn-primary-bg)] [box-shadow:var(--btn-primary-shadow)] border border-[var(--btn-primary-border)] hover:[background:var(--btn-primary-bg-hover)] active:[background:var(--btn-primary-bg-active)] disabled:opacity-60',
+  // Fill lives in .btn-primary (globals.css). Do not put Tailwind
+  // arbitrary background classes in comments — the scanner treats
+  // them as real utilities and the build fails on invalid CSS vars.
+  primary: 'btn-primary disabled:opacity-60',
   secondary:
     'border border-[var(--stroke-sub-300)] bg-white text-[var(--neutral-sub-600)] shadow-[0_1px_2px_rgba(23,23,23,0.04)] hover:bg-[var(--neutral-weak-50)] hover:text-[var(--neutral-strong-950)] active:bg-[var(--neutral-soft-200)]',
   ghost:

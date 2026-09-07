@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 export const metadata: Metadata = {
   title: "Connectors",
   description:
-    "Govern every tool your agents touch. Aegis is expanding beyond GitHub with first-class MCP integrations for Slack, Linear, Jira, GitHub Actions, Terraform, and PostgreSQL.",
+    "Set up personal credentials for the tools your agents use. Connectors are per person, not per organisation.",
 };
 
 export default function ConnectorsLayout({

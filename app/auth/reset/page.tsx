@@ -3,7 +3,7 @@
 /**
  * Password reset — `?token=...` flow landed on from the email link.
  *
- * Same split-screen pattern as /auth: brand showcase on the left (lg+),
+ * Same split-screen pattern as /auth/signin: brand showcase on the left (lg+),
  * form on the right. The three lifecycle states (validating, invalid
  * token, success) each get a centered success-panel treatment matching
  * the auth signup-success / forgot-success panels.
@@ -14,7 +14,7 @@
  *   - GET /auth/validate-reset-token on mount.
  *   - POST /auth/reset-password on submit, with structured error-code
  *      handling (INVALID_RESET_TOKEN / WEAK_PASSWORD / fallback).
- *   - router.push('/auth') for the post-success redirect.
+ *   - router.push('/auth/signin') for the post-success redirect.
  */
 
 import { useState, useEffect, Suspense } from 'react';
@@ -120,7 +120,7 @@ function ResetPasswordPage() {
       setPassword('');
       setConfirmPassword('');
       setTimeout(() => {
-        router.push('/auth');
+        router.push('/auth/signin');
       }, 2000);
     } catch (err: unknown) {
       switch (getApiErrorCode(err)) {
@@ -152,7 +152,7 @@ function ResetPasswordPage() {
 
         <div className="hidden items-center justify-end lg:flex">
           <Link
-            href="/auth"
+            href="/auth/signin"
             className="inline-flex items-center gap-1.5 text-[12.5px] font-medium text-[var(--neutral-sub-600)] transition-colors hover:text-[var(--neutral-strong-950)]"
           >
             <ArrowLeft className="h-3.5 w-3.5" strokeWidth={2.25} />
@@ -203,7 +203,7 @@ function ResetPasswordPage() {
           <p className="text-center text-[11.5px] text-[var(--neutral-soft-400)] lg:text-left">
             Remember your password?{' '}
             <Link
-              href="/auth"
+              href="/auth/signin"
               className="font-semibold text-[var(--primary-base)] transition-colors hover:text-[var(--primary-dark)]"
             >
               Back to log in
@@ -328,7 +328,7 @@ function InvalidTokenState({ message }: { message: string | null }) {
           'This password reset link is invalid or has expired. Please request a new one.'}
       </p>
       <Link
-        href="/auth"
+        href="/auth/signin"
         className="mt-6 inline-flex items-center justify-center gap-1.5 rounded-[8px] border border-[var(--stroke-sub-300)] bg-white px-4 py-2.5 text-[13px] font-semibold text-[var(--neutral-strong-950)] shadow-[0_1px_2px_rgba(23,23,23,0.04)] transition-all hover:bg-[var(--neutral-weak-50)]"
       >
         <ArrowLeft className="h-3.5 w-3.5" strokeWidth={2.25} />
@@ -364,7 +364,7 @@ function SuccessState() {
         You&rsquo;re all set. Redirecting you to log in…
       </p>
       <Link
-        href="/auth"
+        href="/auth/signin"
         className="mt-6 inline-flex items-center justify-center rounded-[8px] border border-[var(--primary-dark)] px-4 py-2.5 text-[13px] font-semibold text-white shadow-[inset_0_1px_0_0_rgba(255,255,255,0.18),0_1px_2px_rgba(206,94,18,0.30)] [background:linear-gradient(180deg,#fb8939_0%,#fa7319_55%,#ed6a14_100%)] transition-all hover:[background:linear-gradient(180deg,#fa7d27_0%,#ed6a14_55%,#d75e10_100%)]"
       >
         Go to log in

@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Inter, JetBrains_Mono } from "next/font/google";
 import { ToastProvider } from "@/components/ui/Toast";
 import AgentationGate from "@/components/dev/AgentationGate";
 import "./globals.css";
@@ -13,6 +13,18 @@ const geist = Geist({
 const geistMono = Geist_Mono({
   subsets: ["latin"],
   variable: "--font-geist-mono",
+  display: "swap",
+});
+
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap",
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ["latin"],
+  variable: "--font-jetbrains-mono",
   display: "swap",
 });
 
@@ -100,7 +112,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`h-full ${geist.variable} ${geistMono.variable}`}
+      className={`h-full ${geist.variable} ${geistMono.variable} ${inter.variable} ${jetbrainsMono.variable}`}
       suppressHydrationWarning
     >
       <head>
@@ -126,7 +138,7 @@ export default function RootLayout({
             embedded contexts (iframes with cookies disabled, etc.). */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var p=location.pathname;var onDash=p.startsWith('/dashboard');var onOnboard=p.startsWith('/onboarding');var onWorkspace=p.startsWith('/workspaces');if(!onDash&&!onOnboard&&!onWorkspace)return;if(onDash||onWorkspace){if(localStorage.getItem('aegis_theme')==='dark')document.documentElement.dataset.theme='dark';}if(onDash){if(localStorage.getItem('aegis_sidebar_collapsed')==='true')document.documentElement.dataset.sidebarCollapsed='true';}var d=localStorage.getItem('aegis_demo');var url=new URLSearchParams(location.search);if(url.get('real')==='1')return;if(url.get('demo')==='1'||url.get('preview')==='1'||d==='true')document.documentElement.dataset.demo='true';}catch(e){}})();`,
+            __html: `(function(){try{var p=location.pathname;var onAuth=p.startsWith('/auth');var onDash=p.startsWith('/dashboard');var onOnboard=p.startsWith('/onboarding');var onWorkspace=p.startsWith('/workspaces');if(!onAuth&&!onDash&&!onOnboard&&!onWorkspace)return;if(onAuth){document.documentElement.dataset.theme='dark';}else if(onDash||onWorkspace){if(localStorage.getItem('aegis_theme')==='dark')document.documentElement.dataset.theme='dark';}if(onDash){if(localStorage.getItem('aegis_sidebar_collapsed')==='true')document.documentElement.dataset.sidebarCollapsed='true';}var d=localStorage.getItem('aegis_demo');var url=new URLSearchParams(location.search);if(url.get('real')==='1')return;if(url.get('demo')==='1'||url.get('preview')==='1'||d==='true')document.documentElement.dataset.demo='true';}catch(e){}})();`,
           }}
         />
       </head>

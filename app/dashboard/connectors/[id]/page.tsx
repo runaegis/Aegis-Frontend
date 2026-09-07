@@ -1,239 +1,387 @@
 'use client';
 
 /**
- * Per-connector detail page.
+ * Connector setup — `/dashboard/connectors/[id]`.
  *
- * Reached from the Connectors catalog (each live card links here). Replaces
- * the old "live card → /dashboard/rooms" jump, which dropped the user on a
- * context-less room list. Explains what the connector governs, what Aegis
- * layers on top that the native tool can't do itself, and routes to the real
- * enable surface (a room's Connect/Tools tab) with that framing.
- *
- * Layout: hero header + two-column body (wide main content + sticky right
- * meta/CTA rail) — the canonical integration-detail pattern (Linear /
- * ElevenLabs), on the dashboard's standard max-width. AlignUI tokens; the
- * `--feature` accent marks the "What Aegis adds" differentiation.
- *
- * Data: CONNECTORS (ConnectorMark) + STATUS_BY_ID / CONNECTOR_CAPABILITIES
- * (lib/connectorCatalog). Frontend-only; no backend dependency.
- * A "Rooms using this connector" section drops into the main column once the
- * connector→room mapping ships (Sprint Board ticket).
+ * Fields come from the catalog private_config_schema. Secrets are never
+ * returned. Test is POST /setup/{key}/test on already-saved credentials.
+ * Do not invent Test-without-saving, runs-failed-since, or 401 copy.
  */
 
-import { useParams } from 'next/navigation';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { motion, useReducedMotion } from 'motion/react';
-import { ArrowLeft, ArrowUpRight, Clock, Loader2, ShieldCheck, Sparkles, Check } from 'lucide-react';
+import { useParams } from 'next/navigation';
+import { AlertTriangle, ArrowLeft, Eye, EyeOff, Loader2, Lock } from 'lucide-react';
 import Topbar from '@/components/layout/Topbar';
-import { ConnectorMark, CONNECTORS, type ConnectorId } from '@/components/ui/ConnectorMark';
+import { CatalogIcon } from '@/components/connectors/CatalogIcon';
 import { Button } from '@/components/ui/Button';
+import ErrorBanner from '@/components/ui/ErrorBanner';
+import { Input } from '@/components/ui/Input';
+import { RelativeTime } from '@/components/ui/RelativeTime';
+import { Skeleton } from '@/components/ui/Skeleton';
+import { useToast } from '@/components/ui/Toast';
+import { api } from '@/lib/api';
 import {
-  STATUS_BY_ID,
-  CONNECTOR_CAPABILITIES,
-  type ConnectorStatus,
-} from '@/lib/connectorCatalog';
-import { fadeUp, staggerContainer } from '@/lib/motion';
+  connectorAttentionLabel,
+  connectorNeedsAttention,
+  isKnownConnectorId,
+  parsePrivateCredentialFields,
+} from '@/lib/connectorCredentials';
+import { CONNECTORS } from '@/components/ui/ConnectorMark';
+import { useUser } from '@/lib/hooks';
+import type { ConnectorCatalogItem, PrivateConnectorCredentialStatus } from '@/lib/types';
+import { formatRelativeTime, parseApiUtcTimestamp } from '@/lib/utils';
 
-const STATUS_META: Record<ConnectorStatus, { label: string; icon: typeof ShieldCheck; cls: string; spin?: boolean }> = {
-  live: { label: 'Live today', icon: ShieldCheck, cls: 'text-[var(--success-dark)] border-[var(--success)]/22 bg-[var(--success-lighter)]/50' },
-  'in-progress': { label: 'Ships this sprint', icon: Loader2, cls: 'text-[var(--primary-base)] border-[var(--primary-base)]/22 bg-[var(--primary-lighter)]/50', spin: true },
-  'coming-soon': { label: 'Designed · queued', icon: Clock, cls: 'text-[var(--neutral-soft-400)] border-[var(--stroke-soft-200)] bg-[var(--neutral-weak-50)]' },
-};
-
-const STANCE_META: Record<string, { label: string; cls: string }> = {
-  allow: { label: 'Allow', cls: 'text-[var(--success-dark)] bg-[var(--success-lighter)]/60' },
-  approval: { label: 'Approval', cls: 'text-[var(--warning-dark)] bg-[var(--warning-lighter)]/60' },
-  deny: { label: 'Deny', cls: 'text-[var(--error-dark)] bg-[var(--error-lighter)]/60' },
-};
-
-function StatusPill({ status }: { status: ConnectorStatus }) {
-  const m = STATUS_META[status];
-  const Icon = m.icon;
-  return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[10.5px] font-bold uppercase tracking-[0.06em] ${m.cls}`}>
-      <Icon className={`h-3.5 w-3.5 ${m.spin ? 'animate-spin' : ''}`} strokeWidth={2} />
-      {m.label}
-    </span>
-  );
+function stubCatalogItem(connectorKey: string): ConnectorCatalogItem | null {
+  if (!isKnownConnectorId(connectorKey)) return null;
+  const known = CONNECTORS[connectorKey];
+  return {
+    connector_key: connectorKey,
+    display_name: known.name,
+    description: known.description,
+    is_active: true,
+  };
 }
 
-export default function ConnectorDetailPage() {
+function isDemoMode(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return (
+      document.documentElement.dataset.demo === 'true' ||
+      localStorage.getItem('aegis_demo') === 'true'
+    );
+  } catch {
+    return false;
+  }
+}
+
+function formatTestedClock(timestamp: string): string {
+  const parsed = parseApiUtcTimestamp(timestamp);
+  if (Number.isNaN(parsed.getTime())) return formatRelativeTime(timestamp);
+  const clock = parsed.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  return `${formatRelativeTime(timestamp)}, ${clock}`;
+}
+
+export default function ConnectorSetupPage() {
   const params = useParams<{ id: string }>();
   const id = Array.isArray(params.id) ? params.id[0] : params.id;
-  const reduce = useReducedMotion();
+  const toast = useToast();
+  const { user, isLoading: userLoading } = useUser();
+  const demo = useMemo(() => isDemoMode(), []);
 
-  const def = id && id in CONNECTORS ? CONNECTORS[id as ConnectorId] : null;
+  const [catalogItem, setCatalogItem] = useState<ConnectorCatalogItem | null | undefined>(undefined);
+  const [status, setStatus] = useState<PrivateConnectorCredentialStatus | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [showSecret, setShowSecret] = useState<Record<string, boolean>>({});
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
-  if (!def) {
-    return (
-      <>
-        <Topbar title="Connector" subtitle="Not found" />
-        <div className="mx-auto max-w-[920px] px-4 py-10 sm:px-6 lg:px-8">
-          <Link href="/dashboard/connectors" className="mb-6 inline-flex items-center gap-1.5 text-[12.5px] font-medium text-[var(--neutral-sub-600)] hover:text-[var(--neutral-strong-950)]">
-            <ArrowLeft className="h-3.5 w-3.5" strokeWidth={2} /> Connectors
-          </Link>
-          <div className="rounded-[12px] border border-[var(--stroke-soft-200)] bg-white p-8 text-center shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
-            <h1 className="text-[16px] font-semibold text-[var(--neutral-strong-950)]">Connector not found</h1>
-            <p className="mt-1 text-[13px] text-[var(--neutral-sub-600)]">No connector with id <span className="font-mono">{id}</span>.</p>
-          </div>
-        </div>
-      </>
-    );
-  }
+  const connectorKey = id ?? '';
+  const displayName =
+    catalogItem?.display_name ??
+    (isKnownConnectorId(connectorKey) ? CONNECTORS[connectorKey].name : connectorKey);
+  const fields = useMemo(
+    () => parsePrivateCredentialFields(connectorKey, catalogItem ?? null),
+    [connectorKey, catalogItem],
+  );
+  const requiredKeys = useMemo(() => fields.filter((f) => f.required).map((f) => f.key), [fields]);
+  const configuredKeys = status?.configured_keys ?? [];
+  const configured = !!status?.configured;
+  const attention = connectorNeedsAttention(status);
+  const attentionLabel = connectorAttentionLabel(status);
+  const secretKeys = useMemo(() => fields.filter((f) => f.secret).map((f) => f.key), [fields]);
 
-  const status = STATUS_BY_ID[def.id];
-  const caps = CONNECTOR_CAPABILITIES[def.id];
+  const load = useCallback(async () => {
+    if (!connectorKey) return;
+    if (!demo && !user?.id) return;
+    setLoadError(null);
+    try {
+      const [catalog, priv] = await Promise.all([
+        api.getConnectorCatalog(false),
+        api.getPrivateConnectorCredentials(),
+      ]);
+      const item =
+        catalog.find((c) => c.connector_key === connectorKey) ?? stubCatalogItem(connectorKey);
+      setCatalogItem(item);
+      setStatus(priv.find((s) => s.connector_key === connectorKey) ?? null);
+    } catch (err) {
+      setCatalogItem(null);
+      setLoadError(err instanceof Error ? err.message : 'Could not load connector.');
+    }
+  }, [connectorKey, demo, user?.id]);
+
+  useEffect(() => {
+    if (demo || user?.id) {
+      void load();
+      return;
+    }
+    if (!userLoading) setCatalogItem(null);
+  }, [demo, user?.id, userLoading, load]);
+
+  useEffect(() => {
+    setValues({});
+    setShowSecret({});
+    setFormError(null);
+  }, [connectorKey]);
+
+  const filledRequired = requiredKeys.every((k) => (values[k] ?? '').trim().length > 0);
+  const hasAnyValue = fields.some((f) => (values[f.key] ?? '').trim().length > 0);
+  const canSave = fields.length > 0 && (configured ? hasAnyValue : filledRequired);
+  const canTest = configured && !status?.revoked_at;
+
+  const savePayload = (): Record<string, string> => {
+    const payload: Record<string, string> = {};
+    for (const f of fields) {
+      const v = (values[f.key] ?? '').trim();
+      if (v) payload[f.key] = v;
+    }
+    return payload;
+  };
+
+  const handleSaveAndTest = async () => {
+    if (!canSave || saving) return;
+    setSaving(true);
+    setFormError(null);
+    try {
+      const saved = await api.savePrivateConnectorCredentials(connectorKey, savePayload());
+      setStatus(saved);
+      setValues({});
+      try {
+        const tested = await api.testPrivateConnectorCredentials(connectorKey);
+        setStatus(tested);
+        if (tested.last_error) {
+          toast.error('Saved, but the test failed', { description: tested.last_error });
+        } else {
+          toast.success('Saved and tested');
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Test failed';
+        toast.error('Saved, but the test could not run', { description: msg });
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Could not save credentials';
+      setFormError(msg);
+      toast.error('Save failed', { description: msg });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleTest = async () => {
+    if (!canTest || testing) return;
+    setTesting(true);
+    setFormError(null);
+    try {
+      const tested = await api.testPrivateConnectorCredentials(connectorKey);
+      setStatus(tested);
+      if (tested.last_error) {
+        toast.error('Test failed', { description: tested.last_error });
+      } else {
+        toast.success('Credentials are valid');
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Could not test credentials';
+      setFormError(msg);
+      toast.error('Test failed', { description: msg });
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const missing = catalogItem === null && !loadError && catalogItem !== undefined;
 
   return (
     <>
-      <Topbar title="Connectors" subtitle="The tools Aegis governs for your agents" />
-      <motion.div
-        className="mx-auto max-w-[1320px] 2xl:max-w-[1480px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8"
-        variants={staggerContainer(0.05, 0.04)}
-        initial={reduce ? false : 'hidden'}
-        animate="show"
-      >
-        <motion.div variants={fadeUp}>
-          <Link href="/dashboard/connectors" className="mb-5 inline-flex items-center gap-1.5 text-[12.5px] font-medium text-[var(--neutral-sub-600)] transition-colors hover:text-[var(--neutral-strong-950)]">
-            <ArrowLeft className="h-3.5 w-3.5" strokeWidth={2} /> Connectors
-          </Link>
-        </motion.div>
+      <Topbar title="Connectors" subtitle={displayName || 'connector setup'} />
 
-        {/* Hero */}
-        <motion.section
-          variants={fadeUp}
-          className="relative mb-6 overflow-hidden rounded-[14px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]"
+      <div className="mx-auto w-full max-w-[720px] px-6 py-6">
+        <Link
+          href="/dashboard/connectors"
+          className="mb-5 inline-flex items-center gap-1.5 text-[12.5px] font-medium text-[var(--neutral-sub-600)] hover:text-[var(--neutral-strong-950)]"
         >
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-1 rounded-[12px]"
-            style={{ background: 'linear-gradient(180deg, rgba(250,115,25,0.08) 0%, rgba(250,115,25,0.03) 30%, rgba(255,255,255,0) 62%)' }}
-          />
-          <div className="relative flex flex-col gap-5 p-6 sm:flex-row sm:items-center sm:gap-6 sm:p-8">
-            <ConnectorMark id={def.id} size="lg" />
-            <div className="min-w-0 flex-1">
-              <p className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.1em] text-[var(--neutral-soft-400)]">{def.category}</p>
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                <h1 className="text-[24px] font-semibold leading-tight tracking-[-0.025em] text-[var(--neutral-strong-950)] sm:text-[28px]">{def.name}</h1>
-                <StatusPill status={status} />
-              </div>
-              <p className="mt-2.5 max-w-[64ch] text-balance text-[14px] leading-[1.5] text-[var(--neutral-sub-600)]">
-                {def.description}
-              </p>
-            </div>
+          <ArrowLeft className="h-3.5 w-3.5" strokeWidth={2} />
+          Connectors
+        </Link>
+
+        {catalogItem === undefined && (
+          <div className="space-y-3">
+            <Skeleton className="h-8 w-48" />
+            <Skeleton className="h-28 w-full rounded-xl" />
+            <Skeleton className="h-64 w-full rounded-xl" />
           </div>
-        </motion.section>
+        )}
 
-        {/* Two-column body */}
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
-          {/* Main content */}
-          <div className="flex min-w-0 flex-col gap-6">
-            {caps ? (
-              <>
-                {/* Governed actions */}
-                <motion.section variants={fadeUp} className="rounded-[12px] border border-[var(--stroke-soft-200)] bg-white p-5 shadow-[0_1px_2px_rgba(23,23,23,0.04)] sm:p-6">
-                  <p className="text-[10.5px] font-semibold uppercase tracking-[0.1em] text-[var(--neutral-soft-400)]">Governed actions</p>
-                  <p className="mt-1 text-[12.5px] text-[var(--neutral-sub-600)]">Native {def.name} actions Aegis proxies and gates.</p>
-                  <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    {caps.governs.map((c) => (
-                      <div key={c.label} className="flex gap-2.5 rounded-[10px] border border-[var(--stroke-soft-200)] bg-[var(--neutral-weak-50)]/40 p-3">
-                        <Check className="mt-0.5 h-4 w-4 shrink-0 text-[var(--neutral-soft-400)]" strokeWidth={2} />
-                        <div className="min-w-0">
-                          <div className="text-[13px] font-medium text-[var(--neutral-strong-950)]">{c.label}</div>
-                          <div className="mt-0.5 text-[12px] leading-[1.5] text-[var(--neutral-sub-600)]">{c.detail}</div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </motion.section>
+        {loadError && (
+          <ErrorBanner
+            message={loadError}
+            onDismiss={() => setLoadError(null)}
+            onRetry={load}
+          />
+        )}
 
-                {/* What Aegis adds — the differentiation */}
-                <motion.section variants={fadeUp} className="overflow-hidden rounded-[12px] border border-[var(--feature)]/25 bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-[var(--stroke-soft-200)] bg-[color-mix(in_srgb,var(--feature)_6%,transparent)] px-5 py-3.5 sm:px-6">
-                    <Sparkles className="h-4 w-4 text-[var(--feature)]" strokeWidth={2} />
-                    <span className="text-[13px] font-semibold text-[var(--neutral-strong-950)]">What Aegis adds</span>
-                    <span className="text-[11.5px] text-[var(--neutral-soft-400)]">— capabilities native {def.name} doesn&rsquo;t have</span>
-                  </div>
-                  <div className="grid grid-cols-1 gap-x-5 gap-y-0 p-1.5 sm:grid-cols-2 sm:p-2">
-                    {caps.aegisAdds.map((c) => (
-                      <div key={c.label} className="flex gap-3 rounded-[10px] p-3.5 transition-colors hover:bg-[var(--neutral-weak-50)]/50">
-                        <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md" style={{ background: 'color-mix(in srgb, var(--feature) 12%, transparent)' }}>
-                          <ShieldCheck className="h-3 w-3 text-[var(--feature)]" strokeWidth={2.25} />
-                        </span>
-                        <div className="min-w-0">
-                          <div className="text-[13px] font-semibold text-[var(--neutral-strong-950)]">{c.label}</div>
-                          <div className="mt-0.5 text-[12px] leading-[1.55] text-[var(--neutral-sub-600)]">{c.detail}</div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </motion.section>
+        {missing && (
+          <div className="rounded-xl border border-[var(--stroke-soft-200)] bg-[var(--bg-surface)] px-4 py-6">
+            <h1 className="text-[16px] font-semibold text-[var(--neutral-strong-950)]">Connector not found</h1>
+            <p className="mt-1 text-[13px] text-[var(--neutral-sub-600)]">
+              No connector with key <span className="font-mono">{connectorKey}</span> in the catalog.
+            </p>
+          </div>
+        )}
 
-                {caps.note && (
-                  <motion.p variants={fadeUp} className="rounded-[10px] border border-[var(--stroke-soft-200)] bg-[var(--neutral-weak-50)]/60 px-4 py-3 text-[12px] leading-[1.55] text-[var(--neutral-sub-600)]">
-                    {caps.note}
-                  </motion.p>
-                )}
-              </>
-            ) : (
-              <motion.section variants={fadeUp} className="rounded-[12px] border border-[var(--stroke-soft-200)] bg-white p-6 shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
-                <div className="flex items-center gap-2 text-[var(--neutral-soft-400)]">
-                  <Clock className="h-4 w-4" strokeWidth={2} />
-                  <span className="text-[12.5px] font-semibold uppercase tracking-[0.06em]">Designed · queued</span>
+        {catalogItem && (
+          <>
+            <div className="mb-6 flex items-end gap-3">
+              <CatalogIcon connectorKey={connectorKey} size="md" />
+              <div className="min-w-0">
+                <h1 className="text-[22px] font-semibold tracking-[-0.03em] text-[var(--neutral-strong-950)]">
+                  {displayName}
+                </h1>
+                <p className="text-[13px] text-[var(--neutral-soft-400)]">connector setup</p>
+              </div>
+            </div>
+
+            {attention && (
+              <div className="mb-6 rounded-xl border border-[var(--attention)] bg-[var(--attention-lighter)] px-4 py-3.5">
+                <div className="flex items-start gap-2.5">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[var(--attention-dark)]" strokeWidth={2} />
+                  <div className="min-w-0">
+                    <p className="text-[13.5px] font-semibold text-[var(--attention-dark)]">
+                      {displayName} rejected the last call
+                    </p>
+                    <p className="mt-1 text-[12.5px] leading-[1.5] text-[var(--neutral-sub-600)]">
+                      {attentionLabel}
+                      {status?.last_tested_at ? (
+                        <>
+                          {', '}
+                          <RelativeTime timestamp={status.last_tested_at} />
+                        </>
+                      ) : null}
+                      . Save new credentials, then test again.
+                    </p>
+                    <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[12px]">
+                      <dt className="text-[var(--neutral-soft-400)]">Last tested</dt>
+                      <dd className="text-[var(--neutral-sub-600)]">
+                        {status?.last_tested_at ? formatTestedClock(status.last_tested_at) : 'never'}
+                      </dd>
+                      <dt className="text-[var(--neutral-soft-400)]">Last error</dt>
+                      <dd className="text-[var(--neutral-sub-600)]">{status?.last_error?.trim() || 'revoked'}</dd>
+                    </dl>
+                  </div>
                 </div>
-                <p className="mt-2 max-w-[68ch] text-[13.5px] leading-[1.6] text-[var(--neutral-sub-600)]">
-                  The governance pack for {def.name} is designed and on the roadmap. It follows the same proxy pattern as the live connectors: every action is classified, gated by policy, and written to the audit trail.
-                </p>
-              </motion.section>
+              </div>
             )}
 
-            {/* "Rooms using this connector" drops in here once the
-                connector→room mapping ships (Sprint Board ticket). */}
-          </div>
-
-          {/* Right rail */}
-          <aside className="flex flex-col gap-5 lg:sticky lg:top-[72px] lg:self-start">
-            <motion.div variants={fadeUp} className="rounded-[12px] border border-[var(--stroke-soft-200)] bg-white p-5 shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
-              <p className="text-[10.5px] font-semibold uppercase tracking-[0.1em] text-[var(--neutral-soft-400)]">Status</p>
-              <div className="mt-2"><StatusPill status={status} /></div>
-
-              <div className="my-4 h-px bg-[var(--stroke-soft-200)]" />
-
-              <p className="text-[10.5px] font-semibold uppercase tracking-[0.1em] text-[var(--neutral-soft-400)]">Default policy stance</p>
-              <div className="mt-2.5 flex flex-col gap-2">
-                {([['Reads', def.policy.read], ['Writes', def.policy.write], ['Destructive', def.policy.destructive]] as const).map(([k, stance]) => (
-                  <div key={k} className="flex items-center justify-between gap-3">
-                    <span className="text-[12px] text-[var(--neutral-sub-600)]">{k}</span>
-                    <span className={`inline-flex rounded-md px-1.5 py-0.5 text-[11px] font-semibold ${STANCE_META[stance].cls}`}>{STANCE_META[stance].label}</span>
-                  </div>
-                ))}
+            <section className="rounded-xl border border-[var(--stroke-soft-200)] bg-[var(--bg-surface)] p-4 sm:p-5">
+              <div className="mb-4">
+                <h2 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--neutral-soft-400)]">
+                  Credentials
+                </h2>
+                <p className="mt-1 text-[12.5px] text-[var(--neutral-sub-600)]">
+                  The schema comes from the catalog, so these fields are whatever {displayName} asks for.
+                </p>
               </div>
 
-              {def.primitive && (
-                <>
-                  <div className="my-4 h-px bg-[var(--stroke-soft-200)]" />
-                  <p className="text-[10.5px] font-semibold uppercase tracking-[0.1em] text-[var(--neutral-soft-400)]">Policy primitive</p>
-                  <span className="mt-2 inline-flex items-center rounded-md border border-[var(--stroke-soft-200)] bg-[var(--neutral-weak-50)] px-2 py-1 font-mono text-[10.5px] font-semibold text-[var(--neutral-sub-600)]">{def.primitive}</span>
-                </>
+              {formError && (
+                <div className="mb-4">
+                  <ErrorBanner message={formError} onDismiss={() => setFormError(null)} />
+                </div>
               )}
 
-              <p className="mt-4 text-[11px] leading-[1.5] text-[var(--neutral-soft-400)]">Defaults shown. Each room tunes the stance and tool allowlist per role.</p>
-            </motion.div>
+              {fields.length === 0 ? (
+                <p className="text-[13px] text-[var(--neutral-sub-600)]">
+                  This connector does not advertise a private credential schema yet.
+                </p>
+              ) : (
+                <div className="space-y-4">
+                  {fields.map((field) => {
+                    const saved = configuredKeys.includes(field.key);
+                    const isSecret = field.secret;
+                    const show = !!showSecret[field.key];
+                    const inputType =
+                      field.inputType === 'password' ? (show ? 'text' : 'password') : field.inputType ?? 'text';
+                    const highlightSecret = attention && isSecret && secretKeys[0] === field.key;
 
-            <motion.div variants={fadeUp} className="rounded-[12px] border border-[var(--stroke-soft-200)] bg-white p-5 shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
-              <p className="text-[10.5px] font-semibold uppercase tracking-[0.1em] text-[var(--neutral-soft-400)]">Use this connector</p>
-              <p className="mt-2 text-[12.5px] leading-[1.55] text-[var(--neutral-sub-600)]">
-                Connectors are enabled per room. Open a room&rsquo;s <span className="font-medium text-[var(--neutral-strong-950)]">Connectors</span> tab to wire {def.name} to its room-scoped resource (repo, database, project, or workspace) and the <span className="font-medium text-[var(--neutral-strong-950)]">Tools</span> tab to tune the role allowlist.
-              </p>
-              <Link href="/dashboard/workspaces" className="mt-4 block">
-                <Button variant="primary" size="md" className="w-full justify-center" trailingIcon={<ArrowUpRight className="h-3.5 w-3.5" strokeWidth={2.25} />}>
-                  {status === 'live' ? 'Open workspaces' : 'View workspaces'}
+                    return (
+                      <div key={field.key} className="space-y-1.5">
+                        <div className="flex items-baseline justify-between gap-2">
+                          <label className="text-[12.5px] font-medium text-[var(--neutral-sub-600)]">
+                            {field.label}
+                            {saved ? (
+                              <span className="ml-1.5 text-[11px] font-medium text-[var(--neutral-soft-400)]">
+                                set
+                              </span>
+                            ) : field.required ? (
+                              <span className="ml-1.5 text-[11px] text-[var(--neutral-soft-400)]">required</span>
+                            ) : null}
+                          </label>
+                        </div>
+                        <Input
+                          type={inputType}
+                          value={values[field.key] ?? ''}
+                          onChange={(e) => setValues((prev) => ({ ...prev, [field.key]: e.target.value }))}
+                          placeholder={saved ? (isSecret ? '••••••••••••' : 'Saved — enter a new value to replace') : field.placeholder}
+                          autoComplete="off"
+                          attention={highlightSecret}
+                          className="font-mono"
+                          trailingIcon={
+                            highlightSecret ? (
+                              <AlertTriangle className="h-3.5 w-3.5 text-[var(--attention-dark)]" strokeWidth={2} />
+                            ) : isSecret ? (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setShowSecret((prev) => ({ ...prev, [field.key]: !prev[field.key] }))
+                                }
+                                aria-label={show ? 'Hide value' : 'Show value'}
+                                className="inline-flex items-center justify-center"
+                              >
+                                {show ? (
+                                  <EyeOff className="h-4 w-4" strokeWidth={2} />
+                                ) : (
+                                  <Eye className="h-4 w-4" strokeWidth={2} />
+                                )}
+                              </button>
+                            ) : undefined
+                          }
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div className="mt-5 flex flex-wrap items-center gap-3">
+                <Button
+                  variant="primary"
+                  onClick={() => void handleSaveAndTest()}
+                  disabled={!canSave || saving || fields.length === 0}
+                  leadingIcon={
+                    saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2} /> : undefined
+                  }
+                >
+                  Save and test
                 </Button>
-              </Link>
-            </motion.div>
-          </aside>
-        </div>
-      </motion.div>
+                {canTest && (
+                  <button
+                    type="button"
+                    onClick={() => void handleTest()}
+                    disabled={testing || saving}
+                    className="text-[13px] font-medium text-[var(--neutral-sub-600)] underline-offset-2 hover:text-[var(--neutral-strong-950)] hover:underline disabled:opacity-50"
+                  >
+                    {testing ? 'Testing…' : 'Test'}
+                  </button>
+                )}
+              </div>
+              <p className="mt-3 flex items-start gap-1.5 text-[12px] leading-[1.5] text-[var(--neutral-soft-400)]">
+                <Lock className="mt-0.5 h-3 w-3 shrink-0" strokeWidth={2} />
+                Credentials are stored per person and never returned to the browser once saved.
+              </p>
+            </section>
+          </>
+        )}
+      </div>
     </>
   );
 }
