@@ -214,7 +214,11 @@ export default function ConnectorSetupPage() {
         )}
 
         {loadError && (
-          <ErrorBanner message={loadError} onRetry={load} />
+          <ErrorBanner
+            message={loadError}
+            onDismiss={() => setLoadError(null)}
+            onRetry={load}
+          />
         )}
 
         {missing && (
