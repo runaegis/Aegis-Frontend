@@ -188,6 +188,8 @@ export type WorkspaceSummary = WorkspaceRecord & {
   total_tokens?: number;
   /** Present only if the API ships it. Do not invent; no failed-run chip. */
   failed_run_count?: number;
+  /** Active agent handles when the list payload includes them. */
+  agent_handles?: string[];
 };
 
 export type WorkspaceRunStatus = "success" | "failed" | "running" | "pending" | string;
@@ -468,17 +470,45 @@ function asFiniteNumber(value: unknown): number | undefined {
   return undefined;
 }
 
+function extractAgentHandles(parsed: Record<string, unknown>): string[] | undefined {
+  if (Array.isArray(parsed.agent_handles)) {
+    const handles = parsed.agent_handles.filter(
+      (handle): handle is string => typeof handle === "string" && handle.trim().length > 0,
+    );
+    return handles.map((handle) => handle.replace(/^@/, ""));
+  }
+  if (Array.isArray(parsed.agents)) {
+    const handles: string[] = [];
+    for (const row of parsed.agents) {
+      if (typeof row === "string" && row.trim()) {
+        handles.push(row.replace(/^@/, ""));
+        continue;
+      }
+      if (!row || typeof row !== "object") continue;
+      const agent = row as { handle?: unknown; status?: unknown };
+      if (typeof agent.status === "string" && agent.status !== "active") continue;
+      if (typeof agent.handle === "string" && agent.handle.trim()) {
+        handles.push(agent.handle.replace(/^@/, ""));
+      }
+    }
+    return handles;
+  }
+  return undefined;
+}
+
 function normalizeWorkspaceSummary(row: unknown): WorkspaceSummary {
-  const parsed = parseRow(row) as WorkspaceSummary;
+  const parsed = parseRow(row) as WorkspaceSummary & Record<string, unknown>;
+  const agent_handles = extractAgentHandles(parsed);
   return {
     ...parsed,
-    agent_count: asFiniteNumber(parsed.agent_count) ?? 0,
+    agent_count: asFiniteNumber(parsed.agent_count) ?? agent_handles?.length ?? 0,
     message_count: asFiniteNumber(parsed.message_count) ?? 0,
     pointer_count: asFiniteNumber(parsed.pointer_count),
     unread_mention_count: asFiniteNumber(parsed.unread_mention_count),
     run_count: asFiniteNumber(parsed.run_count),
     total_tokens: asFiniteNumber(parsed.total_tokens),
     failed_run_count: asFiniteNumber(parsed.failed_run_count),
+    agent_handles,
   };
 }
 
@@ -1456,6 +1486,12 @@ function normalizePrivateCredentialStatus(
     created_at: typeof raw.created_at === "string" ? raw.created_at : null,
     updated_at: typeof raw.updated_at === "string" ? raw.updated_at : null,
     revoked_at: typeof raw.revoked_at === "string" ? raw.revoked_at : null,
+    last_tested_at:
+      typeof raw.last_tested_at === "string" ? raw.last_tested_at : null,
+    last_error:
+      typeof raw.last_error === "string" && raw.last_error.trim()
+        ? raw.last_error
+        : null,
   };
 }
 
@@ -2044,6 +2080,23 @@ export const api = {
       { method: "DELETE" },
     );
     if (!res.ok) throw await readApiError(res);
+  },
+
+  testPrivateConnectorCredentials: async (
+    connectorKey: string,
+  ): Promise<PrivateConnectorCredentialStatus> => {
+    const res = await apiFetch(
+      `${API_BASE}/api/v3/connectors/setup/${encodeURIComponent(connectorKey)}/test`,
+      { method: "POST" },
+    );
+    if (!res.ok) throw await readApiError(res);
+
+    const status = normalizePrivateCredentialStatus(await res.json());
+    if (!status) {
+      throw new Error("Server returned an invalid connector test payload.");
+    }
+
+    return status;
   },
 
   logOut: async () => {
@@ -3368,6 +3421,20 @@ export const api = {
     return [];
   },
 
+  createMemory: async (
+    payload: Pick<Memory, "title" | "memory">,
+  ): Promise<Memory> => {
+    const res = await apiFetch(`${API_BASE}/api/v3/memory`, {
+      method: "POST",
+      headers: getJsonHeaders(),
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to create memory: ${await readErrorMessage(res)}`);
+    }
+    return res.json();
+  },
+
   updateMemory: async (
     memoryId: string,
     userId: string,
@@ -3508,6 +3575,16 @@ export const api = {
       throw new Error(`Failed to update prompt: ${await readErrorMessage(res)}`);
     }
     return res.json();
+  },
+
+  deleteUserPrompt: async (promptId: string): Promise<void> => {
+    const res = await apiFetch(
+      `${API_BASE}/user-prompts/${encodeURIComponent(promptId)}`,
+      { method: "DELETE" },
+    );
+    if (!res.ok) {
+      throw new Error(`Failed to delete prompt: ${await readErrorMessage(res)}`);
+    }
   },
 
   getWorkspaces: async (): Promise<WorkspaceSummary[]> => {

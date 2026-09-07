@@ -144,7 +144,7 @@
      • Borders #1d1d20 — hairline, just enough for edge definition
      • Zero drop shadows — elevation purely from border (Linear sig)
      • Text #fafafa — warm white, NOT pure white
-     • Brand orange unchanged at base, muted for filled CTAs
+     • Accent is Linear blue; orange is attention status only
    ───────────────────────────────────────────────────────────────── */
 [data-theme="dark"] {
   /* Neutral scale — warm near-black with tight elevation steps */
@@ -338,7 +338,7 @@
   --color-muted-foreground: var(--text-soft);
   --color-border: var(--border-soft);
   --color-primary: var(--primary-base);
-  --color-primary-foreground: var(--white-0);
+  --color-primary-foreground: var(--text-on-accent);
   --color-secondary: var(--neutral-soft-200);
   --color-secondary-foreground: var(--text-strong);
   --color-success: var(--success);
@@ -430,11 +430,26 @@ body::-webkit-scrollbar {
   display: none;                /* WebKit (Chrome, Safari) */
 }
 
-/* Focus ring — orange at 24% */
+/* Focus ring — 3px Linear accent at 24% */
 :focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px var(--primary-alpha-24);
   border-radius: 8px;
+}
+
+/* Solid primary CTA as a real CSS class so the fill always paints.
+   Orange is reserved for card status, not buttons. */
+.btn-primary {
+  color: #ffffff;
+  background-color: var(--btn-primary-bg);
+  border: 1px solid var(--btn-primary-border);
+  box-shadow: var(--btn-primary-shadow);
+}
+.btn-primary:hover:not(:disabled) {
+  background-color: var(--btn-primary-bg-hover);
+}
+.btn-primary:active:not(:disabled) {
+  background-color: var(--btn-primary-bg-active);
 }
 
 /* Suppress every possible outline/halo source on the command palette

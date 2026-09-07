@@ -363,9 +363,13 @@ function summarize(record: WorkspaceRecord): WorkspaceSummary {
     'ws-docs-refresh': { unread: 0, runs: 0, tokens: 0 },
   };
   const extra = demoStats[record.id] ?? { unread: 0, runs: 0, tokens: 0 };
+  const activeAgents = store.agents.filter(
+    (a) => a.workspace_id === record.id && a.status === 'active',
+  );
   return {
     ...record,
-    agent_count: store.agents.filter((a) => a.workspace_id === record.id && a.status === 'active').length,
+    agent_count: activeAgents.length,
+    agent_handles: activeAgents.map((a) => a.handle),
     message_count: messages.length,
     pointer_count: store.pointers.filter((p) => p.workspace_id === record.id).length,
     unread_mention_count: extra.unread,

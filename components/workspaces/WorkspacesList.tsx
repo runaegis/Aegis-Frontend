@@ -13,6 +13,7 @@ import { RelativeTime } from '@/components/ui/RelativeTime';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { DUR, EASE } from '@/lib/motion';
 import { cn, formatCompactNumber, parseApiUtcTimestamp } from '@/lib/utils';
+import { AgentGlyph, AgentHueProvider } from './agent-visuals';
 import { CreateWorkspaceDialog } from './CreateWorkspaceDialog';
 import { SampleDataChip } from './WorkspaceDemoGate';
 
@@ -27,7 +28,7 @@ export function WorkspacesList() {
     setError(null);
     try {
       const list = await api.getWorkspaces();
-      setWorkspaces(list);
+      setWorkspaces(await hydrateAgentHandles(list));
     } catch (e) {
       setWorkspaces([]);
       setError(e instanceof Error ? e.message : 'Could not load workspaces.');
@@ -45,7 +46,7 @@ export function WorkspacesList() {
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
           <h1 className="text-[19px] font-semibold tracking-[-0.02em] text-[var(--neutral-strong-950)]">
-            Agent Workspaces
+            Workspaces
           </h1>
           {workspaces && (
             <span className="rounded-md bg-[var(--neutral-weak-50)] px-1.5 py-0.5 font-mono text-[12px] text-[var(--neutral-sub-600)]">
@@ -182,8 +183,9 @@ function WorkspaceCard({ workspace }: { workspace: WorkspaceSummary }) {
   const unused = isUnusedWorkspace(workspace);
   const active = hasRecordedActivity(workspace);
   const borderStatus = workspaceBorderStatus(workspace);
-  const stats = [
-    { label: 'Agents', value: workspace.agent_count },
+  const agentHandles = workspace.agent_handles ?? [];
+  const stats: Array<{ label: string; value: number; handles?: string[] }> = [
+    { label: 'Agents', value: workspace.agent_count, handles: agentHandles },
     { label: 'Messages', value: workspace.message_count },
     { label: 'Task pointers', value: workspace.pointer_count ?? 0 },
     { label: 'Runs', value: workspace.run_count ?? 0 },
@@ -202,11 +204,13 @@ function WorkspaceCard({ workspace }: { workspace: WorkspaceSummary }) {
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--primary-alpha-16)]',
       )}
     >
-      <span
-        aria-hidden
-        className={cn('absolute inset-y-0 left-0 w-[3px]', unused && 'opacity-50')}
-        style={{ backgroundColor: workspaceBorderColor(borderStatus) }}
-      />
+      {borderStatus !== 'default' && (
+        <span
+          aria-hidden
+          className={cn('absolute inset-y-0 left-0 w-[3px]', unused && 'opacity-50')}
+          style={{ backgroundColor: workspaceBorderColor(borderStatus) }}
+        />
+      )}
 
       <div className={cn('flex items-start gap-3', unused && 'opacity-70')}>
         <div className="min-w-0 flex-1">
@@ -245,7 +249,7 @@ function WorkspaceCard({ workspace }: { workspace: WorkspaceSummary }) {
           className={cn(
             'inline-flex h-7 shrink-0 items-center rounded-[8px] border border-[var(--stroke-sub-300)] bg-[var(--bg-surface)] px-2.5 text-[12px] font-medium text-[var(--neutral-sub-600)]',
             'shadow-[0_1px_2px_rgba(23,23,23,0.04)]',
-            'group-hover:border-[var(--primary-base)] group-hover:text-[var(--primary-base)]',
+            'group-hover:border-[var(--neutral-sub-300)] group-hover:bg-[var(--neutral-weak-50)] group-hover:text-[var(--neutral-strong-950)]',
           )}
         >
           Open
@@ -260,8 +264,13 @@ function WorkspaceCard({ workspace }: { workspace: WorkspaceSummary }) {
       >
         {stats.map((stat) => (
           <div key={stat.label} className="min-w-0">
-            <div className="text-[18px] font-semibold leading-none tracking-[-0.03em] tabular-nums text-[var(--neutral-strong-950)]">
-              {formatCompactNumber(stat.value)}
+            <div className="flex items-center gap-2">
+              {stat.handles && stat.handles.length > 0 && (
+                <AgentFaceStack handles={stat.handles} />
+              )}
+              <div className="text-[18px] font-semibold leading-none tracking-[-0.03em] tabular-nums text-[var(--neutral-strong-950)]">
+                {formatCompactNumber(stat.value)}
+              </div>
             </div>
             <div className="mt-1 truncate text-[10.5px] font-medium uppercase tracking-[0.04em] text-[var(--neutral-soft-400)]">
               {stat.label}
@@ -270,5 +279,48 @@ function WorkspaceCard({ workspace }: { workspace: WorkspaceSummary }) {
         ))}
       </div>
     </Link>
+  );
+}
+
+async function hydrateAgentHandles(list: WorkspaceSummary[]): Promise<WorkspaceSummary[]> {
+  return Promise.all(
+    list.map(async (workspace) => {
+      if (workspace.agent_handles?.length || workspace.agent_count === 0) return workspace;
+      try {
+        const detail = await api.getWorkspace(workspace.id);
+        const handles = detail.agents
+          .filter((agent) => agent.status === 'active')
+          .map((agent) => agent.handle);
+        return { ...workspace, agent_handles: handles };
+      } catch {
+        return workspace;
+      }
+    }),
+  );
+}
+
+function AgentFaceStack({ handles }: { handles: string[] }) {
+  const shown = handles.slice(0, 4);
+  const overflow = handles.length - shown.length;
+  return (
+    <AgentHueProvider handles={handles}>
+      <span className="flex items-center" aria-label={handles.map((h) => `@${h}`).join(', ')}>
+        {shown.map((handle, index) => (
+          <span
+            key={handle}
+            className="overflow-hidden rounded-[6px] ring-2 ring-[var(--bg-surface)] group-hover:ring-[var(--neutral-weak-50)]"
+            style={{ marginLeft: index === 0 ? 0 : -6, zIndex: shown.length - index }}
+            title={`@${handle}`}
+          >
+            <AgentGlyph handle={handle} size="sm" />
+          </span>
+        ))}
+        {overflow > 0 && (
+          <span className="ml-1 text-[11px] tabular-nums text-[var(--neutral-soft-400)]">
+            +{overflow}
+          </span>
+        )}
+      </span>
+    </AgentHueProvider>
   );
 }

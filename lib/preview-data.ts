@@ -219,6 +219,7 @@ const APPROVAL_STATUSES = [
 // ── generators ─────────────────────────────────────────────────────────────
 const NOW = Date.now();
 const ONE_DAY = 24 * 60 * 60 * 1000;
+const ONE_HOUR = 60 * 60 * 1000;
 
 // Generate session IDs first so we can group runs into sessions of varying length.
 const SESSION_IDS = Array.from({ length: 14 }, () => uuid());
@@ -1715,20 +1716,38 @@ const PREVIEW_PRIVATE_CONNECTOR_STATUS: Record<string, PrivateConnectorCredentia
   github: {
     connector_key: 'github',
     configured: true,
+    is_enabled: true,
     configured_keys: ['github_pat'],
     credential_metadata: null,
     created_at: new Date(NOW - 18 * ONE_DAY).toISOString(),
     updated_at: new Date(NOW - 4 * ONE_DAY).toISOString(),
     revoked_at: null,
+    last_tested_at: new Date(NOW - 4 * ONE_DAY).toISOString(),
+    last_error: 'Bad credentials',
   },
   postgres: {
     connector_key: 'postgres',
     configured: true,
+    is_enabled: true,
     configured_keys: ['connection_string'],
     credential_metadata: null,
     created_at: new Date(NOW - 16 * ONE_DAY).toISOString(),
     updated_at: new Date(NOW - 6 * ONE_DAY).toISOString(),
     revoked_at: null,
+    last_tested_at: new Date(NOW - 6 * 60 * 1000).toISOString(),
+    last_error: null,
+  },
+  linear: {
+    connector_key: 'linear',
+    configured: true,
+    is_enabled: false,
+    configured_keys: ['api_key'],
+    credential_metadata: null,
+    created_at: new Date(NOW - 12 * ONE_DAY).toISOString(),
+    updated_at: new Date(NOW - 12 * ONE_DAY).toISOString(),
+    revoked_at: null,
+    last_tested_at: null,
+    last_error: null,
   },
 };
 
@@ -1776,47 +1795,83 @@ const PREVIEW_USER_PROMPTS: UserPrompt[] = [
   {
     id: 'prompt_1',
     user_id: 'preview-user',
-    name: 'PR review checklist',
-    description: 'Run before approving a merge.',
+    name: 'Write a database migration',
+    description:
+      'Used by agents that touch a database. Variables are read from the body, not configured separately.',
     prompt:
-      'Review the PR for {repo}.\n\n' +
-      '- Summarize intent in 3 bullets.\n' +
-      '- Call out security + correctness risks.\n' +
-      '- Identify migrations or rollout concerns.\n' +
-      '- Recommend tests to add or run.\n',
+      'Write a database migration against {connector}.\n\n' +
+      'Use the latest {snapshot} — never production.\n\n' +
+      '- Prefer additive changes.\n' +
+      '- Include a reverse of every statement in the same file.\n' +
+      '- Call out expected lock time.\n',
     created_at: new Date(NOW - 21 * ONE_DAY).toISOString(),
-    updated_at: new Date(NOW - 3 * ONE_DAY).toISOString(),
+    updated_at: new Date(NOW - 2 * ONE_HOUR).toISOString(),
   },
   {
     id: 'prompt_2',
     user_id: 'preview-user',
-    name: 'Incident note',
-    description: 'Draft a crisp postmortem update.',
+    name: 'Read a deploy diff',
+    description: 'Summarise what a deploy is about to change.',
+    prompt:
+      'Read the deploy diff for {repo} at {sha}.\n\n' +
+      'Compare against {environment} and the linked {pr}.\n' +
+      'Call out migrations, config, and rollback risk.\n',
+    created_at: new Date(NOW - 18 * ONE_DAY).toISOString(),
+    updated_at: new Date(NOW - 5 * ONE_HOUR).toISOString(),
+  },
+  {
+    id: 'prompt_3',
+    user_id: 'preview-user',
+    name: 'Summarise an incident',
+    description: 'Draft a crisp incident update.',
     prompt:
       'Write an incident update for {incident_id}.\n\n' +
-      'Include:\n' +
-      '- Impact\n' +
-      '- Current status\n' +
-      '- Next steps\n' +
-      '- ETA (if known)\n',
+      'Include impact, current status, next steps, and ETA if known.\n',
     created_at: new Date(NOW - 14 * ONE_DAY).toISOString(),
-    updated_at: new Date(NOW - 14 * ONE_DAY).toISOString(),
+    updated_at: new Date(NOW - 1 * ONE_DAY).toISOString(),
+  },
+  {
+    id: 'prompt_4',
+    user_id: 'preview-user',
+    name: 'Explain a query plan',
+    description: 'Walk through an EXPLAIN for a slow query.',
+    prompt:
+      'Explain the query plan for {query} on {connector}.\n\n' +
+      'Call out seq scans, bad estimates, and the first index to try.\n',
+    created_at: new Date(NOW - 12 * ONE_DAY).toISOString(),
+    updated_at: new Date(NOW - 2 * ONE_DAY).toISOString(),
+  },
+  {
+    id: 'prompt_5',
+    user_id: 'preview-user',
+    name: 'Draft a changelog entry',
+    description: 'Turn a merged PR into a changelog line.',
+    prompt:
+      'Draft a changelog entry for {pr} in {repo}.\n\n' +
+      'Audience is other engineers. One sentence, then a short why.\n',
+    created_at: new Date(NOW - 10 * ONE_DAY).toISOString(),
+    updated_at: new Date(NOW - 3 * ONE_DAY).toISOString(),
+  },
+  {
+    id: 'prompt_6',
+    user_id: 'preview-user',
+    name: 'Bisect to a commit',
+    description: 'Find the commit that introduced a regression.',
+    prompt:
+      'Bisect {repo} to find the commit that introduced {symptom}.\n\n' +
+      'Start from {good_sha} and stop at the first failing test.\n',
+    created_at: new Date(NOW - 8 * ONE_DAY).toISOString(),
+    updated_at: new Date(NOW - 4 * ONE_DAY).toISOString(),
   },
 ];
-
-const PREVIEW_MEMORY_SHARES: MemoryShare[] = [];
-const PREVIEW_REDEEMED_SHARE_CODES = new Set<string>();
 
 const PREVIEW_MEMORIES: Memory[] = [
   {
     id: 'mem_1',
     user_id: 'preview-user',
-    title: 'Branch rules',
+    title: 'Migration rules',
     memory:
-      'Never push to `main`.\n\n' +
-      '- Create a feature branch\n' +
-      '- Open a PR\n' +
-      '- Wait for CI + approval\n',
+      'Run against the newest snapshot, never production. Write the reverse of every statement in the same file. Report lock time in **milliseconds**.',
     is_pinned: true,
     created_at: new Date(NOW - 40 * ONE_DAY).toISOString(),
     updated_at: new Date(NOW - 12 * ONE_DAY).toISOString(),
@@ -1824,17 +1879,95 @@ const PREVIEW_MEMORIES: Memory[] = [
   {
     id: 'mem_2',
     user_id: 'preview-user',
-    title: 'Release checklist',
+    title: 'Checkout p95 target',
     memory:
-      'Before shipping:\n\n' +
-      '1. Confirm freeze windows\n' +
-      '2. Verify migrations have rollback\n' +
-      '3. Capture audit export\n',
+      '**200 ms**, agreed with the payments team in June 2026. Anything above that pages the on call.',
+    is_pinned: true,
+    created_at: new Date(NOW - 28 * ONE_DAY).toISOString(),
+    updated_at: new Date(NOW - 8 * ONE_DAY).toISOString(),
+  },
+  {
+    id: 'mem_3',
+    user_id: 'preview-user',
+    title: 'orders_v2 partitioning',
+    memory:
+      'Partitioned by month, so any index on `orders_v2` must be partial or partitioned too.',
+    is_pinned: true,
+    created_at: new Date(NOW - 21 * ONE_DAY).toISOString(),
+    updated_at: new Date(NOW - 6 * ONE_DAY).toISOString(),
+  },
+  {
+    id: 'mem_4',
+    user_id: 'preview-user',
+    title: 'Deploy window',
+    memory: '`02:00` to `04:00` UTC on weekdays only.',
     is_pinned: false,
     created_at: new Date(NOW - 18 * ONE_DAY).toISOString(),
+    updated_at: new Date(NOW - 5 * ONE_DAY).toISOString(),
+  },
+  {
+    id: 'mem_5',
+    user_id: 'preview-user',
+    title: 'BI job schedule',
+    memory: 'Reads the reporting tables every Monday at `06:00`.',
+    is_pinned: false,
+    created_at: new Date(NOW - 16 * ONE_DAY).toISOString(),
+    updated_at: new Date(NOW - 4 * ONE_DAY).toISOString(),
+  },
+  {
+    id: 'mem_6',
+    user_id: 'preview-user',
+    title: 'Index naming',
+    memory: '`idx_` then table then column, lower case, underscores.',
+    is_pinned: false,
+    created_at: new Date(NOW - 14 * ONE_DAY).toISOString(),
+    updated_at: new Date(NOW - 3 * ONE_DAY).toISOString(),
+  },
+  {
+    id: 'mem_7',
+    user_id: 'preview-user',
+    title: 'Sentry project slugs',
+    memory: '`payments`, `checkout`, `billing`. Nothing else is ours.',
+    is_pinned: false,
+    created_at: new Date(NOW - 10 * ONE_DAY).toISOString(),
     updated_at: new Date(NOW - 2 * ONE_DAY).toISOString(),
   },
+  {
+    id: 'mem_8',
+    user_id: 'preview-user',
+    title: 'Branch rules',
+    memory:
+      'Never push to `main`.\n\n- Create a feature branch\n- Open a PR\n- Wait for CI + approval\n',
+    is_pinned: false,
+    created_at: new Date(NOW - 9 * ONE_DAY).toISOString(),
+    updated_at: new Date(NOW - ONE_DAY).toISOString(),
+  },
 ];
+
+function previewShare(
+  id: string,
+  memoryId: string,
+  usedCount = 0,
+): MemoryShare {
+  return {
+    id,
+    memory_id: memoryId,
+    share_code: `demo_${memoryId}_${id}`,
+    share_url: buildMemoryShareUrl(`demo_${memoryId}_${id}`),
+    status: 'pending',
+    expires_at: new Date(NOW + 7 * ONE_DAY).toISOString(),
+    max_uses: null,
+    used_count: usedCount,
+    created_at: new Date(NOW - 3 * ONE_DAY).toISOString(),
+  };
+}
+
+const PREVIEW_MEMORY_SHARES: MemoryShare[] = [
+  previewShare('share_1', 'mem_1', 2),
+  previewShare('share_2', 'mem_1', 0),
+  previewShare('share_3', 'mem_2', 1),
+];
+const PREVIEW_REDEEMED_SHARE_CODES = new Set<string>();
 
 const PREVIEW_NOTIFICATION_PREFERENCES: NotificationPreferences = {
   ...buildDefaultNotificationPreferences(),
@@ -2486,9 +2619,28 @@ export function installPreviewApi() {
     row.updated_at = new Date().toISOString();
     return row;
   };
+  api.deleteUserPrompt = async (promptId: string) => {
+    const idx = PREVIEW_USER_PROMPTS.findIndex((p) => p.id === promptId);
+    if (idx < 0) throw new Error('Prompt not found');
+    PREVIEW_USER_PROMPTS.splice(idx, 1);
+  };
 
   api.getMemories = async (userId: string) =>
     PREVIEW_MEMORIES.filter((m) => m.user_id === (userId || 'preview-user'));
+  api.createMemory = async (payload) => {
+    const now = new Date().toISOString();
+    const row: Memory = {
+      id: `mem_${Date.now()}`,
+      user_id: 'preview-user',
+      title: payload.title,
+      memory: payload.memory,
+      is_pinned: false,
+      created_at: now,
+      updated_at: now,
+    };
+    PREVIEW_MEMORIES.unshift(row);
+    return row;
+  };
   api.updateMemory = async (
     memoryId: string,
     userId: string,
@@ -2624,11 +2776,43 @@ export function installPreviewApi() {
     const next: PrivateConnectorCredentialStatus = {
       connector_key: connectorKey,
       configured: true,
+      is_enabled: prev?.is_enabled ?? true,
       configured_keys: Object.keys(credentials),
       credential_metadata: null,
       created_at: prev?.created_at ?? now,
       updated_at: now,
       revoked_at: null,
+      last_tested_at: null,
+      last_error: null,
+    };
+    PREVIEW_PRIVATE_CONNECTOR_STATUS[connectorKey] = next;
+    return next;
+  };
+  api.setConnectorEnabled = async (connectorKey, isEnabled) => {
+    const prev = PREVIEW_PRIVATE_CONNECTOR_STATUS[connectorKey];
+    if (!prev?.configured) {
+      throw new Error('Connector is not set up.');
+    }
+    const next: PrivateConnectorCredentialStatus = {
+      ...prev,
+      is_enabled: isEnabled,
+      updated_at: new Date().toISOString(),
+    };
+    PREVIEW_PRIVATE_CONNECTOR_STATUS[connectorKey] = next;
+    return next;
+  };
+  api.testPrivateConnectorCredentials = async (connectorKey) => {
+    const prev = PREVIEW_PRIVATE_CONNECTOR_STATUS[connectorKey];
+    if (!prev?.configured) {
+      throw new Error('Connector is not set up.');
+    }
+    if (prev.revoked_at) {
+      throw new Error('Connector is revoked.');
+    }
+    const next: PrivateConnectorCredentialStatus = {
+      ...prev,
+      last_tested_at: new Date().toISOString(),
+      last_error: null,
     };
     PREVIEW_PRIVATE_CONNECTOR_STATUS[connectorKey] = next;
     return next;

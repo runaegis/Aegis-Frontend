@@ -81,22 +81,36 @@ const markdownComponents = {
       {...props}
     />
   ),
-  code: ({ className, ...props }: ComponentPropsWithoutRef<'code'>) => (
-    <code
-      className={cn(
-        'rounded-[4px] bg-[var(--neutral-weak-50)] px-1 py-0.5 text-[12px] text-[var(--neutral-strong-950)]',
-        '[font-family:var(--font-geist-mono),ui-monospace,monospace]',
-        className,
-      )}
-      {...props}
-    />
-  ),
+  code: ({ className, ...props }: ComponentPropsWithoutRef<'code'>) => {
+    const fenced = Boolean(className?.includes('language-'));
+    if (fenced) {
+      return (
+        <code
+          className={cn(
+            'text-[12px] text-[var(--neutral-strong-950)] [font-family:var(--font-mono),ui-monospace,monospace]',
+            className,
+          )}
+          {...props}
+        />
+      );
+    }
+    return (
+      <code
+        className={cn(
+          'rounded-[4px] bg-[var(--neutral-weak-50)] px-1 py-[1px] text-[12px] text-[var(--neutral-strong-950)]',
+          '[font-family:var(--font-mono),ui-monospace,monospace]',
+          className,
+        )}
+        {...props}
+      />
+    );
+  },
   pre: ({ className, ...props }: ComponentPropsWithoutRef<'pre'>) => (
     <pre
       className={cn(
         'mb-3 overflow-x-auto rounded-[8px] border border-[var(--stroke-soft-200)] bg-[var(--neutral-weak-50)] px-3 py-2.5 last:mb-0',
         'text-[12px] leading-[1.55] text-[var(--neutral-strong-950)]',
-        '[font-family:var(--font-geist-mono),ui-monospace,monospace]',
+        '[font-family:var(--font-mono),ui-monospace,monospace]',
         className,
       )}
       {...props}
@@ -145,7 +159,7 @@ export function MarkdownContent({ content, className, compact }: MarkdownContent
     <div
       className={cn(
         'markdown-content',
-        compact && 'max-h-[6.4em] overflow-hidden',
+        compact && 'max-h-[3.3em] overflow-hidden',
         className,
       )}
     >
