@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Activity, ChevronRight, Search, X } from 'lucide-react';
+import { Activity, Check, ChevronRight, Search, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
@@ -671,17 +671,28 @@ function RunRow({
   onToggle: () => void;
 }) {
   const action = item.action;
+  const isAccepted = isAcceptedDecision(action.decision);
 
   return (
     <>
       <TR clickable isExpanded={isExpanded} onClick={onToggle}>
         <TD className="max-w-[220px]">
           <div className="flex items-center gap-2.5">
-            <span
-              className="inline-block h-1.5 w-1.5 shrink-0 rounded-full"
-              style={{ backgroundColor: decisionColor(action.decision) }}
-              aria-hidden
-            />
+            {isAccepted ? (
+              <span
+                className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[var(--success-lighter)] text-[var(--success)]"
+                aria-label="Accepted"
+                title="Accepted"
+              >
+                <Check className="h-2.5 w-2.5" strokeWidth={2.75} aria-hidden />
+              </span>
+            ) : (
+              <span
+                className="inline-block h-1.5 w-1.5 shrink-0 rounded-full"
+                style={{ backgroundColor: decisionColor(action.decision) }}
+                aria-hidden
+              />
+            )}
             <AgentMark name={action.agent_name || ''} size="xs" />
             <span className="truncate text-[13.5px] font-semibold text-[var(--neutral-strong-950)]">
               {action.agent_name || 'Unknown'}
@@ -689,7 +700,15 @@ function RunRow({
           </div>
         </TD>
         <TD>
-          <CodeChip title={action.tool_name || ''}>{item.toolLabel}</CodeChip>
+          <div className="flex items-center gap-2">
+            <CodeChip title={action.tool_name || ''}>{item.toolLabel}</CodeChip>
+            {isAccepted ? (
+              <span className="inline-flex items-center gap-1 rounded-[5px] bg-[var(--success-lighter)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--success)]">
+                <Check className="h-2.5 w-2.5" strokeWidth={2.75} aria-hidden />
+                Accepted
+              </span>
+            ) : null}
+          </div>
         </TD>
         <TD className="whitespace-nowrap">
           <div
@@ -728,9 +747,17 @@ function RunRow({
           <TRExpanded key="expanded" colSpan={5}>
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(320px,0.9fr)]">
               <div>
-                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.05em] text-[var(--neutral-soft-400)]">
-                  Full summary
-                </p>
+                <div className="mb-1.5 flex items-center gap-2">
+                  {isAccepted ? (
+                    <span className="inline-flex items-center gap-1 rounded-[5px] bg-[var(--success-lighter)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--success)]">
+                      <Check className="h-2.5 w-2.5" strokeWidth={2.75} aria-hidden />
+                      Accepted
+                    </span>
+                  ) : null}
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.05em] text-[var(--neutral-soft-400)]">
+                    Full summary
+                  </p>
+                </div>
                 <p className="text-[13px] leading-[1.6] text-[var(--neutral-strong-950)]">
                   {action.action_summary || 'No summary provided'}
                 </p>
@@ -760,8 +787,23 @@ function RunRow({
   );
 }
 
+function isAcceptedDecision(decision: string | null | undefined): boolean {
+  const normalized = String(decision || '').trim().toLowerCase();
+  return normalized === 'allow' || normalized === 'allowed' || normalized === 'accept' || normalized === 'accepted';
+}
+
 function DecisionOptionDot({ decision }: { decision: string }) {
-  return (
+  const isAccepted = isAcceptedDecision(decision);
+
+  return isAccepted ? (
+    <span
+      className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-[var(--success-lighter)] text-[var(--success)]"
+      aria-label="Accepted"
+      title="Accepted"
+    >
+      <Check className="h-2.5 w-2.5" strokeWidth={2.75} aria-hidden />
+    </span>
+  ) : (
     <span
       className="inline-block h-2 w-2 shrink-0 rounded-full"
       style={{ backgroundColor: decisionColor(decision) }}
