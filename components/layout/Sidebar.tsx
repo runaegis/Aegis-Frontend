@@ -21,6 +21,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { api } from '@/lib/api';
+import { normalizeNotificationType } from '@/lib/notifications';
 import { AegisLogo } from '@/components/ui/AegisLogo';
 import { WorkspaceSwitcher } from '@/components/ui/WorkspaceSwitcher';
 
@@ -134,15 +135,17 @@ export default function Sidebar() {
 
   useEffect(() => {
     let cancelled = false;
-    api
-      .getWorkspaceInviteInbox()
-      .then((invites) => {
-        if (cancelled) return;
-        setInboxCount(invites.filter((invite) => invite.status === 'pending').length);
-      })
-      .catch(() => {
-        if (!cancelled) setInboxCount(0);
-      });
+    Promise.all([
+      api.getNotifications({ unread_only: true, limit: 50 }).catch(() => null),
+      api.getWorkspaceInviteInbox().catch(() => []),
+    ]).then(([notifications, invites]) => {
+      if (cancelled) return;
+      const pingUnread = (notifications?.items ?? []).filter(
+        (item) => normalizeNotificationType(item.notification_type) === 'PING',
+      ).length;
+      const pending = invites.filter((invite) => invite.status === 'pending').length;
+      setInboxCount(pingUnread + pending);
+    });
     return () => {
       cancelled = true;
     };

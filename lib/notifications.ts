@@ -4,12 +4,13 @@ export type NotificationPreferenceKey =
   | 'notify_allow'
   | 'notify_deny'
   | 'notify_approval'
-  | 'notify_rewrite';
+  | 'notify_rewrite'
+  | 'notify_ping';
 
 export type NotificationPreferenceDescriptor = {
   key: NotificationPreferenceKey;
   type: NotificationType;
-  label: 'Allow' | 'Deny' | 'Approval' | 'Rewrite';
+  label: 'Allow' | 'Deny' | 'Approval' | 'Rewrite' | 'Ping';
   badgeLabel: NotificationType;
   description: string;
   tone: 'success' | 'error' | 'warning' | 'feature';
@@ -53,6 +54,15 @@ export const NOTIFICATION_PREFERENCE_FIELDS: readonly NotificationPreferenceDesc
     tone: 'feature',
     defaultEnabled: true,
   },
+  {
+    key: 'notify_ping',
+    type: 'PING',
+    label: 'Ping',
+    badgeLabel: 'PING',
+    description: 'Notify when someone pings you in a workspace conversation.',
+    tone: 'warning',
+    defaultEnabled: true,
+  },
 ] as const;
 
 const NOTIFICATION_TYPE_TO_KEY: Record<NotificationType, NotificationPreferenceKey> = {
@@ -60,6 +70,7 @@ const NOTIFICATION_TYPE_TO_KEY: Record<NotificationType, NotificationPreferenceK
   DENY: 'notify_deny',
   APPROVAL: 'notify_approval',
   REWRITE: 'notify_rewrite',
+  PING: 'notify_ping',
 };
 
 export function buildDefaultNotificationPreferences(): NotificationPreferences {
@@ -68,6 +79,7 @@ export function buildDefaultNotificationPreferences(): NotificationPreferences {
     notify_deny: true,
     notify_approval: true,
     notify_rewrite: true,
+    notify_ping: true,
     created_at: null,
     updated_at: null,
   };
@@ -81,6 +93,7 @@ export function normalizeNotificationType(
   if (upper === 'DENY') return 'DENY';
   if (upper === 'REWRITE') return 'REWRITE';
   if (upper === 'APPROVAL' || upper === 'REQUIRE_APPROVAL') return 'APPROVAL';
+  if (upper === 'PING') return 'PING';
   return null;
 }
 

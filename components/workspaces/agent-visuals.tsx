@@ -142,6 +142,9 @@ export function iconForHandle(handle: string, roleLabel?: string | null): Lucide
   return ICON_RULES.find((rule) => rule.match.test(haystack))?.icon ?? Bot;
 }
 
+/** Handles reserved for human pings — never offered as agent names. */
+export const RESERVED_PING_HANDLES = new Set(['user', 'owner']);
+
 /** Strips a leading @ and normalizes to the handle charset the API expects. */
 export function normalizeHandle(value: string) {
   return value
@@ -237,21 +240,34 @@ export function AgentHandle({ handle, className }: { handle: string; className?:
 export function MentionText({
   text,
   knownHandles,
+  peopleHandles = ['user', 'owner'],
   className,
   tone = 'hue',
 }: {
   text: string;
   knownHandles: string[];
+  peopleHandles?: string[];
   className?: string;
   tone?: 'hue' | 'primary';
 }) {
   const known = new Set(knownHandles.map((h) => h.toLowerCase()));
+  const people = new Set(peopleHandles.map((h) => h.toLowerCase()));
   const parts = text.split(/(@[a-z0-9_-]+)/gi);
   return (
     <span className={className}>
       {parts.map((part, index) => {
         if (/^@[a-z0-9_-]+$/i.test(part)) {
           const handle = part.slice(1);
+          if (people.has(handle.toLowerCase())) {
+            return (
+              <span
+                key={index}
+                className="rounded-[4px] bg-[var(--warning)]/30 px-0.5 font-medium text-[var(--warning-dark)]"
+              >
+                @{handle}
+              </span>
+            );
+          }
           return (
             <MentionChip
               key={index}

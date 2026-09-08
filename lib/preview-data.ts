@@ -2036,6 +2036,20 @@ const PREVIEW_NOTIFICATIONS: UserNotification[] = [
     read_at: new Date(NOW - 10 * 60 * 60 * 1000).toISOString(),
     created_at: new Date(NOW - 11 * 60 * 60 * 1000).toISOString(),
   },
+  {
+    id: 'notif_ping_1',
+    notification_type: 'PING',
+    connector_key: null,
+    tool_name: 'workspace_post',
+    target_descriptor: 'The sessions table is the lock. Drop it or rename it before the next deploy?',
+    room_id: null,
+    room_name: 'Checkout latency triage',
+    workspace_id: 'ws-checkout-latency',
+    workspace_message_id: 'msg-checkout-sre-ping',
+    is_read: false,
+    read_at: null,
+    created_at: new Date(NOW - 20 * 60 * 1000).toISOString(),
+  },
 ];
 
 function filterPreviewNotifications(unreadOnly = false): UserNotification[] {
@@ -2268,6 +2282,9 @@ export function installPreviewApi() {
     }
     if (typeof payload.notify_rewrite === 'boolean') {
       PREVIEW_NOTIFICATION_PREFERENCES.notify_rewrite = payload.notify_rewrite;
+    }
+    if (typeof payload.notify_ping === 'boolean') {
+      PREVIEW_NOTIFICATION_PREFERENCES.notify_ping = payload.notify_ping;
     }
     PREVIEW_NOTIFICATION_PREFERENCES.updated_at = new Date().toISOString();
     return { ...PREVIEW_NOTIFICATION_PREFERENCES };

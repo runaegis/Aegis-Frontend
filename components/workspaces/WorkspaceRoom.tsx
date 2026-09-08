@@ -6,11 +6,13 @@ import { ArrowLeft, FileText, Moon, Pencil, Sun, UserPlus } from 'lucide-react';
 import {
   api,
   getWorkspaceMessageStreamUrl,
+  normalizeWorkspaceMessage,
   type WorkspaceAgentKeyResponse,
   type WorkspaceAgentStatus,
   type WorkspaceDetail,
   type WorkspaceFileRef,
   type WorkspaceMessage,
+  type WorkspacePerson,
   type WorkspacePointerStatus,
   type WorkspaceSummary,
 } from '@/lib/api';
@@ -76,13 +78,20 @@ export function WorkspaceRoom({ workspaceId }: { workspaceId: string }) {
   const [inviteOpen, setInviteOpen] = useState(0);
   const [titleEdit, setTitleEdit] = useState(0);
   const [runsTotal, setRunsTotal] = useState<number | null>(null);
+  const [people, setPeople] = useState<WorkspacePerson[]>([]);
+  const [focusMessageId, setFocusMessageId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
     try {
-      const [d, list] = await Promise.all([api.getWorkspace(workspaceId), api.getWorkspaces()]);
+      const [d, list, nextPeople] = await Promise.all([
+        api.getWorkspace(workspaceId),
+        api.getWorkspaces(),
+        api.getWorkspacePeople(workspaceId).catch(() => [] as WorkspacePerson[]),
+      ]);
       setDetail(d);
       setSiblings(list);
+      setPeople(nextPeople);
       setSenderId(() => {
         const viewerId = isDemo ? DEMO_VIEWER.userId : user?.id;
         const mine = d.agents.find(
@@ -111,8 +120,12 @@ export function WorkspaceRoom({ workspaceId }: { workspaceId: string }) {
   }, [workspaceId, user?.id, isDemo]);
 
   useEffect(() => {
-    setTab('conversation');
+    const params = new URLSearchParams(window.location.search);
+    const nextTab = params.get('tab');
+    const allowed: Tab[] = ['conversation', 'agents', 'tasks', 'runs', 'settings'];
+    setTab(allowed.includes(nextTab as Tab) ? (nextTab as Tab) : 'conversation');
     setRunsTotal(null);
+    setFocusMessageId(params.get('message'));
   }, [workspaceId]);
 
   useEffect(() => {
@@ -130,7 +143,7 @@ export function WorkspaceRoom({ workspaceId }: { workspaceId: string }) {
       if (!event.data) return;
 
       try {
-        const incoming = JSON.parse(event.data) as WorkspaceMessage;
+        const incoming = normalizeWorkspaceMessage(JSON.parse(event.data));
         if (!incoming?.id) return;
         if (incoming.workspace_id && incoming.workspace_id !== workspaceId) return;
 
@@ -158,17 +171,52 @@ export function WorkspaceRoom({ workspaceId }: { workspaceId: string }) {
     [detail?.pointers],
   );
   const activeCount = agents.filter((a) => a.status === 'active').length;
-  const viewerAgentIds = useMemo(() => (senderId ? [senderId] : []), [senderId]);
+  const viewerAgentIds = useMemo(() => {
+    const viewerId = isDemo ? DEMO_VIEWER.userId : user?.id;
+    return agents
+      .filter((a) => a.status === 'active' && viewerId && a.user_id === viewerId)
+      .map((a) => a.id);
+  }, [agents, isDemo, user?.id]);
   const summary = siblings.find((s) => s.id === workspaceId);
   const runCount = summary?.run_count ?? 0;
   const tokenCount = summary?.total_tokens ?? 0;
 
-  const sendMessage = async (text: string, files: WorkspaceFileRef[]) => {
+  const sendMessage = async (
+    text: string,
+    files: WorkspaceFileRef[],
+    pingUserIds: string[] = [],
+  ) => {
     if (!senderId) return;
+    const sender = agents.find((a) => a.id === senderId);
+    const ids = new Set(pingUserIds);
+    const tokens = Array.from((text || '').matchAll(/@([a-z0-9_-]+)/gi)).map((m) =>
+      m[1].toLowerCase(),
+    );
+    for (const person of people) {
+      const handle = person.ping_handle?.trim().toLowerCase();
+      if (handle && tokens.includes(handle)) ids.add(person.user_id);
+    }
+    if (tokens.includes('owner')) {
+      const owner = people.find((person) => person.is_owner);
+      if (owner) ids.add(owner.user_id);
+    }
+    if (tokens.includes('user') && sender?.user_id) ids.add(sender.user_id);
+    try {
+      const resolved = await api.resolveWorkspaceMentions(workspaceId, {
+        message_text: text,
+        sender_member_id: senderId,
+      });
+      for (const ping of resolved.pinged_users ?? []) {
+        if (ping.user_id) ids.add(ping.user_id);
+      }
+    } catch {
+      // Older APIs still accept ping_user_ids computed locally.
+    }
     await api.createWorkspaceMessage(workspaceId, {
       sender_member_id: senderId,
       message_text: text || null,
       file_refs: files,
+      ping_user_ids: ids.size ? [...ids] : undefined,
     });
     await load();
   };
@@ -409,11 +457,14 @@ export function WorkspaceRoom({ workspaceId }: { workspaceId: string }) {
               <AgentChat
                 messages={detail!.messages}
                 agents={agents}
+                people={people}
                 viewerAgentIds={viewerAgentIds}
                 workspaceTitle={workspace.title}
+                focusMessageId={focusMessageId}
               />
               <Composer
                 agents={agents}
+                people={people}
                 senderId={senderId}
                 onSend={sendMessage}
                 focusSignal={composerFocus}
