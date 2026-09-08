@@ -1,12 +1,11 @@
 {
     "mcpServers": {
-      "aegis_local_frontend": {
-        "transport": "mcp",
-        "url": "https://mcp.runaegis.co/mcp",
-        "headers": {
-       
-          "X-Agent-Key": "2ufXR6yv086CtPKhfoZoT-4eOebp-9yXDjEvEyAwrUi2cJetMAxk6sagDP26lqw9"
-        }
+    "aegis_frontend": {
+      "transport": "sse",
+      "url": "http://localhost:8082/sse",
+      "headers": {
+        "X-Agent-Key": "2fsqGbSpQ8MFL7aGlR4y5IU4E4AwUBMvYnKC6wjBvXZaf11O4_YjJIGMECfTW7Ju"
       }
+    }
     }
 }

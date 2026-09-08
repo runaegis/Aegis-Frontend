@@ -146,8 +146,25 @@ export type WorkspaceMessage = {
   sender_member_id: string;
   message_text: string | null;
   mentioned_member_ids: string[];
+  mentioned_user_ids?: string[];
+  pinged_you?: boolean;
   file_refs: WorkspaceFileRef[];
   created_at: string;
+};
+
+export type WorkspacePerson = {
+  user_id: string;
+  name: string;
+  email?: string | null;
+  is_owner: boolean;
+  ping_handle: string;
+};
+
+export type WorkspaceMentionResolve = {
+  mentions: Array<{ handle?: string; member_id?: string }>;
+  unknown_handles: string[];
+  pinged_users: Array<{ user_id: string; name?: string; ping_handle?: string }>;
+  unknown_pings: string[];
 };
 
 export type WorkspacePointerStatus = "pending" | "review" | "done";
@@ -468,6 +485,100 @@ function asFiniteNumber(value: unknown): number | undefined {
     if (Number.isFinite(n)) return n;
   }
   return undefined;
+}
+
+function asIdList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter(
+    (item): item is string => typeof item === "string" && item.trim().length > 0,
+  );
+}
+
+export function normalizeWorkspaceMessage(row: unknown): WorkspaceMessage | null {
+  if (!row || typeof row !== "object") return null;
+  const raw = parseRow(row) as Record<string, unknown>;
+  const id = typeof raw.id === "string" ? raw.id : "";
+  if (!id) return null;
+
+  return {
+    id,
+    workspace_id: typeof raw.workspace_id === "string" ? raw.workspace_id : "",
+    sender_member_id:
+      typeof raw.sender_member_id === "string" ? raw.sender_member_id : "",
+    message_text:
+      typeof raw.message_text === "string"
+        ? raw.message_text
+        : raw.message_text == null
+          ? null
+          : String(raw.message_text),
+    mentioned_member_ids: asIdList(raw.mentioned_member_ids),
+    mentioned_user_ids: asIdList(raw.mentioned_user_ids),
+    pinged_you: raw.pinged_you === true,
+    file_refs: Array.isArray(raw.file_refs)
+      ? (raw.file_refs as WorkspaceFileRef[])
+      : [],
+    created_at:
+      typeof raw.created_at === "string"
+        ? raw.created_at
+        : new Date().toISOString(),
+  };
+}
+
+function normalizeWorkspacePerson(row: unknown): WorkspacePerson | null {
+  if (!row || typeof row !== "object") return null;
+  const raw = parseRow(row) as Record<string, unknown>;
+  const userId = typeof raw.user_id === "string" ? raw.user_id : "";
+  if (!userId) return null;
+  return {
+    user_id: userId,
+    name: typeof raw.name === "string" && raw.name.trim() ? raw.name : "Member",
+    email: typeof raw.email === "string" ? raw.email : null,
+    is_owner: raw.is_owner === true,
+    ping_handle: typeof raw.ping_handle === "string" ? raw.ping_handle : "",
+  };
+}
+
+function normalizeMentionResolve(payload: unknown): WorkspaceMentionResolve {
+  const raw =
+    payload && typeof payload === "object"
+      ? (payload as Record<string, unknown>)
+      : {};
+  const pingedUsers = Array.isArray(raw.pinged_users)
+    ? raw.pinged_users.flatMap((row) => {
+        if (!row || typeof row !== "object") return [];
+        const item = row as Record<string, unknown>;
+        const userId = typeof item.user_id === "string" ? item.user_id : "";
+        if (!userId) return [];
+        return [
+          {
+            user_id: userId,
+            name: typeof item.name === "string" ? item.name : undefined,
+            ping_handle:
+              typeof item.ping_handle === "string" ? item.ping_handle : undefined,
+          },
+        ];
+      })
+    : [];
+  const mentions = Array.isArray(raw.mentions)
+    ? raw.mentions.flatMap((row) => {
+        if (!row || typeof row !== "object") return [];
+        const item = row as Record<string, unknown>;
+        return [
+          {
+            handle: typeof item.handle === "string" ? item.handle : undefined,
+            member_id:
+              typeof item.member_id === "string" ? item.member_id : undefined,
+          },
+        ];
+      })
+    : [];
+
+  return {
+    mentions,
+    unknown_handles: asIdList(raw.unknown_handles),
+    pinged_users: pingedUsers,
+    unknown_pings: asIdList(raw.unknown_pings),
+  };
 }
 
 function extractAgentHandles(parsed: Record<string, unknown>): string[] | undefined {
@@ -1521,6 +1632,10 @@ function normalizeNotificationPreferences(
       typeof raw.notify_rewrite === "boolean"
         ? raw.notify_rewrite
         : defaults.notify_rewrite,
+    notify_ping:
+      typeof raw.notify_ping === "boolean"
+        ? raw.notify_ping
+        : defaults.notify_ping,
     created_at: typeof raw.created_at === "string" ? raw.created_at : null,
     updated_at: typeof raw.updated_at === "string" ? raw.updated_at : null,
   };
@@ -1565,6 +1680,12 @@ function normalizeUserNotification(
       typeof raw.target_descriptor === "string" ? raw.target_descriptor : null,
     room_id: typeof raw.room_id === "string" ? raw.room_id : null,
     room_name: typeof raw.room_name === "string" ? raw.room_name : null,
+    workspace_id:
+      typeof raw.workspace_id === "string" ? raw.workspace_id : null,
+    workspace_message_id:
+      typeof raw.workspace_message_id === "string"
+        ? raw.workspace_message_id
+        : null,
     is_read:
       typeof raw.is_read === "boolean"
         ? raw.is_read
@@ -2691,7 +2812,11 @@ export const api = {
     payload: Partial<
       Pick<
         NotificationPreferences,
-        "notify_allow" | "notify_deny" | "notify_approval" | "notify_rewrite"
+        | "notify_allow"
+        | "notify_deny"
+        | "notify_approval"
+        | "notify_rewrite"
+        | "notify_ping"
       >
     >,
   ): Promise<NotificationPreferences> => {
@@ -3658,7 +3783,15 @@ export const api = {
     if (!res.ok) {
       throw new Error(`Failed to load workspace: ${await readErrorMessage(res)}`);
     }
-    return res.json();
+    const data = (await res.json()) as WorkspaceDetail;
+    return {
+      ...data,
+      messages: Array.isArray(data.messages)
+        ? data.messages
+            .map(normalizeWorkspaceMessage)
+            .filter((message): message is WorkspaceMessage => Boolean(message))
+        : [],
+    };
   },
 
   updateWorkspace: async (
@@ -3776,6 +3909,7 @@ export const api = {
       sender_member_id: string;
       message_text?: string | null;
       file_refs?: WorkspaceFileRef[];
+      ping_user_ids?: string[];
     },
   ): Promise<WorkspaceMessage> => {
     const res = await apiFetch(
@@ -3789,7 +3923,53 @@ export const api = {
     if (!res.ok) {
       throw new Error(`Failed to post message: ${await readErrorMessage(res)}`);
     }
-    return parseRow(await res.json()) as WorkspaceMessage;
+    const message = normalizeWorkspaceMessage(await res.json());
+    if (!message) {
+      throw new Error("Failed to post message: invalid response");
+    }
+    return message;
+  },
+
+  getWorkspacePeople: async (
+    workspaceId: string,
+  ): Promise<WorkspacePerson[]> => {
+    const res = await apiFetch(
+      `${API_BASE}/api/workspaces/${encodeURIComponent(workspaceId)}/people`,
+    );
+    if (!res.ok) {
+      throw new Error(
+        `Failed to load workspace people: ${await readErrorMessage(res)}`,
+      );
+    }
+    const data = await res.json();
+    const rows = Array.isArray(data)
+      ? data
+      : Array.isArray((data as { people?: unknown }).people)
+        ? (data as { people: unknown[] }).people
+        : [];
+    return rows
+      .map(normalizeWorkspacePerson)
+      .filter((person): person is WorkspacePerson => Boolean(person));
+  },
+
+  resolveWorkspaceMentions: async (
+    workspaceId: string,
+    payload: { message_text: string; sender_member_id: string },
+  ): Promise<WorkspaceMentionResolve> => {
+    const res = await apiFetch(
+      `${API_BASE}/api/workspaces/${encodeURIComponent(workspaceId)}/messages/resolve-mentions`,
+      {
+        method: "POST",
+        headers: getJsonHeaders(),
+        body: JSON.stringify(payload),
+      },
+    );
+    if (!res.ok) {
+      throw new Error(
+        `Failed to resolve mentions: ${await readErrorMessage(res)}`,
+      );
+    }
+    return normalizeMentionResolve(await res.json());
   },
 
   getWorkspacePointers: async (

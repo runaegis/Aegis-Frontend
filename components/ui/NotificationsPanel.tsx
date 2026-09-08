@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import {
   Bell,
@@ -76,7 +77,7 @@ function NotificationsEmptyState({ unreadOnly }: { unreadOnly: boolean }) {
       <p className="mt-1 max-w-[260px] text-[12px] leading-[1.55] text-[var(--neutral-sub-600)]">
         {unreadOnly
           ? 'Everything in the panel has already been read.'
-          : 'The bell will show Allow, Deny, Approval, and Rewrite decisions here.'}
+          : 'The bell will show policy decisions and workspace pings here.'}
       </p>
       <Link
         href="/dashboard/settings#profile"
@@ -90,6 +91,7 @@ function NotificationsEmptyState({ unreadOnly }: { unreadOnly: boolean }) {
 
 export function NotificationsPanel() {
   const reduce = useReducedMotion();
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<NotificationView>('all');
   const [notifications, setNotifications] = useState<UserNotification[]>([]);
@@ -236,6 +238,23 @@ export function NotificationsPanel() {
     [markingId, view],
   );
 
+  const handleNotificationClick = useCallback(
+    async (notification: UserNotification) => {
+      const type = normalizeNotificationType(notification.notification_type);
+      if (!notification.is_read) {
+        await handleMarkRead(notification);
+      }
+      if (type === 'PING' && notification.workspace_id) {
+        const qs = notification.workspace_message_id
+          ? `?message=${encodeURIComponent(notification.workspace_message_id)}`
+          : '';
+        setOpen(false);
+        router.push(`/workspaces/${notification.workspace_id}${qs}`);
+      }
+    },
+    [handleMarkRead, router],
+  );
+
   const showingFooterSummary = useMemo(
     () => total > notifications.length,
     [notifications.length, total],
@@ -364,9 +383,16 @@ export function NotificationsPanel() {
                           key={notification.id}
                           type="button"
                           onClick={() => {
-                            void handleMarkRead(notification);
+                            void handleNotificationClick(notification);
                           }}
-                          title={notification.is_read ? 'Read' : 'Mark as read'}
+                          title={
+                            normalizeNotificationType(notification.notification_type) ===
+                            'PING'
+                              ? 'Open workspace'
+                              : notification.is_read
+                                ? 'Read'
+                                : 'Mark as read'
+                          }
                           className={
                             notification.is_read
                               ? 'w-full rounded-[10px] border border-[var(--stroke-soft-200)] bg-white p-3 text-left transition-colors hover:bg-[var(--neutral-weak-50)]/60 focus:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--primary-alpha-16)]'

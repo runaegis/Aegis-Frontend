@@ -13,7 +13,7 @@ import { Input } from '@/components/ui/Input';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { RelativeTime } from '@/components/ui/RelativeTime';
 import { cn, formatCompactNumber } from '@/lib/utils';
-import { AgentGlyph, normalizeHandle } from './agent-visuals';
+import { AgentGlyph, RESERVED_PING_HANDLES, normalizeHandle } from './agent-visuals';
 import { PanelEmpty } from './PanelEmpty';
 import { InviteWorkspaceDialog } from './InviteWorkspaceDialog';
 import { Dialog } from './Dialog';
@@ -120,7 +120,9 @@ export function AgentRoster({
   const active = agents.filter((a) => a.status === 'active');
   const normalized = normalizeHandle(handle);
   const duplicate = active.some((a) => a.handle.toLowerCase() === normalized);
+  const reserved = RESERVED_PING_HANDLES.has(normalized);
   const editNormalized = normalizeHandle(editHandle);
+  const editReserved = RESERVED_PING_HANDLES.has(editNormalized);
   const editDuplicate =
     Boolean(editing) &&
     active.some(
@@ -128,7 +130,7 @@ export function AgentRoster({
     );
 
   const submit = async () => {
-    if (!normalized || duplicate || busy) return;
+    if (!normalized || duplicate || reserved || busy) return;
     setBusy(true);
     setError(null);
     try {
@@ -144,7 +146,7 @@ export function AgentRoster({
   };
 
   const saveEdit = async () => {
-    if (!editing || !editNormalized || editDuplicate || busy) return;
+    if (!editing || !editNormalized || editDuplicate || editReserved || busy) return;
     setBusy(true);
     try {
       await onUpdate(editing.id, {
@@ -187,7 +189,7 @@ export function AgentRoster({
                   value={handle}
                   onChange={(e) => setHandle(e.target.value)}
                   placeholder="handle, e.g. backend"
-                  invalid={!!normalized && duplicate}
+                  invalid={!!normalized && (duplicate || reserved)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') void submit();
                     if (e.key === 'Escape') setInviting(false);
@@ -208,13 +210,18 @@ export function AgentRoster({
                   @{normalized} is already in this workspace.
                 </p>
               )}
+              {reserved && (
+                <p className="mt-2 text-[11.5px] text-[var(--error-dark)]">
+                  @{normalized} is reserved for people pings.
+                </p>
+              )}
               {error && <p className="mt-2 text-[11.5px] text-[var(--error-dark)]">{error}</p>}
               <div className="mt-3 flex flex-wrap items-center gap-1.5">
                 <Button
                   variant="primary"
                   size="md"
                   leadingIcon={<Plus size={13} />}
-                  disabled={!normalized || duplicate || busy}
+                  disabled={!normalized || duplicate || reserved || busy}
                   onClick={() => void submit()}
                 >
                   {busy ? 'Adding...' : 'Add agent'}
@@ -359,7 +366,7 @@ export function AgentRoster({
             <Button
               variant="primary"
               size="md"
-              disabled={!editNormalized || editDuplicate || busy}
+              disabled={!editNormalized || editDuplicate || editReserved || busy}
               onClick={() => void saveEdit()}
             >
               Save
@@ -372,7 +379,7 @@ export function AgentRoster({
             value={editHandle}
             onChange={(e) => setEditHandle(e.target.value)}
             placeholder="handle"
-            invalid={editDuplicate}
+            invalid={editDuplicate || editReserved}
           />
           <Input
             value={editRole}
@@ -382,6 +389,11 @@ export function AgentRoster({
           {editDuplicate && (
             <p className="text-[11.5px] text-[var(--error-dark)]">
               @{editNormalized} is already in this workspace.
+            </p>
+          )}
+          {editReserved && (
+            <p className="text-[11.5px] text-[var(--error-dark)]">
+              @{editNormalized} is reserved for people pings.
             </p>
           )}
         </div>
