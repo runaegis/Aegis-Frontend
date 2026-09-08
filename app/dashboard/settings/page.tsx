@@ -441,7 +441,8 @@ function NotificationPreferencesCard({
     saved.notify_allow !== draft.notify_allow ||
     saved.notify_deny !== draft.notify_deny ||
     saved.notify_approval !== draft.notify_approval ||
-    saved.notify_rewrite !== draft.notify_rewrite
+    saved.notify_rewrite !== draft.notify_rewrite ||
+    saved.notify_ping !== draft.notify_ping
   );
 
   const handleSave = useCallback(async () => {
@@ -453,6 +454,7 @@ function NotificationPreferencesCard({
         notify_deny: draft.notify_deny,
         notify_approval: draft.notify_approval,
         notify_rewrite: draft.notify_rewrite,
+        notify_ping: draft.notify_ping,
       });
       setSaved(next);
       setDraft(next);
@@ -489,7 +491,7 @@ function NotificationPreferencesCard({
 
       {loading ? (
         <div className="space-y-3">
-          {Array.from({ length: 4 }).map((_, index) => (
+          {Array.from({ length: 5 }).map((_, index) => (
             <div
               key={index}
               className="flex items-start justify-between gap-4 rounded-[10px] border border-[var(--stroke-soft-200)] px-3 py-3"

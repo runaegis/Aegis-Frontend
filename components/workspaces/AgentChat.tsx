@@ -3,7 +3,7 @@
 import { useEffect, useRef } from 'react';
 import { useReducedMotion } from 'motion/react';
 import { MessagesSquare, Paperclip } from 'lucide-react';
-import type { WorkspaceAgent, WorkspaceMessage } from '@/lib/api';
+import type { WorkspaceAgent, WorkspaceMessage, WorkspacePerson } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { AgentGlyph, MentionText } from './agent-visuals';
 
@@ -27,30 +27,59 @@ function formatSize(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function pingChipLabel(
+  pingedYou: boolean,
+  mentionedUserIds: string[],
+  peopleById: Map<string, WorkspacePerson>,
+): string | null {
+  if (pingedYou) return 'mentioned you';
+  if (mentionedUserIds.length === 0) return null;
+  if (mentionedUserIds.length === 1) {
+    const name = peopleById.get(mentionedUserIds[0])?.name?.trim();
+    return name ? `pinged ${name}` : 'pinged a member';
+  }
+  return `pinged ${mentionedUserIds.length} people`;
+}
+
 /**
  * Flat conversation: avatar, sender, you/role, timestamp, then plain text.
- * Mentions of the posting agent get a thin orange border (no fill) plus
- * disabled actions — matching the Linear-style mock.
+ * Human pings use the filled amber "mentioned you" chip from the workspace mock.
+ * Agent mentions of the posting viewer stay a thin orange border without fill.
  */
 export function AgentChat({
   messages,
   agents,
+  people = [],
   viewerAgentIds = [],
   workspaceTitle,
+  focusMessageId = null,
 }: {
   messages: WorkspaceMessage[];
   agents: WorkspaceAgent[];
+  people?: WorkspacePerson[];
   viewerAgentIds?: string[];
   workspaceTitle: string;
+  focusMessageId?: string | null;
 }) {
   const reduce = useReducedMotion();
   const bottomRef = useRef<HTMLDivElement>(null);
   const byId = new Map(agents.map((a) => [a.id, a]));
+  const peopleById = new Map(people.map((person) => [person.user_id, person]));
   const handles = agents.map((a) => a.handle);
+  const peopleHandles = [
+    'user',
+    'owner',
+    ...people.map((person) => person.ping_handle).filter(Boolean),
+  ];
 
   useEffect(() => {
+    if (focusMessageId) {
+      const el = document.getElementById(`workspace-msg-${focusMessageId}`);
+      el?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'center' });
+      return;
+    }
     bottomRef.current?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'end' });
-  }, [messages.length, reduce]);
+  }, [messages.length, reduce, focusMessageId]);
 
   if (messages.length === 0) {
     return (
@@ -82,6 +111,8 @@ export function AgentChat({
         const mentionedYou = (viewerAgentIds ?? []).some((id) =>
           message.mentioned_member_ids.includes(id),
         );
+        const pingedYou = message.pinged_you === true;
+        const mentionedUserIds = message.mentioned_user_ids ?? [];
         const isYou = Boolean(sender && (viewerAgentIds ?? []).includes(sender.id));
 
         return (
@@ -99,8 +130,13 @@ export function AgentChat({
               message={message}
               sender={sender}
               handles={handles}
+              peopleHandles={peopleHandles}
+              peopleById={peopleById}
               mentionedYou={mentionedYou}
+              pingedYou={pingedYou}
+              mentionedUserIds={mentionedUserIds}
               isYou={isYou}
+              focused={focusMessageId === message.id}
             />
           </div>
         );
@@ -114,24 +150,39 @@ function MessageBubble({
   message,
   sender,
   handles,
+  peopleHandles,
+  peopleById,
   mentionedYou,
+  pingedYou,
+  mentionedUserIds,
   isYou,
+  focused,
 }: {
   message: WorkspaceMessage;
   sender?: WorkspaceAgent;
   handles: string[];
+  peopleHandles: string[];
+  peopleById: Map<string, WorkspacePerson>;
   mentionedYou: boolean;
+  pingedYou: boolean;
+  mentionedUserIds: string[];
   isYou: boolean;
+  focused: boolean;
 }) {
   const handle = sender?.handle ?? 'unknown';
   const relation = isYou ? 'you' : sender?.role_label || null;
+  const pingLabel = pingChipLabel(pingedYou, mentionedUserIds, peopleById);
+  const attention = pingedYou || mentionedYou;
+  const showActions = pingedYou || mentionedYou;
 
   return (
     <div
+      id={`workspace-msg-${message.id}`}
       className={cn(
         'my-1.5 flex gap-2.5 px-1 py-2',
-        mentionedYou &&
+        attention &&
           'rounded-[10px] border border-[var(--attention)]/45 bg-transparent px-2.5 py-2',
+        focused && 'ring-2 ring-[var(--warning)]/70',
       )}
     >
       <AgentGlyph handle={handle} roleLabel={sender?.role_label} />
@@ -146,7 +197,18 @@ function MessageBubble({
           <span className="text-[11.5px] text-[var(--neutral-soft-400)]">
             {timeLabel(message.created_at)}
           </span>
-          {mentionedYou && (
+          {pingLabel && (
+            <span
+              className={
+                pingedYou
+                  ? 'rounded-[6px] bg-[var(--warning)] px-1.5 py-px text-[10.5px] font-semibold text-[#1a1a1a]'
+                  : 'rounded px-1.5 py-px text-[10.5px] font-medium text-[var(--attention-dark)]'
+              }
+            >
+              {pingLabel}
+            </span>
+          )}
+          {mentionedYou && !pingedYou && (
             <span className="rounded px-1.5 py-px text-[10.5px] font-medium text-[var(--attention-dark)]">
               mentioned you
             </span>
@@ -160,7 +222,12 @@ function MessageBubble({
 
         {message.message_text && (
           <p className="mt-0.5 whitespace-pre-wrap text-[13.5px] leading-[1.65] text-[var(--neutral-strong-950)]">
-            <MentionText text={message.message_text} knownHandles={handles} tone="primary" />
+            <MentionText
+              text={message.message_text}
+              knownHandles={handles}
+              peopleHandles={peopleHandles}
+              tone="primary"
+            />
           </p>
         )}
 
@@ -179,13 +246,13 @@ function MessageBubble({
           </div>
         )}
 
-        {mentionedYou && (
-          <div className="mt-2 flex flex-wrap gap-1.5">
+        {showActions && (
+          <div className="mt-2.5 flex flex-wrap items-center gap-3">
             <button
               type="button"
               disabled
               title="Coming soon — pointers cannot link to a source message yet"
-              className="rounded-md bg-[var(--neutral-weak-50)] px-2.5 py-1.5 text-[12px] text-[var(--neutral-sub-600)]"
+              className="rounded-md border border-[var(--stroke-soft-200)] px-2.5 py-1.5 text-[12px] text-[var(--neutral-sub-600)] disabled:opacity-70"
             >
               Point a task at it
             </button>
@@ -193,7 +260,7 @@ function MessageBubble({
               type="button"
               disabled
               title="Coming soon — runs are not linked to messages"
-              className="rounded-md bg-[var(--neutral-weak-50)] px-2.5 py-1.5 text-[12px] text-[var(--neutral-sub-600)]"
+              className="text-[12px] text-[var(--neutral-sub-600)] underline-offset-2 disabled:opacity-70"
             >
               Open the runs behind this
             </button>

@@ -30,6 +30,8 @@ import {
   type WorkspaceSummary,
   type WorkspaceTaskPointer,
   type WorkspaceFileRef,
+  type WorkspacePerson,
+  type WorkspaceMentionResolve,
 } from '@/lib/api';
 import { buildWorkspaceJoinUrl } from '@/lib/authRedirect';
 
@@ -106,13 +108,16 @@ function message(
   mentions: string[],
   createdMinutes: number,
   fileRefs: WorkspaceFileRef[] = [],
+  ping?: { id?: string; mentioned_user_ids?: string[]; pinged_you?: boolean },
 ): WorkspaceMessage {
   return {
-    id: uid('msg'),
+    id: ping?.id ?? uid('msg'),
     workspace_id: workspaceId,
     sender_member_id: senderId,
     message_text: text,
     mentioned_member_ids: mentions,
+    mentioned_user_ids: ping?.mentioned_user_ids ?? [],
+    pinged_you: ping?.pinged_you === true,
     file_refs: fileRefs,
     created_at: minutesAgo(createdMinutes),
   };
@@ -265,8 +270,9 @@ function seed() {
   };
   const perf = agent(ws2.id, 'perf', 'Performance agent', 60 * 8);
   const data = agent(ws2.id, 'data', 'Data analysis agent', 60 * 7, 'active', OTHER_USER_ID);
+  const sre = agent(ws2.id, 'sre', 'SRE agent', 60 * 6, 'active', OTHER_USER_ID);
   store.workspaces.push(ws2);
-  store.agents.push(perf, data);
+  store.agents.push(perf, data, sre);
   store.messages.push(
     message(
       ws2.id,
@@ -276,6 +282,19 @@ function seed() {
       140,
     ),
     message(ws2.id, data.id, 'Pulling it now. Early read is that eu-west is the outlier.', [perf.id], 128),
+    message(
+      ws2.id,
+      sre.id,
+      '@owner The sessions table is the lock. Drop it or rename it before the next deploy?',
+      [],
+      20,
+      [],
+      {
+        id: 'msg-checkout-sre-ping',
+        mentioned_user_ids: [DEMO_USER_ID],
+        pinged_you: true,
+      },
+    ),
   );
   store.pointers.push(
     pointer(ws2.id, 'Pull p95 by region', null, 'done', 1, data.id, 138),
@@ -359,7 +378,7 @@ function summarize(record: WorkspaceRecord): WorkspaceSummary {
   const lastMessage = [...messages].sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
   const demoStats: Record<string, { unread: number; runs: number; tokens: number }> = {
     'ws-analytics-api': { unread: 2, runs: 18, tokens: 482_110 },
-    'ws-checkout-latency': { unread: 1, runs: 7, tokens: 91_400 },
+    'ws-checkout-latency': { unread: 2, runs: 7, tokens: 91_400 },
     'ws-docs-refresh': { unread: 0, runs: 0, tokens: 0 },
   };
   const extra = demoStats[record.id] ?? { unread: 0, runs: 0, tokens: 0 };
@@ -458,11 +477,15 @@ export function installWorkspacePreviewApi() {
     workspaceId: string,
     payload: { handle: string; role_label?: string | null },
   ) => {
+    const handle = payload.handle.replace(/^@/, '');
+    if (handle.toLowerCase() === 'user' || handle.toLowerCase() === 'owner') {
+      throw new Error('user and owner are reserved ping handles.');
+    }
     const created: WorkspaceAgent = {
       id: uid('agent'),
       workspace_id: workspaceId,
       user_id: DEMO_USER_ID,
-      handle: payload.handle.replace(/^@/, ''),
+      handle,
       role_label: payload.role_label ?? null,
       status: 'active',
       created_at: new Date().toISOString(),
@@ -478,7 +501,13 @@ export function installWorkspacePreviewApi() {
   ) => {
     const found = store.agents.find((a) => a.id === agentId && a.workspace_id === workspaceId);
     if (!found) throw new Error('Agent not found');
-    if (payload.handle !== undefined) found.handle = payload.handle.replace(/^@/, '');
+    if (payload.handle !== undefined) {
+      const nextHandle = payload.handle.replace(/^@/, '');
+      if (nextHandle.toLowerCase() === 'user' || nextHandle.toLowerCase() === 'owner') {
+        throw new Error('user and owner are reserved ping handles.');
+      }
+      found.handle = nextHandle;
+    }
     if (payload.role_label !== undefined) found.role_label = payload.role_label;
     if (payload.status !== undefined) found.status = payload.status;
     return wait(clone(found));
@@ -496,20 +525,40 @@ export function installWorkspacePreviewApi() {
       sender_member_id: string;
       message_text?: string | null;
       file_refs?: WorkspaceFileRef[];
+      ping_user_ids?: string[];
     },
   ) => {
+    const text = payload.message_text ?? '';
+    const mentionedUserIds = uniqueIds([
+      ...(payload.ping_user_ids ?? []),
+      ...resolvePingUsers(workspaceId, text, payload.sender_member_id),
+    ]);
     const created: WorkspaceMessage = {
       id: uid('msg'),
       workspace_id: workspaceId,
       sender_member_id: payload.sender_member_id,
       message_text: payload.message_text ?? null,
-      mentioned_member_ids: resolveMentions(workspaceId, payload.message_text ?? ''),
+      mentioned_member_ids: resolveMentions(workspaceId, text),
+      mentioned_user_ids: mentionedUserIds,
+      pinged_you: mentionedUserIds.includes(DEMO_USER_ID),
       file_refs: payload.file_refs ?? [],
       created_at: new Date().toISOString(),
     };
     store.messages.push(created);
     return wait(clone(created));
   };
+
+  api.getWorkspacePeople = async (workspaceId: string) => {
+    if (!store.workspaces.some((w) => w.id === workspaceId)) {
+      throw new Error('Workspace not found');
+    }
+    return wait(clone(peopleForWorkspace(workspaceId)));
+  };
+
+  api.resolveWorkspaceMentions = async (
+    workspaceId: string,
+    payload: { message_text: string; sender_member_id: string },
+  ) => wait(clone(resolveMentionPreview(workspaceId, payload)));
 
   api.getWorkspacePointers = async (workspaceId: string) =>
     wait(
@@ -792,13 +841,92 @@ export function installWorkspacePreviewApi() {
   };
 }
 
-/** Maps `@handle` tokens in a message body to member ids. */
+/** Maps `@handle` tokens in a message body to member ids. Reserved ping tokens are skipped. */
 function resolveMentions(workspaceId: string, text: string): string[] {
-  const handles = Array.from(text.matchAll(/@([a-z0-9_-]+)/gi)).map((m) => m[1].toLowerCase());
+  const handles = Array.from(text.matchAll(/@([a-z0-9_-]+)/gi))
+    .map((m) => m[1].toLowerCase())
+    .filter((handle) => handle !== 'user' && handle !== 'owner');
   if (!handles.length) return [];
   return store.agents
     .filter((a) => a.workspace_id === workspaceId && handles.includes(a.handle.toLowerCase()))
     .map((a) => a.id);
+}
+
+function uniqueIds(ids: string[]): string[] {
+  return [...new Set(ids.filter(Boolean))];
+}
+
+function peopleForWorkspace(workspaceId: string): WorkspacePerson[] {
+  const workspace = store.workspaces.find((w) => w.id === workspaceId);
+  if (!workspace) return [];
+  const userIds = new Set<string>([workspace.owner_user_id]);
+  for (const member of store.agents.filter((a) => a.workspace_id === workspaceId)) {
+    userIds.add(member.user_id);
+  }
+  return [...userIds].map((id) => ({
+    user_id: id,
+    name: id === DEMO_USER_ID ? 'You' : 'Teammate',
+    email: id === DEMO_USER_ID ? 'demo@runaegis.co' : null,
+    is_owner: id === workspace.owner_user_id,
+    ping_handle: id === DEMO_USER_ID ? 'demo' : 'teammate',
+  }));
+}
+
+function resolvePingUsers(
+  workspaceId: string,
+  text: string,
+  senderMemberId: string,
+): string[] {
+  const tokens = Array.from(text.matchAll(/@([a-z0-9_-]+)/gi)).map((m) => m[1].toLowerCase());
+  if (!tokens.length) return [];
+  const people = peopleForWorkspace(workspaceId);
+  const ids: string[] = [];
+  for (const person of people) {
+    if (person.ping_handle && tokens.includes(person.ping_handle.toLowerCase())) {
+      ids.push(person.user_id);
+    }
+  }
+  if (tokens.includes('owner')) {
+    const owner = people.find((person) => person.is_owner);
+    if (owner) ids.push(owner.user_id);
+  }
+  if (tokens.includes('user')) {
+    const sender = store.agents.find((a) => a.id === senderMemberId);
+    if (sender?.user_id) ids.push(sender.user_id);
+  }
+  return uniqueIds(ids);
+}
+
+function resolveMentionPreview(
+  workspaceId: string,
+  payload: { message_text: string; sender_member_id: string },
+): WorkspaceMentionResolve {
+  const text = payload.message_text ?? '';
+  const memberIds = resolveMentions(workspaceId, text);
+  const pingIds = resolvePingUsers(workspaceId, text, payload.sender_member_id);
+  const people = peopleForWorkspace(workspaceId);
+  const knownPing = new Set(['user', 'owner']);
+  const unknownHandles = Array.from(text.matchAll(/@([a-z0-9_-]+)/gi))
+    .map((m) => m[1].toLowerCase())
+    .filter((handle) => {
+      if (knownPing.has(handle)) return false;
+      return !store.agents.some(
+        (a) => a.workspace_id === workspaceId && a.handle.toLowerCase() === handle,
+      );
+    });
+
+  return {
+    mentions: memberIds.map((member_id) => {
+      const agent = store.agents.find((a) => a.id === member_id);
+      return { handle: agent?.handle, member_id };
+    }),
+    unknown_handles: uniqueIds(unknownHandles),
+    pinged_users: pingIds.map((user_id) => {
+      const person = people.find((row) => row.user_id === user_id);
+      return { user_id, name: person?.name, ping_handle: person?.ping_handle };
+    }),
+    unknown_pings: [],
+  };
 }
 
 /** The demo identity that composes messages from the manager side. */
