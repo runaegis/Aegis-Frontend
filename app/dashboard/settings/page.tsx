@@ -17,6 +17,7 @@ import {
   KeyRound,
   Lock,
   LogOut,
+  Map,
   Palette,
   RefreshCw,
   Shield,
@@ -51,6 +52,7 @@ import {
   useCustomAvatar,
 } from '@/lib/customAvatar';
 import { DUR, EASE, fadeUp, staggerContainer } from '@/lib/motion';
+import { requestProductTour } from '@/lib/productTour';
 import { useRouter } from 'next/navigation';
 
 // ── Section catalog ─────────────────────────────────────────────────────────
@@ -587,6 +589,19 @@ function AppearanceSection({ reduce }: { reduce: boolean }) {
         description="Choose how the dashboard looks. Auth and onboarding stay light by design."
       >
         <ThemeToggle variant="card" />
+      </SettingsCard>
+      <SettingsCard
+        title="Product tour"
+        description="Optional walkthrough of workspaces, connecting an agent, Memory, and Prompts. Skip any step."
+      >
+        <Button
+          variant="secondary"
+          size="md"
+          leadingIcon={<Map size={14} />}
+          onClick={() => requestProductTour()}
+        >
+          Replay tour
+        </Button>
       </SettingsCard>
     </motion.div>
   );

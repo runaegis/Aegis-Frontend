@@ -3,14 +3,15 @@
 /**
  * Usage — `/dashboard/token-spenditure`.
  *
- * Tokens only. Summary + tool_chart from GET /api/v3/analytics/token-usage.
- * Daily stacked bars are bucketed from GET /api/v3/analytics/token-usage/runs
- * timestamps. Do not invent prices, failed counts, or extra tools.
+ * Tokens only. Summary + tool_chart + category_chart from
+ * GET /api/v3/analytics/token-usage. Daily stacked bars are bucketed from
+ * GET /api/v3/analytics/token-usage/runs timestamps. Do not invent prices,
+ * failed counts, or extra tools.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DateRange } from 'react-day-picker';
-import { Bar, BarChart, XAxis } from 'recharts';
+import { Bar, BarChart, Cell, Pie, PieChart, XAxis } from 'recharts';
 import Topbar from '@/components/layout/Topbar';
 import { Button } from '@/components/ui/Button';
 import { DateRangePicker } from '@/components/ui/DateRangePicker';
@@ -33,7 +34,7 @@ import type {
   TokenUsageSessionItem,
 } from '@/lib/types';
 import { parseApiUtcTimestamp } from '@/lib/utils';
-import { BarChart3 } from 'lucide-react';
+import { BarChart3, PieChart as PieChartIcon } from 'lucide-react';
 
 function isDemoMode(): boolean {
   if (typeof window === 'undefined') return false;
@@ -68,6 +69,19 @@ const DAILY_CHART_CONFIG = {
   output: { label: 'output', color: 'var(--primary-base)' },
 } satisfies ChartConfig;
 
+const PIE_PALETTE = [
+  'var(--primary-base)',
+  'var(--chart-plum)',
+  'var(--chart-amber)',
+  'var(--feature)',
+  'var(--success)',
+  'var(--attention)',
+  'var(--information)',
+  'var(--warning)',
+] as const;
+
+const OTHER_SLICE_FILL = 'var(--neutral-soft-400)';
+const TOOL_PIE_LIMIT = 6;
 const RUNS_LIMIT = 500;
 
 function startOfLocalDay(date: Date): Date {
@@ -224,6 +238,53 @@ function downloadJson(filename: string, payload: unknown) {
   URL.revokeObjectURL(url);
 }
 
+type PieSlice = {
+  key: string;
+  name: string;
+  value: number;
+  fill: string;
+};
+
+function toSliceKey(name: string, index: number): string {
+  const cleaned = name.replace(/[^a-zA-Z0-9_-]/g, '-').replace(/^-+|-+$/g, '') || 'item';
+  const prefixed = /^[0-9]/.test(cleaned) ? `s-${cleaned}` : cleaned;
+  return `${prefixed}-${index}`;
+}
+
+function buildTopSlices(
+  items: Array<{ name: string; value: number }>,
+  limit = TOOL_PIE_LIMIT,
+): PieSlice[] {
+  const ranked = items
+    .filter((item) => item.name && item.value > 0)
+    .sort((a, b) => b.value - a.value);
+  if (ranked.length === 0) return [];
+
+  const head = ranked.slice(0, limit);
+  const tail = ranked.slice(limit);
+  const slices: PieSlice[] = head.map((item, index) => ({
+    key: toSliceKey(item.name, index),
+    name: item.name,
+    value: item.value,
+    fill: PIE_PALETTE[index % PIE_PALETTE.length],
+  }));
+
+  const otherValue = tail.reduce((sum, item) => sum + item.value, 0);
+  if (otherValue > 0) {
+    slices.push({
+      key: 'other',
+      name: `Other (${tail.length})`,
+      value: otherValue,
+      fill: OTHER_SLICE_FILL,
+    });
+  }
+  return slices;
+}
+
+function colorForTool(index: number): string {
+  return PIE_PALETTE[index % PIE_PALETTE.length];
+}
+
 export default function TokenSpenditurePage() {
   const { user, isLoading: userLoading } = useUser();
   const demo = useMemo(() => isDemoMode(), []);
@@ -298,6 +359,56 @@ export default function TokenSpenditurePage() {
       .filter((item) => item && item.name)
       .sort((a, b) => toNumber(b.total_tokens) - toNumber(a.total_tokens));
   }, [analytics.tool_chart]);
+  const categoryRows = useMemo(() => {
+    return [...analytics.category_chart]
+      .filter((item) => item && item.name && toNumber(item.total_tokens) > 0)
+      .sort((a, b) => toNumber(b.total_tokens) - toNumber(a.total_tokens));
+  }, [analytics.category_chart]);
+
+  const toolTokenSlices = useMemo(
+    () =>
+      buildTopSlices(
+        toolRows.map((row) => ({ name: row.name, value: toNumber(row.total_tokens) })),
+      ),
+    [toolRows],
+  );
+  const categoryTokenSlices = useMemo(
+    () =>
+      buildTopSlices(
+        categoryRows.map((row) => ({ name: row.name, value: toNumber(row.total_tokens) })),
+        8,
+      ),
+    [categoryRows],
+  );
+  const ioSlices = useMemo<PieSlice[]>(() => {
+    const slices: PieSlice[] = [];
+    if (input > 0) {
+      slices.push({
+        key: 'input',
+        name: 'input',
+        value: input,
+        fill: 'var(--neutral-sub-600)',
+      });
+    }
+    if (output > 0) {
+      slices.push({
+        key: 'output',
+        name: 'output',
+        value: output,
+        fill: 'var(--primary-base)',
+      });
+    }
+    return slices;
+  }, [input, output]);
+
+  const peakDay = useMemo(() => {
+    if (!dailyRows.length) return null;
+    return dailyRows.reduce((best, row) => (row.total > best.total ? row : best));
+  }, [dailyRows]);
+  const heaviestTool = toolRows[0] ?? null;
+  const avgPerCall = calls > 0 ? Math.round(total / calls) : 0;
+  const runCount = sessions.length;
+  const avgPerRun = runCount > 0 ? Math.round(total / runCount) : 0;
 
   const rangeLabel =
     filters.date_range === 'today'
@@ -446,12 +557,73 @@ export default function TokenSpenditurePage() {
           </div>
         </section>
 
+        <section className="mb-6 grid gap-3 lg:grid-cols-3">
+          <UsagePieCard
+            title="By tool"
+            subtitle="token share · top tools"
+            slices={toolTokenSlices}
+            centerValue={formatCompact(total)}
+            centerLabel="tokens"
+            emptyTitle="No tool breakdown"
+            emptyDescription="Tool slices come from tool_chart on the analytics payload."
+          />
+          <UsagePieCard
+            title="By category"
+            subtitle="token share · connector groups"
+            slices={categoryTokenSlices}
+            centerValue={formatCompact(total)}
+            centerLabel="tokens"
+            emptyTitle="No category breakdown"
+            emptyDescription="Category slices come from category_chart on the analytics payload."
+          />
+          <UsagePieCard
+            title="Input vs output"
+            subtitle="token mix in this window"
+            slices={ioSlices}
+            centerValue={formatCompact(total)}
+            centerLabel="tokens"
+            emptyTitle="No token mix"
+            emptyDescription="Input and output appear here once runs record tokens."
+          />
+        </section>
+
+        <section className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard
+            label="Avg / call"
+            value={formatCompact(avgPerCall)}
+            meta="tokens per tool call"
+          />
+          <StatCard
+            label="Avg / run"
+            value={formatCompact(avgPerRun)}
+            meta={
+              runCount
+                ? `across ${runCount.toLocaleString()} runs`
+                : 'no runs in this window'
+            }
+          />
+          <StatCard
+            label="Peak day"
+            value={peakDay && peakDay.total > 0 ? formatCompact(peakDay.total) : '—'}
+            meta={peakDay && peakDay.total > 0 ? peakDay.label : 'no daily peak yet'}
+          />
+          <StatCard
+            label="Heaviest tool"
+            value={heaviestTool ? `${percentOf(toNumber(heaviestTool.total_tokens), total)}%` : '—'}
+            meta={
+              heaviestTool
+                ? `${heaviestTool.name} · ${toolRows.length} tools`
+                : 'no tools in this window'
+            }
+          />
+        </section>
+
         <section>
           <div className="mb-3">
             <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--neutral-soft-400)]">
               By tool
               <span className="font-medium normal-case tracking-normal">
-                {' · '}the API breaks usage down by category and by tool
+                {' · '}every tool in this window
               </span>
             </p>
           </div>
@@ -477,8 +649,13 @@ export default function TokenSpenditurePage() {
                 </tr>
               </THead>
               <TBody>
-                {toolRows.map((row) => (
-                  <ToolRow key={row.name} row={row} total={total} />
+                {toolRows.map((row, index) => (
+                  <ToolRow
+                    key={row.name}
+                    row={row}
+                    total={total}
+                    color={colorForTool(index)}
+                  />
                 ))}
               </TBody>
             </Table>
@@ -506,7 +683,9 @@ function StatCard({
       <p className="mt-2 text-[28px] font-semibold leading-none tracking-[-0.04em] tabular-nums text-[var(--neutral-strong-950)]">
         {value}
       </p>
-      <p className="mt-2 text-[12px] text-[var(--neutral-soft-400)]">{meta}</p>
+      <p className="mt-2 truncate text-[12px] text-[var(--neutral-soft-400)]" title={meta}>
+        {meta}
+      </p>
     </div>
   );
 }
@@ -520,12 +699,168 @@ function LegendDot({ color, label }: { color: string; label: string }) {
   );
 }
 
-function ToolRow({ row, total }: { row: TokenUsageChartItem; total: number }) {
+function UsagePieCard({
+  title,
+  subtitle,
+  slices,
+  centerValue,
+  centerLabel,
+  emptyTitle,
+  emptyDescription,
+}: {
+  title: string;
+  subtitle: string;
+  slices: PieSlice[];
+  centerValue: string;
+  centerLabel: string;
+  emptyTitle: string;
+  emptyDescription: string;
+}) {
+  const sliceTotal = slices.reduce((sum, slice) => sum + slice.value, 0);
+  const pieConfig: ChartConfig = Object.fromEntries(
+    slices.map((slice) => [slice.key, { label: slice.name, color: slice.fill }]),
+  );
+
+  return (
+    <div className="overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-[var(--white-0)]">
+      <div className="px-4 py-3 sm:px-5">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--neutral-soft-400)]">
+          {title}
+          <span className="font-medium normal-case tracking-normal">
+            {' · '}
+            {subtitle}
+          </span>
+        </p>
+      </div>
+      {slices.length === 0 ? (
+        <EmptyState
+          compact
+          icon={<PieChartIcon className="h-5 w-5" />}
+          title={emptyTitle}
+          description={emptyDescription}
+        />
+      ) : (
+        <div className="grid items-center gap-3 px-4 pb-4 sm:grid-cols-[minmax(0,160px)_minmax(0,1fr)] sm:px-5">
+          <div className="relative mx-auto h-[168px] w-[168px]">
+            <ChartContainer
+              config={pieConfig}
+              className="h-full w-full !aspect-auto"
+              initialDimension={{ width: 168, height: 168 }}
+            >
+              <PieChart>
+                <ChartTooltip cursor={false} content={<PieTooltip total={sliceTotal} />} />
+                <Pie
+                  data={slices}
+                  dataKey="value"
+                  nameKey="name"
+                  innerRadius={52}
+                  outerRadius={78}
+                  paddingAngle={slices.length > 1 ? 2 : 0}
+                  stroke="var(--white-0)"
+                  strokeWidth={2}
+                >
+                  {slices.map((slice) => (
+                    <Cell key={slice.key} fill={slice.fill} />
+                  ))}
+                </Pie>
+              </PieChart>
+            </ChartContainer>
+            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+              <p className="text-[18px] font-semibold leading-none tracking-[-0.04em] tabular-nums text-[var(--neutral-strong-950)]">
+                {centerValue}
+              </p>
+              <p className="mt-1 text-[11px] text-[var(--neutral-soft-400)]">{centerLabel}</p>
+            </div>
+          </div>
+          <ul className="max-h-[180px] min-w-0 space-y-1.5 overflow-y-auto">
+            {slices.map((slice) => (
+              <li key={slice.key} className="flex items-center gap-2 text-[12px]">
+                <span
+                  className="h-2 w-2 shrink-0 rounded-full"
+                  style={{ backgroundColor: slice.fill }}
+                  aria-hidden
+                />
+                <span className="min-w-0 flex-1 truncate text-[var(--neutral-sub-600)]" title={slice.name}>
+                  {slice.name}
+                </span>
+                <span className="shrink-0 tabular-nums text-[var(--neutral-strong-950)]">
+                  {percentOf(slice.value, sliceTotal)}%
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PieTooltip({
+  active,
+  payload,
+  total,
+}: {
+  active?: boolean;
+  payload?: Array<{
+    name?: string | number;
+    value?: number | string;
+    payload?: PieSlice;
+  }>;
+  total: number;
+}) {
+  if (!active || !payload?.length) return null;
+  const slice = payload[0]?.payload;
+  if (!slice) return null;
+
+  return (
+    <div className="min-w-[160px] rounded-[10px] border border-[var(--stroke-soft-200)] bg-[var(--white-0)] p-3 shadow-[0_8px_24px_rgba(23,23,23,0.08)]">
+      <p className="flex items-center gap-2 text-[11px] font-semibold text-[var(--neutral-strong-950)]">
+        <span
+          className="h-2 w-2 rounded-full"
+          style={{ backgroundColor: slice.fill }}
+          aria-hidden
+        />
+        {slice.name}
+      </p>
+      <div className="mt-2 space-y-1.5 text-[12px]">
+        <div className="flex items-center justify-between gap-4">
+          <span className="text-[var(--neutral-sub-600)]">tokens</span>
+          <span className="font-medium tabular-nums text-[var(--neutral-strong-950)]">
+            {slice.value.toLocaleString()}
+          </span>
+        </div>
+        <div className="flex items-center justify-between gap-4 text-[var(--neutral-sub-600)]">
+          <span>share</span>
+          <span className="font-medium tabular-nums text-[var(--neutral-strong-950)]">
+            {percentOf(slice.value, total)}%
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ToolRow({
+  row,
+  total,
+  color,
+}: {
+  row: TokenUsageChartItem;
+  total: number;
+  color: string;
+}) {
   const share = percentOf(toNumber(row.total_tokens), total);
   return (
     <TR>
       <TD>
-        <code className="text-[12.5px] text-[var(--neutral-strong-950)]">{row.name}</code>
+        <span className="inline-flex items-center gap-2">
+          <span
+            className="h-2 w-2 shrink-0 rounded-full"
+            style={{ backgroundColor: color }}
+            aria-hidden
+          />
+          <code className="text-[12.5px] text-[var(--neutral-strong-950)]">{row.name}</code>
+        </span>
       </TD>
       <TD className="text-right tabular-nums">{toNumber(row.tool_call_count).toLocaleString()}</TD>
       <TD className="text-right tabular-nums">{formatCompact(toNumber(row.input_tokens))}</TD>
@@ -537,8 +872,8 @@ function ToolRow({ row, total }: { row: TokenUsageChartItem; total: number }) {
         <div className="flex items-center gap-2.5">
           <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-[var(--neutral-weak-50)]">
             <div
-              className="h-full rounded-full bg-[var(--primary-base)]"
-              style={{ width: `${share}%` }}
+              className="h-full rounded-full"
+              style={{ width: `${share}%`, backgroundColor: color }}
             />
           </div>
           <span className="w-8 shrink-0 text-right text-[12px] tabular-nums text-[var(--neutral-sub-600)]">

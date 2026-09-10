@@ -1,0 +1,114 @@
+/* Aegis theme for driver.js — uses dashboard tokens so light/dark stay in sync. */
+
+.aegis-tour-popover.driver-popover {
+  background: var(--white-0);
+  color: var(--neutral-strong-950);
+  border: 1px solid var(--stroke-soft-200);
+  border-radius: 12px;
+  box-shadow:
+    0 24px 72px rgba(0, 0, 0, 0.18),
+    0 4px 16px rgba(0, 0, 0, 0.08);
+  max-width: 360px;
+  padding: 18px 18px 14px;
+  font-family: inherit;
+}
+
+.aegis-tour-popover .driver-popover-title {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.3;
+  color: var(--neutral-strong-950);
+}
+
+.aegis-tour-popover .driver-popover-description {
+  margin-top: 8px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--neutral-sub-600);
+}
+
+.aegis-tour-popover .driver-popover-arrow {
+  border: 1px solid var(--stroke-soft-200);
+}
+
+.aegis-tour-popover .driver-popover-arrow-side-left {
+  border-right-color: var(--white-0);
+  border-bottom-color: var(--white-0);
+}
+
+.aegis-tour-popover .driver-popover-arrow-side-right {
+  border-left-color: var(--white-0);
+  border-top-color: var(--white-0);
+}
+
+.aegis-tour-popover .driver-popover-arrow-side-top {
+  border-bottom-color: var(--white-0);
+  border-left-color: var(--white-0);
+}
+
+.aegis-tour-popover .driver-popover-arrow-side-bottom {
+  border-top-color: var(--white-0);
+  border-right-color: var(--white-0);
+}
+
+.aegis-tour-popover .driver-popover-footer {
+  margin-top: 14px;
+  align-items: center;
+}
+
+.aegis-tour-popover .driver-popover-progress-text {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--neutral-soft-400);
+}
+
+.aegis-tour-popover .driver-popover-footer button {
+  text-shadow: none;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  border-radius: 8px;
+  padding: 0 11px;
+  height: 32px;
+  line-height: 32px;
+  text-decoration: none;
+}
+
+.aegis-tour-popover .driver-popover-prev-btn {
+  background: transparent;
+  color: var(--neutral-sub-600);
+  border: 1px solid transparent;
+  text-shadow: none;
+}
+
+.aegis-tour-popover .driver-popover-prev-btn:hover {
+  background: var(--neutral-weak-50);
+  color: var(--neutral-strong-950);
+}
+
+.aegis-tour-popover .driver-popover-next-btn {
+  background: var(--btn-primary-bg);
+  color: var(--text-on-accent);
+  border: 1px solid var(--btn-primary-border);
+  text-shadow: none;
+  box-shadow: var(--btn-primary-shadow);
+}
+
+.aegis-tour-popover .driver-popover-next-btn:hover {
+  background: var(--btn-primary-bg-hover);
+}
+
+.aegis-tour-popover .driver-popover-close-btn {
+  color: var(--neutral-soft-400);
+}
+
+.aegis-tour-popover .driver-popover-close-btn:hover {
+  color: var(--neutral-strong-950);
+}
+
+.driver-overlay {
+  background: rgba(0, 0, 0, 0.48) !important;
+}

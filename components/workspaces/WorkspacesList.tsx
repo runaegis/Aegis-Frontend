@@ -60,6 +60,7 @@ export function WorkspacesList() {
           size="lg"
           leadingIcon={<Plus size={14} />}
           onClick={() => setCreating(true)}
+          data-tour="new-workspace"
         >
           New workspace
         </Button>

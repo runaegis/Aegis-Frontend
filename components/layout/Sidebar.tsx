@@ -5,8 +5,6 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   Activity,
-  FileText,
-  Clock,
   Coins,
   Boxes,
   Settings,
@@ -21,7 +19,6 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { api } from '@/lib/api';
-import { normalizeNotificationType } from '@/lib/notifications';
 import { AegisLogo } from '@/components/ui/AegisLogo';
 import { WorkspaceSwitcher } from '@/components/ui/WorkspaceSwitcher';
 
@@ -78,6 +75,7 @@ type NavItem = {
   name: string;
   href: string;
   icon: LucideIcon;
+  tour?: string;
   badge?: { value: number | string; tone: 'urgent' | 'neutral' };
 };
 
@@ -95,10 +93,11 @@ function buildNavGroups(inboxCount: number): NavGroup[] {
           name: 'Inbox',
           href: '/dashboard/inbox',
           icon: Inbox,
+          tour: 'nav-inbox',
           badge:
             inboxCount > 0 ? { value: inboxCount, tone: 'urgent' } : undefined,
         },
-        { name: 'Workspaces', href: '/dashboard/workspaces', icon: MessagesSquare },
+        { name: 'Workspaces', href: '/dashboard/workspaces', icon: MessagesSquare, tour: 'nav-workspaces' },
       ],
     },
     {
@@ -106,21 +105,19 @@ function buildNavGroups(inboxCount: number): NavGroup[] {
       items: [
         { name: 'Runs', href: '/dashboard/runs', icon: Activity },
         { name: 'Usage', href: '/dashboard/token-spenditure', icon: Coins },
-        { name: 'Audit', href: '/dashboard/audit', icon: FileText },
       ],
     },
     {
       label: 'Library',
       items: [
-        { name: 'Memory', href: '/dashboard/memory', icon: BrainCircuit },
-        { name: 'Prompts', href: '/dashboard/prompts', icon: ScrollText },
+        { name: 'Memory', href: '/dashboard/memory', icon: BrainCircuit, tour: 'nav-memory' },
+        { name: 'Prompts', href: '/dashboard/prompts', icon: ScrollText, tour: 'nav-prompts' },
       ],
     },
     {
       label: 'Set up',
       items: [
         { name: 'Connectors', href: '/dashboard/connectors', icon: Boxes },
-        { name: 'Freeze Windows', href: '/dashboard/freeze-window', icon: Clock },
         { name: 'Settings', href: '/dashboard/settings', icon: Settings },
       ],
     },
@@ -140,11 +137,12 @@ export default function Sidebar() {
       api.getWorkspaceInviteInbox().catch(() => []),
     ]).then(([notifications, invites]) => {
       if (cancelled) return;
-      const pingUnread = (notifications?.items ?? []).filter(
-        (item) => normalizeNotificationType(item.notification_type) === 'PING',
-      ).length;
+      const unread =
+        notifications && Number.isFinite(notifications.unread_count)
+          ? notifications.unread_count
+          : (notifications?.items ?? []).length;
       const pending = invites.filter((invite) => invite.status === 'pending').length;
-      setInboxCount(pingUnread + pending);
+      setInboxCount(unread + pending);
     });
     return () => {
       cancelled = true;
@@ -165,19 +163,27 @@ export default function Sidebar() {
 
   // Nav-row link. `data-sidebar-center` is consumed by globals.css
   // to center the icon when the rail collapses. The label span is
-  // marked `data-sidebar-hide` so it disappears with the rail. Badge
-  // follows the same pattern; numeric value collapses to a small dot
-  // indicator when minimized so urgent state remains visible at a
-  // glance.
-  const renderNavLink = (item: NavItem) => {
+  // marked `data-sidebar-hide` so it disappears with the rail. The
+  // inline badge hides the same way; collapsed rail overlays a compact
+  // numeric count on the icon so urgent state stays readable.
+  const renderNavLink = (item: NavItem, desktop: boolean) => {
     const active = isActive(item.href);
     const Icon = item.icon;
+    const badgeValue =
+      typeof item.badge?.value === 'number' && item.badge.value > 99
+        ? '99+'
+        : item.badge?.value;
+    const badgeToneClass =
+      item.badge?.tone === 'urgent'
+        ? 'bg-[var(--error)] text-white'
+        : 'bg-[var(--neutral-soft-200)] text-[var(--neutral-sub-600)]';
     return (
       <Link
         key={item.href}
         href={item.href}
         onClick={() => setMobileOpen(false)}
         data-sidebar-center
+        data-tour={desktop ? item.tour : undefined}
         className={[
           'group relative flex h-8 items-center gap-2 rounded-[7px] px-2 text-[13px] font-medium tracking-[-0.01em]',
           'transition-colors duration-200 ease-[cubic-bezier(0.2,0.8,0.2,1)]',
@@ -196,25 +202,22 @@ export default function Sidebar() {
             data-sidebar-hide
             className={[
               'inline-flex h-[17px] min-w-[17px] items-center justify-center rounded-[5px] px-[5px] text-[10.5px] font-bold tabular-nums',
-              item.badge.tone === 'urgent'
-                ? 'bg-[var(--error)] text-white'
-                : 'bg-[var(--neutral-soft-200)] text-[var(--neutral-sub-600)]',
+              badgeToneClass,
             ].join(' ')}
           >
-            {item.badge.value}
+            {badgeValue}
           </span>
         )}
-        {item.badge && collapsed && (
+        {item.badge && collapsed && desktop && (
           <span
             aria-hidden
-            className="absolute right-1.5 top-1.5 h-[6px] w-[6px] rounded-full"
-            style={{
-              backgroundColor:
-                item.badge.tone === 'urgent'
-                  ? 'var(--error)'
-                  : 'var(--neutral-sub-600)',
-            }}
-          />
+            className={[
+              'absolute -right-0.5 -top-0.5 z-10 inline-flex h-[15px] min-w-[15px] items-center justify-center rounded-full px-[4px] text-[9px] font-bold leading-none tabular-nums',
+              badgeToneClass,
+            ].join(' ')}
+          >
+            {badgeValue}
+          </span>
         )}
       </Link>
     );
@@ -274,7 +277,7 @@ export default function Sidebar() {
               {group.label}
             </div>
             <div className="space-y-0.5">
-              {group.items.map((item) => renderNavLink(item))}
+              {group.items.map((item) => renderNavLink(item, desktop))}
             </div>
           </div>
         ))}

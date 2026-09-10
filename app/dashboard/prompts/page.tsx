@@ -313,7 +313,7 @@ export default function PromptsPage() {
               {loading ? '—' : prompts.length}
             </span>
           </div>
-          <Button variant="primary" size="sm" onClick={startDraft}>
+          <Button variant="primary" size="sm" onClick={startDraft} data-tour="new-prompt">
             New prompt
           </Button>
         </div>
