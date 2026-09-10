@@ -483,6 +483,41 @@ export function TokenSpendSkeleton() {
         <ChartSkeleton height={220} />
       </section>
 
+      <section className="mb-6 grid gap-3 lg:grid-cols-3">
+        {[0, 1, 2].map((i) => (
+          <div
+            key={i}
+            className="overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-[var(--white-0)] p-5"
+          >
+            <Skeleton className="mb-4 h-[12px] w-40 rounded-[3px]" />
+            <div className="grid items-center gap-3 sm:grid-cols-[minmax(0,160px)_minmax(0,1fr)]">
+              <Skeleton className="mx-auto h-[168px] w-[168px] rounded-full" />
+              <div className="space-y-2">
+                {[0, 1, 2, 3].map((row) => (
+                  <div key={row} className="flex items-center justify-between gap-3">
+                    <Skeleton className="h-[12px] w-24 rounded-[3px]" />
+                    <Skeleton className="h-[12px] w-8 rounded-[3px]" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        ))}
+      </section>
+
+      <section className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {[0, 1, 2, 3].map((i) => (
+          <div
+            key={i}
+            className="rounded-[12px] border border-[var(--stroke-soft-200)] bg-[var(--white-0)] px-5 py-4"
+          >
+            <Skeleton className="h-[11px] w-20 rounded-[3px]" />
+            <Skeleton className="mt-3 h-[28px] w-24 rounded-[6px]" />
+            <Skeleton className="mt-2 h-[12px] w-32 rounded-[3px]" />
+          </div>
+        ))}
+      </section>
+
       <section className="overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-[var(--white-0)] p-5">
         <Skeleton className="mb-4 h-[12px] w-64 rounded-[3px]" />
         <div className="space-y-3">

@@ -8,6 +8,7 @@ import Layout from '@/components/layout/Layout';
 import { AppShellSkeleton } from '@/components/ui/PageSkeletons';
 import { CommandPalette } from '@/components/ui/CommandPalette';
 import { DemoWelcomeModal } from '@/components/ui/DemoWelcomeModal';
+import { ProductTour } from '@/components/tour/ProductTour';
 import { installPreviewApi } from '@/lib/preview-data';
 import { installWorkspacePreviewApi } from '@/lib/workspace-preview';
 import { DashboardDataProvider } from '@/lib/dashboardDataContext';
@@ -233,6 +234,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           once at the dashboard layout level so it's available on every
           route under /dashboard. */}
       <CommandPalette />
+      <ProductTour welcomeOpen={showWelcome} />
     </DashboardDataProvider>
   );
 }

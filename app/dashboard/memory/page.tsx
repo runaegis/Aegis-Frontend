@@ -289,7 +289,7 @@ export default function MemoryPage() {
             >
               Redeem a share code
             </button>
-            <Button variant="primary" onClick={openCreate}>
+            <Button variant="primary" onClick={openCreate} data-tour="new-memory">
               New memory
             </Button>
           </div>

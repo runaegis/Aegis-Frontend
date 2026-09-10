@@ -37,6 +37,7 @@ import {
   Inbox,
   LayoutDashboard,
   LogOut,
+  Map,
   MessagesSquare,
   Moon,
   PanelLeftClose,
@@ -52,6 +53,7 @@ import {
 import { cn } from '@/lib/utils';
 import { api } from '@/lib/api';
 import { useUser } from '@/lib/hooks';
+import { requestProductTour } from '@/lib/productTour';
 
 interface Command {
   id: string;
@@ -188,6 +190,18 @@ export function CommandPalette() {
             localStorage.setItem('aegis_theme', 'dark');
           }
           setOpen(false);
+        },
+      },
+      {
+        id: 'product-tour',
+        label: 'Take product tour',
+        hint: 'Optional',
+        icon: Map,
+        keywords: ['tour', 'guide', 'walkthrough', 'onboarding', 'intro', 'help', 'agent', 'memory', 'prompts'],
+        group: 'Actions' as const,
+        perform: () => {
+          setOpen(false);
+          requestProductTour();
         },
       },
       {

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Usage",
-  description: "Token usage by day and by tool. Tokens only — no prices.",
+  description: "Token usage by day, tool, and category. Tokens only — no prices.",
 };
 
 export default function TokenSpenditureLayout({
