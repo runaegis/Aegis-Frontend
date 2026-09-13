@@ -2360,6 +2360,38 @@ export const api = {
     }
   },
 
+  logoutAllDevices: async () => {
+    try {
+      const res = await apiFetch(`${API_BASE}/auth/logout-all`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        throw await readApiError(res);
+      }
+    } catch {
+      // ignore logout-all network failures
+    } finally {
+      clearStoredAuthState();
+    }
+  },
+
+  deleteUser: async (payload: {
+    confirmation: string;
+    password?: string;
+  }): Promise<void> => {
+    const res = await apiFetch(`${API_BASE}/auth/user`, {
+      method: "DELETE",
+      headers: getJsonHeaders(),
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      throw await readApiError(res);
+    }
+
+    clearStoredAuthState();
+  },
+
   getRuns: async (
     userId?: string,
     filters: ActionDateFilters = {},
