@@ -134,18 +134,6 @@ function formatDuration(ms: number | null | undefined): string {
   return `${minutes}m ${remainder}s`;
 }
 
-function formatTokens(run: RunRecord): string {
-  const value =
-    run.token_count ??
-    numberFromPayload(run.result_payload, 'token_count') ??
-    numberFromPayload(run.result_payload, 'tokens') ??
-    numberFromPayload(run.result_payload, 'total_tokens');
-
-  if (value == null || !Number.isFinite(value)) return '—';
-  if (value >= 1000) return `${(value / 1000).toFixed(value >= 10000 ? 0 : 1)}K`;
-  return value.toLocaleString();
-}
-
 function numberFromPayload(
   payload: unknown,
   key: string,
