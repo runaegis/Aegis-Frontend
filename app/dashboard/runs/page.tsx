@@ -69,6 +69,22 @@ function compareText(left: string, right: string): number {
   return left.localeCompare(right, undefined, { sensitivity: 'base' });
 }
 
+function formatTokenCount(value: number | null | undefined): string {
+  const count = Number(value ?? 0);
+
+  if (!Number.isFinite(count)) {
+    return "0";
+  }
+
+  if (Math.abs(count) < 1000) {
+    return Math.round(count).toLocaleString();
+  }
+
+  const thousands = count / 1000;
+
+  return `${thousands.toFixed(1).replace(/\.0$/, "")}K`;
+}
+
 function compareByDirection(
   left: string | number,
   right: string | number,
@@ -526,10 +542,10 @@ export default function RunsPage() {
           );
         case 'tokens':
           return compareByDirection(
-            left.token_count ?? 0,
-            right.token_count ?? 0,
+            (left.input_token ?? 0) + (left.output_token ?? 0),
+            (right.input_token ?? 0) + (right.output_token ?? 0),
             sortDir,
-          );
+        );
         case 'time':
           return compareByDirection(
             new Date(
@@ -819,7 +835,7 @@ export default function RunsPage() {
                       sortDirection={dirFor('tokens')}
                       onSort={() => onSort('tokens')}
                     >
-                      Tokens
+                      In/Out Tokens
                     </TH>
                     <TH
                       sortable
@@ -996,7 +1012,8 @@ function RunRow({
         </TD>
 
         <TD className="whitespace-nowrap text-[12px] text-[var(--neutral-sub-600)]">
-          {formatTokens(run)}
+          {formatTokenCount(run.input_token)}/
+          {formatTokenCount(run.output_token)}
         </TD>
 
         <TD className="whitespace-nowrap text-[12px] text-[var(--neutral-sub-600)]">
@@ -1159,8 +1176,8 @@ function RunDetails({ run }: { run: RunRecord }) {
             value={formatDuration(run.execution_time_ms)}
           />
           <MetaCell
-            label="Tokens"
-            value={formatTokens(run)}
+            label="In/Out Tokens"
+            value={`${formatTokenCount(run.input_token)}/${formatTokenCount(run.output_token)}`}
           />
         </div>
       </aside>

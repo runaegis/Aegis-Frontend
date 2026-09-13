@@ -216,23 +216,33 @@ export type RunRecord = {
   workspace_id: string;
   workspace_name: string;
   workspace_title?: string | null;
+
   user_id: string | null;
+
   agent_id: string | null;
   agent_name: string;
   agent_handle?: string | null;
+
   connector_key: string | null;
   tool_name: string;
+
   arguments: Record<string, unknown>;
+
   status: string;
+
   result_summary: string | null;
   result_payload: Record<string, unknown>;
   error_message: string | null;
+
   started_at: string | null;
   completed_at: string | null;
   execution_time_ms: number;
+
+  input_token: number;
+  output_token: number;
+
   created_at: string;
   updated_at: string | null;
-  token_count?: number | null;
 };
 
 export type RunListResponse = {
@@ -420,11 +430,13 @@ function normalizeRunRecord(row: unknown): RunRecord {
       typeof parsed.updated_at === "string"
         ? parsed.updated_at
         : null,
-    token_count:
-      asFiniteNumber(parsed.token_count) ??
-      asFiniteNumber(parsed.tokens) ??
-      asFiniteNumber(parsed.total_tokens) ??
-      null,
+    input_token:
+      asFiniteNumber(parsed.input_token) ??
+      0,
+
+    output_token:
+      asFiniteNumber(parsed.output_token) ??
+      0,
   };
 }
 
