@@ -1,17 +1,14 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Activity, Check, ChevronRight, Search, X } from 'lucide-react';
-import Link from 'next/link';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { Check, ChevronRight, Search, X } from 'lucide-react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
+
 import Topbar from '@/components/layout/Topbar';
 import { AgentMark } from '@/components/ui/AgentMark';
-import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { CodeChip } from '@/components/ui/CodeChip';
 import { CONNECTORS, ConnectorMark } from '@/components/ui/ConnectorMark';
-import { decisionColor } from '@/components/ui/DecisionBadge';
 import EmptyState from '@/components/ui/EmptyState';
 import ErrorBanner from '@/components/ui/ErrorBanner';
 import { FilterChip } from '@/components/ui/FilterChip';
@@ -28,207 +25,570 @@ import {
   TRExpanded,
   type SortDirection,
 } from '@/components/ui/Table';
-import { api } from '@/lib/api';
-import {
-  formatDashboardDateRangeLabel,
-  getActionDateFilters,
-  matchesActionDateFilters,
-} from '@/lib/dashboardDateRange';
-import { useDashboardData } from '@/lib/dashboardDataContext';
-import { useUser } from '@/lib/hooks';
-import { DUR, EASE, fadeUp, staggerContainer } from '@/lib/motion';
-import { buildRunActivityFilterOptions, buildRunActivityViewModel, filterRunActivity, summarizeRunActivity, type RunActivityViewModel } from '@/lib/runActivity';
-import { formatExecutionTimeMs, formatFullTimestamp, readBlastRadius } from '@/lib/utils';
-import type { Metrics, PaginatedResponse, SessionAction } from '@/lib/types';
+import { api, type RunRecord } from '@/lib/api';
+import type { WorkspaceDetail, WorkspaceSummary } from '@/lib/api';
+import { DUR, EASE } from '@/lib/motion';
+import { formatFullTimestamp } from '@/lib/utils';
 
 const PAGE_SIZE = 20;
-const EMPTY_PAGE: PaginatedResponse<SessionAction> = {
-  items: [],
+
+const EMPTY_PAGE = {
+  items: [] as RunRecord[],
   total: 0,
-  page: 1,
-  page_size: PAGE_SIZE,
-  pages: 0,
-};
-const EMPTY_METRICS: Metrics = {
-  total: 0,
-  allows: 0,
-  denies: 0,
-  rewrites: 0,
-  approvals: 0,
+  limit: PAGE_SIZE,
+  offset: 0,
 };
 
+type FilterValue = string;
+
 type SortKey =
-  | 'agent'
   | 'tool'
+  | 'agent'
   | 'connector'
-  | 'target'
-  | 'policy'
-  | 'risk'
-  | 'decision'
+  | 'result'
+  | 'execution'
+  | 'tokens'
   | 'time';
+
+type AgentOption = {
+  id: string;
+  handle: string;
+  workspace_id: string;
+};
+
+const STATUS_OPTIONS = [
+  { value: 'all', label: 'Any' },
+  { value: 'queued', label: 'Queued' },
+  { value: 'running', label: 'Running' },
+  { value: 'completed', label: 'Completed' },
+  { value: 'failed', label: 'Failed' },
+  { value: 'cancelled', label: 'Cancelled' },
+];
 
 function compareText(left: string, right: string): number {
   return left.localeCompare(right, undefined, { sensitivity: 'base' });
 }
 
-export default function RunsPage() {
-  const { user, isLoading: userLoading } = useUser();
-  const { dateRange, setDateRange } = useDashboardData();
-  const reduceMotion = useReducedMotion();
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const scopedSessionId = searchParams.get('session')?.trim() || null;
+function compareByDirection(
+  left: string | number,
+  right: string | number,
+  direction: SortDirection,
+): number {
+  const comparison =
+    typeof left === 'number' && typeof right === 'number'
+      ? left - right
+      : compareText(String(left), String(right));
 
-  const [runs, setRuns] = useState<SessionAction[]>([]);
-  const [pageMeta, setPageMeta] = useState<PaginatedResponse<SessionAction>>(EMPTY_PAGE);
-  const [rangeMetrics, setRangeMetrics] = useState<Metrics>(EMPTY_METRICS);
+  return direction === 'asc' ? comparison : -comparison;
+}
+
+function connectorName(connectorKey: string | null | undefined): string {
+  const key = String(connectorKey || '').trim().toLowerCase();
+  if (!key) return '—';
+
+  const connector = (CONNECTORS as Record<string, { name?: string }>)[key];
+  if (connector?.name) return connector.name;
+
+  return key
+    .split(/[-_]/g)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function connectorId(
+  connectorKey: string | null | undefined,
+): keyof typeof CONNECTORS | null {
+  const key = String(connectorKey || '').trim().toLowerCase();
+  if (key && key in CONNECTORS) {
+    return key as keyof typeof CONNECTORS;
+  }
+  return null;
+}
+
+function formatDuration(ms: number | null | undefined): string {
+  if (ms == null || !Number.isFinite(ms)) return '—';
+  if (ms < 1000) return `${Math.round(ms)} ms`;
+
+  const seconds = ms / 1000;
+  if (seconds < 60) return `${seconds.toFixed(seconds >= 10 ? 1 : 2)} s`;
+
+  const minutes = Math.floor(seconds / 60);
+  const remainder = Math.round(seconds % 60);
+  return `${minutes}m ${remainder}s`;
+}
+
+function formatTokens(run: RunRecord): string {
+  const value =
+    run.token_count ??
+    numberFromPayload(run.result_payload, 'token_count') ??
+    numberFromPayload(run.result_payload, 'tokens') ??
+    numberFromPayload(run.result_payload, 'total_tokens');
+
+  if (value == null || !Number.isFinite(value)) return '—';
+  if (value >= 1000) return `${(value / 1000).toFixed(value >= 10000 ? 0 : 1)}K`;
+  return value.toLocaleString();
+}
+
+function numberFromPayload(
+  payload: unknown,
+  key: string,
+): number | null {
+  if (!payload || typeof payload !== 'object') return null;
+  const value = (payload as Record<string, unknown>)[key];
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function resultText(run: RunRecord): string {
+  if (run.result_summary?.trim()) return run.result_summary.trim();
+
+  if (run.error_message?.trim()) return run.error_message.trim();
+
+  if (run.result_payload && typeof run.result_payload === 'object') {
+    const payload = run.result_payload as Record<string, unknown>;
+    const message =
+      typeof payload.message === 'string'
+        ? payload.message
+        : typeof payload.error === 'string'
+          ? payload.error
+          : null;
+
+    if (message?.trim()) return message.trim();
+  }
+
+  switch (run.status) {
+    case 'completed':
+      return 'Completed';
+    case 'failed':
+      return 'Run failed';
+    case 'running':
+      return 'Running';
+    case 'queued':
+      return 'Queued';
+    case 'cancelled':
+      return 'Cancelled by the agent';
+    default:
+      return 'No result summary';
+  }
+}
+
+function retryLabel(run: RunRecord): boolean {
+  if (!run.result_payload || typeof run.result_payload !== 'object') return false;
+
+  const payload = run.result_payload as Record<string, unknown>;
+  return (
+    payload.retry === true ||
+    payload.retryable === true ||
+    payload.is_retry === true
+  );
+}
+
+function statusLabel(status: string): string {
+  switch (status) {
+    case 'completed':
+      return 'Completed';
+    case 'failed':
+      return 'Failed';
+    case 'running':
+      return 'Running';
+    case 'queued':
+      return 'Queued';
+    case 'cancelled':
+      return 'Cancelled';
+    default:
+      return status || 'Unknown';
+  }
+}
+
+function statusClasses(status: string): {
+  dot: string;
+  text: string;
+  row: string;
+  badge: string;
+} {
+  switch (status) {
+    case 'completed':
+      return {
+        dot: 'bg-[var(--success)]',
+        text: 'text-[var(--success)]',
+        row: '',
+        badge: 'bg-[var(--success-lighter)] text-[var(--success)]',
+      };
+    case 'failed':
+      return {
+        dot: 'bg-[var(--error)]',
+        text: 'text-[var(--error)]',
+        row: 'bg-[var(--error-lighter)]/40',
+        badge: 'bg-[var(--error-lighter)] text-[var(--error)]',
+      };
+    case 'running':
+      return {
+        dot: 'bg-[var(--warning)]',
+        text: 'text-[var(--warning)]',
+        row: '',
+        badge: 'bg-[var(--warning-lighter)] text-[var(--warning)]',
+      };
+    case 'queued':
+      return {
+        dot: 'bg-[var(--neutral-soft-400)]',
+        text: 'text-[var(--neutral-sub-600)]',
+        row: '',
+        badge: 'bg-[var(--neutral-weak-50)] text-[var(--neutral-sub-600)]',
+      };
+    case 'cancelled':
+      return {
+        dot: 'bg-[var(--neutral-soft-400)]',
+        text: 'text-[var(--neutral-sub-600)]',
+        row: '',
+        badge: 'bg-[var(--neutral-weak-50)] text-[var(--neutral-sub-600)]',
+      };
+    default:
+      return {
+        dot: 'bg-[var(--neutral-soft-400)]',
+        text: 'text-[var(--neutral-sub-600)]',
+        row: '',
+        badge: 'bg-[var(--neutral-weak-50)] text-[var(--neutral-sub-600)]',
+      };
+  }
+}
+
+function extractSelected(value: string[]): FilterValue {
+  return value[0] || 'all';
+}
+
+export default function RunsPage() {
+  const reduceMotion = useReducedMotion();
+
+  const [runs, setRuns] = useState<RunRecord[]>([]);
+  const [pageMeta, setPageMeta] = useState(EMPTY_PAGE);
+  const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
+  const [agents, setAgents] = useState<AgentOption[]>([]);
+
   const [loading, setLoading] = useState(true);
+  const [loadingOptions, setLoadingOptions] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<Date | undefined>(undefined);
+  const [lastUpdated, setLastUpdated] = useState<Date>();
+
   const [page, setPage] = useState(1);
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [agentFilter, setAgentFilter] = useState<string[]>([]);
-  const [decisionFilter, setDecisionFilter] = useState<string[]>([]);
-  const [connectorFilter, setConnectorFilter] = useState<string[]>([]);
-  const [targetFilter, setTargetFilter] = useState<string[]>([]);
-  const [toolFilter, setToolFilter] = useState<string[]>([]);
+  const [workspaceFilter, setWorkspaceFilter] = useState<string[]>(['all']);
+  const [statusFilter, setStatusFilter] = useState<string[]>(['all']);
+  const [connectorFilter, setConnectorFilter] = useState<string[]>(['all']);
+  const [toolFilter, setToolFilter] = useState<string[]>(['all']);
+  const [agentFilter, setAgentFilter] = useState<string[]>(['all']);
 
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<SortDirection>(null);
 
-  const dateFilters = useMemo(() => getActionDateFilters(dateRange), [dateRange]);
-  const rangeLabel = useMemo(
-    () => formatDashboardDateRangeLabel(dateRange, 'All time'),
-    [dateRange],
-  );
+  const selectedWorkspace = extractSelected(workspaceFilter);
+  const selectedStatus = extractSelected(statusFilter);
+  const selectedConnector = extractSelected(connectorFilter);
+  const selectedTool = extractSelected(toolFilter);
+  const selectedAgent = extractSelected(agentFilter);
 
-  const fetchData = useCallback(
+  const fetchRuns = useCallback(
     async (options?: { soft?: boolean }) => {
-      if (!user?.id) {
-        if (!userLoading) {
-          setRuns([]);
-          setPageMeta(EMPTY_PAGE);
-          setRangeMetrics(EMPTY_METRICS);
-          setLoading(false);
-        }
-        return;
-      }
-
-      if (!options?.soft) {
-        setLoading(true);
-      }
+      if (!options?.soft) setLoading(true);
 
       try {
-        if (scopedSessionId) {
-          const sessionActions = (await api.getSessionActions(scopedSessionId))
-            .filter((action) => matchesActionDateFilters(action.timestamp, dateFilters))
-            .sort(
-              (left, right) =>
-                new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime(),
-            );
+        const response = await api.getRunsPage({
+          page,
+          page_size: PAGE_SIZE,
+          workspace_id:
+            selectedWorkspace !== 'all' ? selectedWorkspace : undefined,
+          status: selectedStatus !== 'all' ? selectedStatus : undefined,
+          connector_key:
+            selectedConnector !== 'all' ? selectedConnector : undefined,
+          tool_name: selectedTool !== 'all' ? selectedTool : undefined,
+          agent_id: selectedAgent !== 'all' ? selectedAgent : undefined,
+        });
 
-          const scopedMetrics = summarizeRunActivity(
-            sessionActions.map((action) => buildRunActivityViewModel(action)),
-          );
-
-          setRuns(sessionActions);
-          setPageMeta({
-            items: sessionActions,
-            total: sessionActions.length,
-            page: 1,
-            page_size: PAGE_SIZE,
-            pages: sessionActions.length > 0 ? 1 : 0,
-          });
-          setRangeMetrics(scopedMetrics);
-        } else {
-          const [pagedRuns, metrics] = await Promise.all([
-            api.getSessionActionsPage(user.id, page, PAGE_SIZE, dateFilters),
-            api.getMetrics(user.id, dateFilters),
-          ]);
-
-          setRuns(Array.isArray(pagedRuns.items) ? pagedRuns.items : []);
-          setPageMeta(pagedRuns);
-          setRangeMetrics(metrics);
-        }
+        setRuns(Array.isArray(response.items) ? response.items : []);
+        setPageMeta(response);
         setLastUpdated(new Date());
         setError(null);
       } catch (fetchError) {
-        setError(fetchError instanceof Error ? fetchError.message : 'Failed to load runs.');
+        setError(
+          fetchError instanceof Error
+            ? fetchError.message
+            : 'Failed to load runs.',
+        );
       } finally {
-        if (!options?.soft) {
-          setLoading(false);
-        }
+        if (!options?.soft) setLoading(false);
       }
     },
-    [dateFilters, page, scopedSessionId, user?.id, userLoading],
-  );
-
-  useEffect(() => {
-    if (user?.id) {
-      void fetchData();
-      return;
-    }
-    if (!userLoading) {
-      setRuns([]);
-      setPageMeta(EMPTY_PAGE);
-      setRangeMetrics(EMPTY_METRICS);
-      setLoading(false);
-    }
-  }, [fetchData, page, scopedSessionId, user?.id, userLoading]);
-
-  useEffect(() => {
-    if (!user?.id) return;
-    const interval = window.setInterval(() => {
-      void fetchData({ soft: true });
-    }, 30000);
-    return () => window.clearInterval(interval);
-  }, [fetchData, user?.id]);
-
-  const runItems = useMemo(
-    () => runs.map((run) => buildRunActivityViewModel(run)),
-    [runs],
-  );
-
-  const filterOptions = useMemo(
-    () => buildRunActivityFilterOptions(runItems),
-    [runItems],
-  );
-
-  const filteredItems = useMemo(
-    () =>
-      filterRunActivity(runItems, {
-        searchQuery,
-        agentFilter,
-        decisionFilter,
-        connectorFilter,
-        targetFilter,
-        toolFilter,
-        scopedSessionId,
-      }),
     [
-      agentFilter,
-      connectorFilter,
-      decisionFilter,
-      runItems,
-      scopedSessionId,
-      searchQuery,
-      targetFilter,
-      toolFilter,
+      page,
+      selectedAgent,
+      selectedConnector,
+      selectedStatus,
+      selectedTool,
+      selectedWorkspace,
     ],
   );
 
-  const filteredMetrics = useMemo(
-    () => summarizeRunActivity(filteredItems),
-    [filteredItems],
+  useEffect(() => {
+    void fetchRuns();
+  }, [fetchRuns]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      void fetchRuns({ soft: true });
+    }, 30000);
+
+    return () => window.clearInterval(interval);
+  }, [fetchRuns]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadOptions() {
+      setLoadingOptions(true);
+
+      try {
+        const workspaceRows = await api.getWorkspaces();
+        if (cancelled) return;
+
+        setWorkspaces(workspaceRows);
+
+        const details = await Promise.all(
+          workspaceRows.map(async (workspace) => {
+            try {
+              return await api.getWorkspace(workspace.id);
+            } catch {
+              return null;
+            }
+          }),
+        );
+
+        if (cancelled) return;
+
+        const nextAgents: AgentOption[] = [];
+
+        details.forEach((detail: WorkspaceDetail | null) => {
+          if (!detail) return;
+
+          detail.agents.forEach((agent) => {
+            nextAgents.push({
+              id: agent.id,
+              handle: agent.handle,
+              workspace_id: agent.workspace_id,
+            });
+          });
+        });
+
+        const deduped = Array.from(
+          new Map(nextAgents.map((agent) => [agent.id, agent])).values(),
+        ).sort((left, right) =>
+          compareText(left.handle, right.handle),
+        );
+
+        setAgents(deduped);
+      } catch {
+        if (!cancelled) {
+          setWorkspaces([]);
+          setAgents([]);
+        }
+      } finally {
+        if (!cancelled) setLoadingOptions(false);
+      }
+    }
+
+    void loadOptions();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const connectorOptions = useMemo(() => {
+    const keys = Array.from(
+      new Set(
+        runs
+          .map((run) => run.connector_key?.trim().toLowerCase())
+          .filter((key): key is string => Boolean(key)),
+      ),
+    ).sort(compareText);
+
+    return [
+      { value: 'all', label: 'Any' },
+      ...keys.map((key) => ({
+        value: key,
+        label: connectorName(key),
+      })),
+    ];
+  }, [runs]);
+
+  const toolOptions = useMemo(() => {
+    const tools = Array.from(
+      new Set(
+        runs
+          .map((run) => run.tool_name?.trim())
+          .filter((tool): tool is string => Boolean(tool)),
+      ),
+    ).sort(compareText);
+
+    return [
+      { value: 'all', label: 'Any' },
+      ...tools.map((tool) => ({ value: tool, label: tool })),
+    ];
+  }, [runs]);
+
+  const workspaceOptions = useMemo(
+    () => [
+      { value: 'all', label: 'All' },
+      ...workspaces.map((workspace) => ({
+        value: workspace.id,
+        label: workspace.title,
+      })),
+    ],
+    [workspaces],
   );
 
-  const totalMetrics = useMemo(
-    () => rangeMetrics,
-    [rangeMetrics],
+  const agentOptions = useMemo(
+    () => [
+      { value: 'all', label: 'Any' },
+      ...agents.map((agent) => ({
+        value: agent.id,
+        label: `@${agent.handle.replace(/^@/, '')}`,
+      })),
+    ],
+    [agents],
   );
+
+  const filteredRuns = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+
+    if (!query) return runs;
+
+    return runs.filter((run) => {
+      const haystack = [
+        run.agent_name,
+        run.agent_handle,
+        run.tool_name,
+        connectorName(run.connector_key),
+        run.workspace_name,
+        run.workspace_title,
+        resultText(run),
+        run.error_message,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+
+      return haystack.includes(query);
+    });
+  }, [runs, searchQuery]);
+
+  const sortedRuns = useMemo(() => {
+    if (!sortKey || sortDir === null) return filteredRuns;
+
+    const sorted = [...filteredRuns];
+
+    sorted.sort((left, right) => {
+      switch (sortKey) {
+        case 'tool':
+          return compareByDirection(
+            left.tool_name,
+            right.tool_name,
+            sortDir,
+          );
+        case 'agent':
+          return compareByDirection(
+            left.agent_handle || left.agent_name || '',
+            right.agent_handle || right.agent_name || '',
+            sortDir,
+          );
+        case 'connector':
+          return compareByDirection(
+            connectorName(left.connector_key),
+            connectorName(right.connector_key),
+            sortDir,
+          );
+        case 'result':
+          return compareByDirection(
+            resultText(left),
+            resultText(right),
+            sortDir,
+          );
+        case 'execution':
+          return compareByDirection(
+            left.execution_time_ms ?? 0,
+            right.execution_time_ms ?? 0,
+            sortDir,
+          );
+        case 'tokens':
+          return compareByDirection(
+            left.token_count ?? 0,
+            right.token_count ?? 0,
+            sortDir,
+          );
+        case 'time':
+          return compareByDirection(
+            new Date(
+              left.created_at || left.started_at || 0,
+            ).getTime(),
+            new Date(
+              right.created_at || right.started_at || 0,
+            ).getTime(),
+            sortDir,
+          );
+      }
+    });
+
+    return sorted;
+  }, [filteredRuns, sortDir, sortKey]);
+
+  const totalPages = Math.max(
+    1,
+    Math.ceil(pageMeta.total / Math.max(pageMeta.limit, 1)),
+  );
+
+  const firstItem =
+    pageMeta.total === 0 ? 0 : pageMeta.offset + 1;
+  const lastItem =
+    pageMeta.total === 0
+      ? 0
+      : Math.min(pageMeta.offset + sortedRuns.length, pageMeta.total);
+
+  const hasActiveFilters =
+    selectedWorkspace !== 'all' ||
+    selectedStatus !== 'all' ||
+    selectedConnector !== 'all' ||
+    selectedTool !== 'all' ||
+    selectedAgent !== 'all' ||
+    searchQuery.trim().length > 0;
+
+  useEffect(() => {
+    setPage(1);
+    setExpandedRow(null);
+  }, [
+    selectedAgent,
+    selectedConnector,
+    selectedStatus,
+    selectedTool,
+    selectedWorkspace,
+  ]);
+
+  const clearAllFilters = useCallback(() => {
+    setSearchQuery('');
+    setWorkspaceFilter(['all']);
+    setStatusFilter(['all']);
+    setConnectorFilter(['all']);
+    setToolFilter(['all']);
+    setAgentFilter(['all']);
+    setSortKey(null);
+    setSortDir(null);
+    setPage(1);
+    setExpandedRow(null);
+  }, []);
 
   const onSort = useCallback(
     (key: SortKey) => {
@@ -249,126 +609,20 @@ export default function RunsPage() {
     [sortDir, sortKey],
   );
 
-  const sortedItems = useMemo(() => {
-    if (!sortKey || sortDir === null) {
-      return filteredItems;
-    }
-
-    const sorted = [...filteredItems];
-    sorted.sort((left, right) => {
-      switch (sortKey) {
-        case 'agent':
-          return compareByDirection(
-            left.action.agent_name || '',
-            right.action.agent_name || '',
-            sortDir,
-          );
-        case 'tool':
-          return compareByDirection(left.toolLabel, right.toolLabel, sortDir);
-        case 'connector':
-          return compareByDirection(
-            CONNECTORS[left.connectorId].name,
-            CONNECTORS[right.connectorId].name,
-            sortDir,
-          );
-        case 'target':
-          return compareByDirection(
-            left.target.primary || '',
-            right.target.primary || '',
-            sortDir,
-          );
-        case 'policy':
-          return compareByDirection(
-            String(left.action.policy || ''),
-            String(right.action.policy || ''),
-            sortDir,
-          );
-        case 'risk':
-          return compareByDirection(
-            blastRadiusSortValue(left.action),
-            blastRadiusSortValue(right.action),
-            sortDir,
-          );
-        case 'decision':
-          return compareByDirection(left.decision, right.decision, sortDir);
-        case 'time':
-          return compareByDirection(
-            new Date(left.action.timestamp).getTime(),
-            new Date(right.action.timestamp).getTime(),
-            sortDir,
-          );
-      }
-    });
-
-    return sorted;
-  }, [filteredItems, sortDir, sortKey]);
-
-  const safePage = scopedSessionId ? 1 : Math.max(1, pageMeta.page || 1);
-  const totalPages = scopedSessionId ? (pageMeta.total > 0 ? 1 : 0) : pageMeta.pages;
-  const visibleItems = sortedItems;
-
-  const hasActiveFilters =
-    agentFilter.length > 0 ||
-    decisionFilter.length > 0 ||
-    connectorFilter.length > 0 ||
-    targetFilter.length > 0 ||
-    toolFilter.length > 0 ||
-    searchQuery.trim().length > 0 ||
-    Boolean(scopedSessionId);
-
-  useEffect(() => {
-    setExpandedRow(null);
-  }, [
-    agentFilter,
-    decisionFilter,
-    searchQuery,
-    connectorFilter,
-    targetFilter,
-    toolFilter,
-  ]);
-
-  useEffect(() => {
-    setPage(1);
-    setExpandedRow(null);
-  }, [dateRange, scopedSessionId]);
-
-  const clearSessionScope = useCallback(() => {
-    const nextParams = new URLSearchParams(searchParams.toString());
-    nextParams.delete('session');
-    const nextUrl = nextParams.toString() ? `${pathname}?${nextParams.toString()}` : pathname;
-    router.replace(nextUrl, { scroll: false });
-  }, [pathname, router, searchParams]);
-
-  const clearAllFilters = useCallback(() => {
-    setSearchQuery('');
-    setAgentFilter([]);
-    setDecisionFilter([]);
-    setConnectorFilter([]);
-    setTargetFilter([]);
-    setToolFilter([]);
-    setSortKey(null);
-    setSortDir(null);
-    if (scopedSessionId) {
-      clearSessionScope();
-    }
-  }, [clearSessionScope, scopedSessionId]);
-
   const dirFor = useCallback(
-    (key: SortKey): SortDirection => (sortKey === key ? sortDir : null),
+    (key: SortKey): SortDirection =>
+      sortKey === key ? sortDir : null,
     [sortDir, sortKey],
   );
 
-  if (userLoading || (loading && runs.length === 0)) {
+  if (loading && runs.length === 0) {
     return (
       <>
         <Topbar
           title="Runs"
-          subtitle="Cross-connector agent activity"
-          showDateRange
-          dateRangeValue={dateRange}
-          onDateRangeChange={setDateRange}
+          subtitle="Every tool call an agent has made"
         />
-        <div className="mx-auto max-w-[1320px] 2xl:max-w-[1480px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
+        <div className="mx-auto max-w-[1480px] px-4 py-6 sm:px-6 lg:px-8">
           <RunsSkeleton />
         </div>
       </>
@@ -379,407 +633,392 @@ export default function RunsPage() {
     <>
       <Topbar
         title="Runs"
-        subtitle="Cross-connector agent activity"
+        subtitle={`${pageMeta.total.toLocaleString()} · every tool call an agent has made`}
         lastUpdated={lastUpdated}
-        onRefresh={() => void fetchData()}
-        showDateRange
-        dateRangeValue={dateRange}
-        onDateRangeChange={setDateRange}
+        onRefresh={() => void fetchRuns()}
       />
-      <div className="mx-auto max-w-[1320px] 2xl:max-w-[1480px] px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
+
+      <div className="mx-auto max-w-[1480px] px-4 py-5 sm:px-6 lg:px-8">
         {error ? (
-          <div className="mb-6">
+          <div className="mb-4">
             <ErrorBanner
               message={error}
               onDismiss={() => setError(null)}
-              onRetry={() => void fetchData()}
+              onRetry={() => void fetchRuns()}
             />
           </div>
         ) : null}
 
-        <motion.header
-          className="mb-6"
-          variants={staggerContainer(0.05, 0.04)}
-          initial={reduceMotion ? false : 'hidden'}
-          animate="show"
-        >
-          <motion.div variants={fadeUp} className="mb-3 flex flex-wrap items-center gap-2">
-            <Badge tone="info" leadingDot>
-              Agent activity
-            </Badge>
-            <Badge tone="neutral">{rangeLabel}</Badge>
-            {scopedSessionId ? (
-              <Badge tone="feature">Scoped session</Badge>
-            ) : null}
-          </motion.div>
-          <motion.h1
-            variants={fadeUp}
-            className="text-[26px] font-semibold leading-[1.1] tracking-[-0.03em] text-[var(--neutral-strong-950)]"
-          >
-            Every action your agents took
-          </motion.h1>
-          <motion.p
-            variants={fadeUp}
-            className="mt-2 text-[13.5px] text-[var(--neutral-sub-600)]"
-          >
-            {filteredMetrics.total.toLocaleString()} visible runs on this page
-            {hasActiveFilters
-              ? ` of ${totalMetrics.total.toLocaleString()} in ${scopedSessionId ? 'this session scope' : 'the selected range'}.`
-              : ` of ${totalMetrics.total.toLocaleString()} in ${scopedSessionId ? 'this session scope' : 'the selected range'}.`}
-          </motion.p>
-          {scopedSessionId ? (
-            <motion.div variants={fadeUp} className="mt-3 flex flex-wrap items-center gap-2">
-              <CodeChip>{scopedSessionId}</CodeChip>
-              <button
-                type="button"
-                onClick={clearSessionScope}
-                className="text-[12px] font-medium text-[var(--neutral-sub-600)] underline decoration-[var(--stroke-sub-300)] underline-offset-2 transition-colors hover:text-[var(--neutral-strong-950)]"
-              >
-                Clear session scope
-              </button>
-            </motion.div>
-          ) : null}
-        </motion.header>
-
         <motion.section
-          className="mb-6 overflow-hidden rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]"
-          initial={reduceMotion ? false : { opacity: 0, y: 8 }}
+          className="overflow-hidden rounded-[10px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]"
+          initial={reduceMotion ? false : { opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: DUR.slow, ease: EASE.out, delay: 0.12 }}
+          transition={{
+            duration: DUR.slow,
+            ease: EASE.out,
+          }}
         >
-          <div className="grid grid-cols-2 divide-y divide-[var(--stroke-soft-200)] sm:grid-cols-3 sm:divide-y-0 lg:grid-cols-5 lg:divide-x lg:divide-y-0">
-            <MetricStripCell label="Visible runs" value={filteredMetrics.total} />
-            <MetricStripCell label="Allow" value={filteredMetrics.allows} dot="var(--success)" />
-            <MetricStripCell label="Deny" value={filteredMetrics.denies} dot="var(--error)" />
-            <MetricStripCell label="Rewrite" value={filteredMetrics.rewrites} dot="var(--feature)" />
-            <MetricStripCell label="Approval" value={filteredMetrics.approvals} dot="var(--warning)" />
-          </div>
-        </motion.section>
+          <div className="border-b border-[var(--stroke-soft-200)] px-3 py-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <FilterChip
+                label="Workspace"
+                options={workspaceOptions}
+                value={workspaceFilter}
+                onChange={(values) =>
+                  setWorkspaceFilter(values.length ? [values[0]] : ['all'])
+                }
+              />
 
-        {runs.length === 0 ? (
-          <div className="rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
-            <EmptyState
-              icon={<Activity className="h-5 w-5" />}
-              title="No agent actions yet"
-              description="Connect your agent to start monitoring governed actions."
-              action={
-                <Link href="/onboarding">
-                  <Button variant="primary">Set up agent</Button>
-                </Link>
-              }
-            />
+              <FilterChip
+                label="Status"
+                options={STATUS_OPTIONS}
+                value={statusFilter}
+                onChange={(values) =>
+                  setStatusFilter(values.length ? [values[0]] : ['all'])
+                }
+              />
+
+              <FilterChip
+                label="Connector"
+                options={connectorOptions}
+                value={connectorFilter}
+                onChange={(values) =>
+                  setConnectorFilter(values.length ? [values[0]] : ['all'])
+                }
+              />
+
+              <FilterChip
+                label="Tool"
+                options={toolOptions}
+                value={toolFilter}
+                onChange={(values) =>
+                  setToolFilter(values.length ? [values[0]] : ['all'])
+                }
+              />
+
+              <FilterChip
+                label="Agent"
+                options={agentOptions}
+                value={agentFilter}
+                onChange={(values) =>
+                  setAgentFilter(values.length ? [values[0]] : ['all'])
+                }
+              />
+
+              <div className="ml-auto min-w-[220px] max-w-[320px] flex-1">
+                <Input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(event) =>
+                    setSearchQuery(event.target.value)
+                  }
+                  placeholder="Search runs"
+                  leadingIcon={
+                    <Search
+                      className="h-3.5 w-3.5"
+                      strokeWidth={2}
+                    />
+                  }
+                  trailingIcon={
+                    searchQuery ? (
+                      <button
+                        type="button"
+                        onClick={() => setSearchQuery('')}
+                        aria-label="Clear search"
+                        className="rounded p-0.5 text-[var(--neutral-soft-400)] transition-colors hover:text-[var(--neutral-strong-950)]"
+                      >
+                        <X
+                          className="h-3.5 w-3.5"
+                          strokeWidth={2.25}
+                        />
+                      </button>
+                    ) : undefined
+                  }
+                />
+              </div>
+
+              {hasActiveFilters ? (
+                <button
+                  type="button"
+                  onClick={clearAllFilters}
+                  className="inline-flex h-7 items-center gap-1 rounded-[8px] px-2 text-[11.5px] font-medium text-[var(--neutral-sub-600)] transition-colors hover:bg-[var(--neutral-weak-50)] hover:text-[var(--neutral-strong-950)]"
+                >
+                  <X
+                    className="h-3 w-3"
+                    strokeWidth={2.25}
+                    aria-hidden
+                  />
+                  Clear
+                </button>
+              ) : null}
+            </div>
           </div>
-        ) : filteredItems.length === 0 ? (
-          <div className="rounded-[12px] border border-[var(--stroke-soft-200)] bg-white shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
+
+          {runs.length === 0 ? (
             <EmptyState
-              icon={<Activity className="h-5 w-5" />}
-              title="No runs match the current filters"
-              description="Adjust or clear the current search and filters to inspect other actions in this range."
+              icon={<ActivityIcon />}
+              title="No runs yet"
+              description="Run an action through one of your agents to see it here."
+            />
+          ) : sortedRuns.length === 0 ? (
+            <EmptyState
+              icon={<ActivityIcon />}
+              title="No runs match these filters"
+              description="Clear a filter or search term to inspect other runs."
               action={
-                <Button variant="secondary" onClick={clearAllFilters}>
+                <Button
+                  variant="secondary"
+                  onClick={clearAllFilters}
+                >
                   Clear filters
                 </Button>
               }
             />
-          </div>
-        ) : (
-          <>
-            <motion.div
-              className="mb-3 rounded-[12px] border border-[var(--stroke-soft-200)] bg-white p-3 shadow-[0_1px_2px_rgba(23,23,23,0.04)]"
-              initial={reduceMotion ? false : { opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: DUR.slow, ease: EASE.out, delay: 0.16 }}
-            >
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="min-w-[240px] flex-1">
-                  <Input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(event) => setSearchQuery(event.target.value)}
-                    placeholder="Search agent, tool, connector, target, policy, or session"
-                    leadingIcon={<Search className="h-3.5 w-3.5" strokeWidth={2} />}
-                    trailingIcon={
-                      searchQuery ? (
-                        <button
-                          type="button"
-                          onClick={() => setSearchQuery('')}
-                          aria-label="Clear search"
-                          className="rounded p-0.5 text-[var(--neutral-soft-400)] transition-colors hover:text-[var(--neutral-strong-950)]"
-                        >
-                          <X className="h-3.5 w-3.5" strokeWidth={2.25} />
-                        </button>
-                      ) : undefined
-                    }
-                  />
-                </div>
-                <FilterChip
-                  label="Agent"
-                  options={filterOptions.agents}
-                  value={agentFilter}
-                  onChange={setAgentFilter}
-                />
-                <FilterChip
-                  label="Decision"
-                  options={filterOptions.decisions.map((option) => ({
-                    value: option.value,
-                    label: option.label,
-                    icon: <DecisionOptionDot decision={option.value} />,
-                  }))}
-                  value={decisionFilter}
-                  onChange={setDecisionFilter}
-                />
-                <FilterChip
-                  label="Connector"
-                  options={filterOptions.connectors.map((option) => ({
-                    value: option.value,
-                    label: CONNECTORS[option.value as keyof typeof CONNECTORS].name,
-                    icon: (
-                      <ConnectorMark
-                        id={option.value as keyof typeof CONNECTORS}
-                        size="xs"
-                        className="cursor-default"
-                      />
-                    ),
-                  }))}
-                  value={connectorFilter}
-                  onChange={setConnectorFilter}
-                />
-                <FilterChip
-                  label="Target"
-                  options={filterOptions.targets}
-                  value={targetFilter}
-                  onChange={setTargetFilter}
-                />
-                <FilterChip
-                  label="Tool"
-                  options={filterOptions.tools}
-                  value={toolFilter}
-                  onChange={setToolFilter}
-                />
-                {hasActiveFilters ? (
-                  <button
-                    type="button"
-                    onClick={clearAllFilters}
-                    className="inline-flex h-7 items-center gap-1 rounded-[8px] px-2 text-[11.5px] font-medium text-[var(--neutral-sub-600)] transition-colors hover:bg-[var(--neutral-weak-50)] hover:text-[var(--neutral-strong-950)]"
-                  >
-                    <X className="h-3 w-3" strokeWidth={2.25} aria-hidden />
-                    Clear filters
-                  </button>
-                ) : null}
-              </div>
-              {!scopedSessionId ? (
-                <p className="mt-2 text-[11.5px] text-[var(--neutral-soft-400)]">
-                  Search and facet filters apply to the loaded page. Use pagination to inspect older activity.
-                </p>
-              ) : null}
-            </motion.div>
-
-            <motion.div
-              initial={reduceMotion ? false : { opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: DUR.slow, ease: EASE.out, delay: 0.2 }}
-            >
+          ) : (
+            <>
               <Table scrollX>
                 <THead>
                   <tr>
-                    <TH sortable sortDirection={dirFor('agent')} onSort={() => onSort('agent')}>
-                      Agent
-                    </TH>
-                    <TH sortable sortDirection={dirFor('tool')} onSort={() => onSort('tool')}>
+                    <TH
+                      sortable
+                      sortDirection={dirFor('tool')}
+                      onSort={() => onSort('tool')}
+                    >
                       Tool
                     </TH>
-                    <TH sortable sortDirection={dirFor('connector')} onSort={() => onSort('connector')}>
+                    <TH
+                      sortable
+                      sortDirection={dirFor('agent')}
+                      onSort={() => onSort('agent')}
+                    >
+                      Agent
+                    </TH>
+                    <TH
+                      sortable
+                      sortDirection={dirFor('connector')}
+                      onSort={() => onSort('connector')}
+                    >
                       Connector
                     </TH>
-                    <TH sortable sortDirection={dirFor('target')} onSort={() => onSort('target')}>
-                      Target
+                    <TH
+                      sortable
+                      sortDirection={dirFor('result')}
+                      onSort={() => onSort('result')}
+                    >
+                      Result
                     </TH>
-                    <TH aria-label="Expand" className="w-8" />
+                    <TH
+                      sortable
+                      sortDirection={dirFor('execution')}
+                      onSort={() => onSort('execution')}
+                    >
+                      Took
+                    </TH>
+                    <TH
+                      sortable
+                      sortDirection={dirFor('tokens')}
+                      onSort={() => onSort('tokens')}
+                    >
+                      Tokens
+                    </TH>
+                    <TH
+                      sortable
+                      sortDirection={dirFor('time')}
+                      onSort={() => onSort('time')}
+                    >
+                      When
+                    </TH>
+                    <TH
+                      aria-label="Expand"
+                      className="w-8"
+                    />
                   </tr>
                 </THead>
+
                 <TBody>
-                  {visibleItems.map((item) => (
+                  {sortedRuns.map((run) => (
                     <RunRow
-                      key={item.action.id}
-                      item={item}
-                      isExpanded={expandedRow === item.action.id}
+                      key={run.id}
+                      run={run}
+                      isExpanded={expandedRow === run.id}
                       onToggle={() =>
-                        setExpandedRow(expandedRow === item.action.id ? null : item.action.id)
+                        setExpandedRow(
+                          expandedRow === run.id ? null : run.id,
+                        )
                       }
                     />
                   ))}
                 </TBody>
               </Table>
 
-              <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-[12px] border border-[var(--stroke-soft-200)] bg-white px-4 py-3 shadow-[0_1px_2px_rgba(23,23,23,0.04)]">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--stroke-soft-200)] px-4 py-3">
                 <p className="text-xs text-[var(--neutral-soft-400)]">
                   Showing{' '}
                   <span className="font-medium text-[var(--neutral-strong-950)]">
-                    {sortedItems.length.toLocaleString()}
+                    {firstItem.toLocaleString()}
                   </span>{' '}
-                  matching runs on this page
-                  {!scopedSessionId ? (
-                    <>
-                      {' '}
-                      of{' '}
-                      <span className="font-medium text-[var(--neutral-strong-950)]">
-                        {pageMeta.total.toLocaleString()}
-                      </span>{' '}
-                      in the selected range
-                    </>
-                  ) : null}
+                  to{' '}
+                  <span className="font-medium text-[var(--neutral-strong-950)]">
+                    {lastItem.toLocaleString()}
+                  </span>{' '}
+                  of{' '}
+                  <span className="font-medium text-[var(--neutral-strong-950)]">
+                    {pageMeta.total.toLocaleString()}
+                  </span>
                 </p>
+
                 <div className="flex items-center gap-2">
                   <Button
                     variant="secondary"
                     size="sm"
-                    disabled={Boolean(scopedSessionId) || safePage <= 1}
-                    onClick={() => setPage((current) => Math.max(1, current - 1))}
+                    disabled={page <= 1}
+                    onClick={() =>
+                      setPage((current) =>
+                        Math.max(1, current - 1),
+                      )
+                    }
                   >
                     Previous
                   </Button>
+
                   <span className="text-[12px] text-[var(--neutral-soft-400)]">
-                    Page {safePage} of {Math.max(totalPages, 1)}
+                    Page {page} of {totalPages}
                   </span>
+
                   <Button
                     variant="secondary"
                     size="sm"
-                    disabled={Boolean(scopedSessionId) || totalPages <= 1 || safePage >= totalPages}
+                    disabled={page >= totalPages}
                     onClick={() =>
-                      setPage((current) => Math.min(Math.max(totalPages, 1), current + 1))
+                      setPage((current) =>
+                        Math.min(totalPages, current + 1),
+                      )
                     }
                   >
                     Next
                   </Button>
                 </div>
               </div>
-            </motion.div>
-          </>
-        )}
+            </>
+          )}
+        </motion.section>
+
+        {loadingOptions ? null : null}
       </div>
     </>
   );
 }
 
 function RunRow({
-  item,
+  run,
   isExpanded,
   onToggle,
 }: {
-  item: RunActivityViewModel;
+  run: RunRecord;
   isExpanded: boolean;
   onToggle: () => void;
 }) {
-  const action = item.action;
-  const isAccepted = isAcceptedDecision(action.decision);
+  const status = statusClasses(run.status);
+  const connectorKey = connectorId(run.connector_key);
+  const handle = run.agent_handle || run.agent_name || 'Unknown';
+  const result = resultText(run);
 
   return (
     <>
-      <TR clickable isExpanded={isExpanded} onClick={onToggle}>
+      <TR
+        clickable
+        isExpanded={isExpanded}
+        onClick={onToggle}
+        className={status.row}
+      >
         <TD className="max-w-[220px]">
-          <div className="flex items-center gap-2.5">
-            {isAccepted ? (
-              <span
-                className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[var(--success-lighter)] text-[var(--success)]"
-                aria-label="Accepted"
-                title="Accepted"
-              >
-                <Check className="h-2.5 w-2.5" strokeWidth={2.75} aria-hidden />
-              </span>
-            ) : (
-              <span
-                className="inline-block h-1.5 w-1.5 shrink-0 rounded-full"
-                style={{ backgroundColor: decisionColor(action.decision) }}
-                aria-hidden
-              />
-            )}
-            <AgentMark name={action.agent_name || ''} size="xs" />
-            <span className="truncate text-[13.5px] font-semibold text-[var(--neutral-strong-950)]">
-              {action.agent_name || 'Unknown'}
+          <div className="flex items-center gap-2">
+            <span
+              className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${status.dot}`}
+              aria-hidden
+            />
+            <CodeChip title={run.tool_name}>
+              {run.tool_name}
+            </CodeChip>
+          </div>
+        </TD>
+
+        <TD className="max-w-[180px]">
+          <div className="flex min-w-0 items-center gap-2">
+            <AgentMark name={handle} size="xs" />
+            <span className="truncate text-[12.5px] font-medium text-[var(--neutral-strong-950)]">
+              {handle.startsWith('@') ? handle : `@${handle}`}
             </span>
           </div>
         </TD>
-        <TD>
-          <div className="flex items-center gap-2">
-            <CodeChip title={action.tool_name || ''}>{item.toolLabel}</CodeChip>
-            {isAccepted ? (
-              <span className="inline-flex items-center gap-1 rounded-[5px] bg-[var(--success-lighter)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--success)]">
-                <Check className="h-2.5 w-2.5" strokeWidth={2.75} aria-hidden />
-                Accepted
+
+        <TD className="whitespace-nowrap">
+          <div
+            className="flex items-center gap-2"
+            title={`${connectorName(run.connector_key)} connector`}
+          >
+            {connectorKey ? (
+              <ConnectorMark
+                id={connectorKey}
+                size="xs"
+                className="cursor-default"
+              />
+            ) : null}
+            <span className="text-[12.5px] text-[var(--neutral-sub-600)]">
+              {connectorName(run.connector_key)}
+            </span>
+          </div>
+        </TD>
+
+        <TD className="min-w-[300px] max-w-[460px]">
+          <div className="flex min-w-0 items-center gap-2">
+            <span
+              className={`truncate text-[12.5px] ${
+                run.status === 'failed'
+                  ? 'text-[var(--error)]'
+                  : 'text-[var(--neutral-sub-600)]'
+              }`}
+              title={result}
+            >
+              {result}
+            </span>
+
+            {retryLabel(run) ? (
+              <span className="shrink-0 rounded-[5px] border border-[var(--stroke-soft-200)] bg-white px-1.5 py-0.5 text-[10px] font-medium text-[var(--neutral-sub-600)]">
+                retry
               </span>
             ) : null}
           </div>
         </TD>
-        <TD className="whitespace-nowrap">
-          <div
-            className="flex items-center gap-2"
-            title={`${CONNECTORS[item.connectorId].name} connector`}
-          >
-            <ConnectorMark id={item.connectorId} size="xs" className="cursor-default" />
-            <span className="text-[12.5px] text-[var(--neutral-sub-600)]">
-              {CONNECTORS[item.connectorId].name}
-            </span>
-          </div>
+
+        <TD className="whitespace-nowrap text-[12px] text-[var(--neutral-sub-600)]">
+          {formatDuration(run.execution_time_ms)}
         </TD>
-        <TD className="max-w-[260px]">
-          {item.target.primary ? (
-            <div className="flex min-w-0 items-center gap-2" title={item.target.kind}>
-              <span className="truncate text-[12.5px] text-[var(--neutral-sub-600)]">
-                {item.target.primary}
-              </span>
-              {item.target.secondary ? <CodeChip>{item.target.secondary}</CodeChip> : null}
-            </div>
-          ) : (
-            <span className="text-[12px] italic text-[var(--neutral-soft-400)]">No target</span>
+
+        <TD className="whitespace-nowrap text-[12px] text-[var(--neutral-sub-600)]">
+          {formatTokens(run)}
+        </TD>
+
+        <TD className="whitespace-nowrap text-[12px] text-[var(--neutral-sub-600)]">
+          {formatRelativeTime(
+            run.created_at || run.started_at,
           )}
         </TD>
+
         <TD className="w-8 text-right">
           <ChevronRight
-            className={`ml-auto h-3.5 w-3.5 text-[var(--neutral-soft-400)] transition-transform duration-150 group-hover:translate-x-0.5 group-hover:text-[var(--neutral-strong-950)] ${
+            className={`ml-auto h-3.5 w-3.5 text-[var(--neutral-soft-400)] transition-transform duration-150 ${
               isExpanded ? 'rotate-90' : ''
             }`}
             strokeWidth={2}
           />
         </TD>
       </TR>
+
       <AnimatePresence initial={false}>
         {isExpanded ? (
-          <TRExpanded key="expanded" colSpan={5}>
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(320px,0.9fr)]">
-              <div>
-                <div className="mb-1.5 flex items-center gap-2">
-                  {isAccepted ? (
-                    <span className="inline-flex items-center gap-1 rounded-[5px] bg-[var(--success-lighter)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--success)]">
-                      <Check className="h-2.5 w-2.5" strokeWidth={2.75} aria-hidden />
-                      Accepted
-                    </span>
-                  ) : null}
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.05em] text-[var(--neutral-soft-400)]">
-                    Full summary
-                  </p>
-                </div>
-                <p className="text-[13px] leading-[1.6] text-[var(--neutral-strong-950)]">
-                  {action.action_summary || 'No summary provided'}
-                </p>
-                {action.arguments ? (
-                  <div className="mt-4">
-                    <JsonViewer data={action.arguments} collapsed={false} label="Arguments" />
-                  </div>
-                ) : null}
-              </div>
-
-              <div className="grid grid-cols-2 gap-3 text-[12px] md:grid-cols-3">
-                <MetaCell label="Connector" value={CONNECTORS[item.connectorId].name} />
-                <MetaCell label="Target kind" value={item.target.kind} />
-                <MetaCell label="Session" value={action.session_id || 'Unavailable'} mono />
-                <MetaCell label="Timestamp" value={formatFullTimestamp(action.timestamp)} />
-                <MetaCell
-                  label="Execution"
-                  value={formatExecutionTimeMs(action.execution_time) || 'Unavailable'}
-                />
-                <MetaCell label="Policy" value={String(action.policy || 'Unavailable')} mono />
-              </div>
-            </div>
+          <TRExpanded key="expanded" colSpan={8}>
+            <RunDetails run={run} />
           </TRExpanded>
         ) : null}
       </AnimatePresence>
@@ -787,28 +1026,145 @@ function RunRow({
   );
 }
 
-function isAcceptedDecision(decision: string | null | undefined): boolean {
-  const normalized = String(decision || '').trim().toLowerCase();
-  return normalized === 'allow' || normalized === 'allowed' || normalized === 'accept' || normalized === 'accepted';
-}
+function RunDetails({ run }: { run: RunRecord }) {
+  const status = statusClasses(run.status);
+  const isSuccessful = run.status === 'completed';
 
-function DecisionOptionDot({ decision }: { decision: string }) {
-  const isAccepted = isAcceptedDecision(decision);
+  return (
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_270px]">
+      <div className="min-w-0">
+        <div
+          className={`rounded-[9px] border px-4 py-3 ${
+            isSuccessful
+              ? 'border-[var(--success-light)] bg-[var(--success-lighter)]'
+              : run.status === 'failed'
+                ? 'border-[var(--error-light)] bg-[var(--error-lighter)]'
+                : 'border-[var(--stroke-soft-200)] bg-white'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {isSuccessful ? (
+              <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-[var(--success)] text-white">
+                <Check
+                  className="h-2.5 w-2.5"
+                  strokeWidth={3}
+                  aria-hidden
+                />
+              </span>
+            ) : (
+              <span
+                className={`inline-block h-2 w-2 rounded-full ${status.dot}`}
+              />
+            )}
 
-  return isAccepted ? (
-    <span
-      className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-[var(--success-lighter)] text-[var(--success)]"
-      aria-label="Accepted"
-      title="Accepted"
-    >
-      <Check className="h-2.5 w-2.5" strokeWidth={2.75} aria-hidden />
-    </span>
-  ) : (
-    <span
-      className="inline-block h-2 w-2 shrink-0 rounded-full"
-      style={{ backgroundColor: decisionColor(decision) }}
-      aria-hidden
-    />
+            <p className={`text-[12px] font-semibold ${status.text}`}>
+              {run.status === 'failed'
+                ? 'This run failed'
+                : run.status === 'completed'
+                  ? 'This run completed'
+                  : `This run is ${statusLabel(run.status).toLowerCase()}`}
+            </p>
+          </div>
+
+          <p className="mt-1 text-[12px] text-[var(--neutral-sub-600)]">
+            {resultText(run)}
+          </p>
+        </div>
+
+        <div className="mt-4">
+          <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.06em] text-[var(--neutral-soft-400)]">
+            What the agent sent
+          </p>
+          <div className="rounded-[9px] border border-[var(--stroke-soft-200)] bg-[var(--neutral-weak-50)] p-3">
+            <JsonViewer
+              data={{
+                tool: run.tool_name,
+                connector: run.connector_key,
+                arguments: run.arguments || {},
+              }}
+              collapsed={false}
+              label="Request"
+            />
+          </div>
+        </div>
+
+        <div className="mt-4">
+          <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.06em] text-[var(--neutral-soft-400)]">
+            What came back
+          </p>
+          <div className="rounded-[9px] border border-[var(--stroke-soft-200)] bg-[var(--neutral-weak-50)] p-3">
+            <JsonViewer
+              data={
+                run.result_payload &&
+                typeof run.result_payload === 'object'
+                  ? run.result_payload
+                  : {
+                      result: run.result_payload,
+                      error: run.error_message,
+                    }
+              }
+              collapsed={false}
+              label="Response"
+            />
+          </div>
+        </div>
+      </div>
+
+      <aside className="rounded-[9px] border border-[var(--stroke-soft-200)] bg-white p-4">
+        <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.06em] text-[var(--neutral-soft-400)]">
+          The record
+        </p>
+
+        <div className="space-y-3">
+          <MetaCell
+            label="Status"
+            value={statusLabel(run.status)}
+            valueClass={status.text}
+          />
+          <MetaCell
+            label="Agent"
+            value={
+              run.agent_handle
+                ? `@${run.agent_handle.replace(/^@/, '')}`
+                : run.agent_name || 'Unavailable'
+            }
+          />
+          <MetaCell
+            label="Workspace"
+            value={
+              run.workspace_title ||
+              run.workspace_name ||
+              'Unavailable'
+            }
+          />
+          <MetaCell
+            label="Connector"
+            value={connectorName(run.connector_key)}
+          />
+          <MetaCell
+            label="Tool"
+            value={run.tool_name || 'Unavailable'}
+            mono
+          />
+          <MetaCell
+            label="Started"
+            value={formatFullTimestamp(run.started_at)}
+          />
+          <MetaCell
+            label="Completed"
+            value={formatFullTimestamp(run.completed_at)}
+          />
+          <MetaCell
+            label="Execution time"
+            value={formatDuration(run.execution_time_ms)}
+          />
+          <MetaCell
+            label="Tokens"
+            value={formatTokens(run)}
+          />
+        </div>
+      </aside>
+    </div>
   );
 }
 
@@ -816,10 +1172,12 @@ function MetaCell({
   label,
   value,
   mono = false,
+  valueClass = 'text-[var(--neutral-strong-950)]',
 }: {
   label: string;
   value: string;
   mono?: boolean;
+  valueClass?: string;
 }) {
   return (
     <div>
@@ -827,11 +1185,11 @@ function MetaCell({
         {label}
       </p>
       <p
-        className={
+        className={`mt-0.5 ${
           mono
-            ? 'mt-0.5 break-all text-[var(--neutral-strong-950)] [font-family:var(--font-geist-mono),ui-monospace,monospace]'
-            : 'mt-0.5 text-[var(--neutral-strong-950)]'
-        }
+            ? '[font-family:var(--font-geist-mono),ui-monospace,monospace] break-all'
+            : ''
+        } text-[12px] ${valueClass}`}
       >
         {value}
       </p>
@@ -839,50 +1197,35 @@ function MetaCell({
   );
 }
 
-function compareByDirection(left: string | number, right: string | number, direction: SortDirection): number {
-  const comparison =
-    typeof left === 'number' && typeof right === 'number'
-      ? left - right
-      : compareText(String(left), String(right));
+function formatRelativeTime(value?: string | null): string {
+  if (!value) return '—';
 
-  return direction === 'asc' ? comparison : -comparison;
+  const timestamp = new Date(value).getTime();
+  if (!Number.isFinite(timestamp)) return '—';
+
+  const seconds = Math.max(
+    0,
+    Math.floor((Date.now() - timestamp) / 1000),
+  );
+
+  if (seconds < 60) return `${seconds}s ago`;
+
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+
+  return new Date(timestamp).toLocaleDateString();
 }
 
-function blastRadiusSortValue(action: SessionAction): number {
-  const value = (readBlastRadius(action) || '').toLowerCase();
-  if (value === 'low') return 1;
-  if (value === 'medium') return 2;
-  if (value === 'high') return 3;
-  if (value === 'critical') return 4;
-  return 0;
-}
-
-function MetricStripCell({
-  label,
-  value,
-  dot,
-}: {
-  label: string;
-  value: number;
-  dot?: string;
-}) {
+function ActivityIcon() {
   return (
-    <div className="px-6 py-4">
-      <div className="flex items-center gap-2">
-        {dot ? (
-          <span
-            className="inline-block h-[7px] w-[7px] shrink-0 rounded-full"
-            style={{ backgroundColor: dot }}
-            aria-hidden
-          />
-        ) : null}
-        <p className="text-[10.5px] font-semibold uppercase tracking-[0.07em] text-[var(--neutral-soft-400)]">
-          {label}
-        </p>
-      </div>
-      <p className="mt-1.5 text-[26px] font-semibold leading-none tracking-[-0.04em] tabular-nums text-[var(--neutral-strong-950)]">
-        {value.toLocaleString()}
-      </p>
-    </div>
+    <span className="inline-flex h-5 w-5 items-center justify-center">
+      <span className="h-2 w-2 rounded-full bg-[var(--neutral-soft-400)]" />
+    </span>
   );
 }

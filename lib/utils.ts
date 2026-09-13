@@ -75,8 +75,13 @@ export function formatRelativeTime(timestamp: string): string {
   return parsed.toLocaleDateString();
 }
 
-export function formatFullTimestamp(timestamp: string): string {
-  return parseApiUtcTimestamp(timestamp).toLocaleString('en-US', {
+export function formatFullTimestamp(timestamp?: string | null): string {
+  if (!timestamp || !timestamp.trim()) return '—';
+
+  const parsed = parseApiUtcTimestamp(timestamp);
+  if (Number.isNaN(parsed.getTime())) return '—';
+
+  return parsed.toLocaleString('en-US', {
     year: 'numeric',
     month: 'short',
     day: 'numeric',

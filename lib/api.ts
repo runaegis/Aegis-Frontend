@@ -211,6 +211,37 @@ export type WorkspaceSummary = WorkspaceRecord & {
 
 export type WorkspaceRunStatus = "success" | "failed" | "running" | "pending" | string;
 
+export type RunRecord = {
+  id: string;
+  workspace_id: string;
+  workspace_name: string;
+  workspace_title?: string | null;
+  user_id: string | null;
+  agent_id: string | null;
+  agent_name: string;
+  agent_handle?: string | null;
+  connector_key: string | null;
+  tool_name: string;
+  arguments: Record<string, unknown>;
+  status: string;
+  result_summary: string | null;
+  result_payload: Record<string, unknown>;
+  error_message: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  execution_time_ms: number;
+  created_at: string;
+  updated_at: string | null;
+  token_count?: number | null;
+};
+
+export type RunListResponse = {
+  items: RunRecord[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
 export type WorkspaceRun = {
   id: string;
   workspace_id?: string;
@@ -313,6 +344,90 @@ export type WorkspaceJoinResponse = {
   agent_key: string | null;
   mcp_config_snippet: WorkspaceAgentKeyResponse["mcp_config_snippet"] | null;
 };
+
+function normalizeRunRecord(row: unknown): RunRecord {
+  const parsed = parseRow(row) as Record<string, unknown>;
+
+  return {
+    id: String(parsed.id ?? ""),
+    workspace_id: String(parsed.workspace_id ?? ""),
+    workspace_name: String(parsed.workspace_name ?? ""),
+    workspace_title:
+      typeof parsed.workspace_title === "string"
+        ? parsed.workspace_title
+        : null,
+    user_id:
+      typeof parsed.user_id === "string"
+        ? parsed.user_id
+        : null,
+    agent_id:
+      typeof parsed.agent_id === "string"
+        ? parsed.agent_id
+        : null,
+    agent_name:
+      typeof parsed.agent_name === "string"
+        ? parsed.agent_name
+        : "Unknown",
+    agent_handle:
+      typeof parsed.agent_handle === "string"
+        ? parsed.agent_handle
+        : null,
+    connector_key:
+      typeof parsed.connector_key === "string"
+        ? parsed.connector_key
+        : null,
+    tool_name:
+      typeof parsed.tool_name === "string"
+        ? parsed.tool_name
+        : "unknown",
+    arguments:
+      parsed.arguments &&
+      typeof parsed.arguments === "object"
+        ? (parsed.arguments as Record<string, unknown>)
+        : {},
+    status:
+      typeof parsed.status === "string"
+        ? parsed.status
+        : "unknown",
+    result_summary:
+      typeof parsed.result_summary === "string"
+        ? parsed.result_summary
+        : null,
+    result_payload:
+      parsed.result_payload &&
+      typeof parsed.result_payload === "object"
+        ? (parsed.result_payload as Record<string, unknown>)
+        : {},
+    error_message:
+      typeof parsed.error_message === "string"
+        ? parsed.error_message
+        : null,
+    started_at:
+      typeof parsed.started_at === "string"
+        ? parsed.started_at
+        : null,
+    completed_at:
+      typeof parsed.completed_at === "string"
+        ? parsed.completed_at
+        : null,
+    execution_time_ms:
+      asFiniteNumber(parsed.execution_time_ms) ?? 0,
+    created_at:
+      typeof parsed.created_at === "string"
+        ? parsed.created_at
+        : new Date().toISOString(),
+    updated_at:
+      typeof parsed.updated_at === "string"
+        ? parsed.updated_at
+        : null,
+    token_count:
+      asFiniteNumber(parsed.token_count) ??
+      asFiniteNumber(parsed.tokens) ??
+      asFiniteNumber(parsed.total_tokens) ??
+      null,
+  };
+}
+
 
 function getAPIBase(): string {
   let url = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -2246,6 +2361,66 @@ export const api = {
       (a, b) =>
         new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
     );
+  },
+
+  getRunsPage: async (
+    opts: {
+      workspace_id?: string;
+      agent_id?: string;
+      status?: string;
+      connector_key?: string;
+      tool_name?: string;
+      page?: number;
+      page_size?: number;
+    } = {},
+  ): Promise<RunListResponse> => {
+    const page = opts.page ?? 1;
+    const page_size = opts.page_size ?? 20;
+    const offset = (page - 1) * page_size;
+
+    const url = new URL(`${API_BASE}/api/v3/runs`);
+
+    if (opts.workspace_id) {
+      url.searchParams.set("workspace_id", opts.workspace_id);
+    }
+
+    if (opts.agent_id) {
+      url.searchParams.set("agent_id", opts.agent_id);
+    }
+
+    if (opts.status) {
+      url.searchParams.set("status", opts.status);
+    }
+
+    if (opts.connector_key) {
+      url.searchParams.set("connector_key", opts.connector_key);
+    }
+
+    if (opts.tool_name) {
+      url.searchParams.set("tool_name", opts.tool_name);
+    }
+
+    url.searchParams.set("limit", String(page_size));
+    url.searchParams.set("offset", String(offset));
+
+    const res = await apiFetch(url.toString());
+
+    if (!res.ok) {
+      throw await readApiError(res);
+    }
+
+    const payload = await res.json();
+
+    const rawItems = Array.isArray(payload?.items)
+      ? payload.items
+      : [];
+
+    return {
+      items: rawItems.map(normalizeRunRecord),
+      total: asFiniteNumber(payload?.total) ?? rawItems.length,
+      limit: asFiniteNumber(payload?.limit) ?? page_size,
+      offset: asFiniteNumber(payload?.offset) ?? offset,
+    };
   },
 
   /** One page of session actions (runs). Default matches server pagination (20). */
