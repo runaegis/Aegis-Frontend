@@ -78,35 +78,6 @@ const DEMO_USER = {
   onboarding_status: true,
 };
 
-// Theme handling — reads from `?theme=` query string OR persisted
-// localStorage flag (`aegis_theme`). When set to 'dark', the dashboard
-// layout applies `data-theme="dark"` on the document root, which
-// triggers the token-override block in globals.css.
-//
-// Scoping: this is set/cleared inside the dashboard layout, so /auth
-// and /onboarding pages never receive `data-theme` — they always
-// render in light mode by design.
-//
-// FOUC prevention: an inline <script> in app/layout.tsx reads the same
-// localStorage flag at first paint and applies `data-theme` before
-// React hydrates, so dark mode persists across reloads with no flash.
-type ThemeFlag = 'dark' | null;
-
-function readThemeFlag(): ThemeFlag {
-  if (typeof window === 'undefined') return null;
-  const params = new URLSearchParams(window.location.search);
-  const fromQuery = params.get('theme');
-  if (fromQuery === 'dark') {
-    localStorage.setItem('aegis_theme', 'dark');
-    return 'dark';
-  }
-  if (fromQuery === 'light') {
-    localStorage.removeItem('aegis_theme');
-    return null;
-  }
-  return localStorage.getItem('aegis_theme') === 'dark' ? 'dark' : null;
-}
-
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { user, setUser } = useUser();
@@ -126,20 +97,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     installPreviewApi();
     installWorkspacePreviewApi();
   }
-
-  // Apply dark theme on mount when flag is set; clean up on unmount so
-  // navigating away from /dashboard restores the default light theme.
-  useEffect(() => {
-    const theme = readThemeFlag();
-    if (theme) {
-      document.documentElement.dataset.theme = theme;
-    } else {
-      delete document.documentElement.dataset.theme;
-    }
-    return () => {
-      delete document.documentElement.dataset.theme;
-    };
-  }, []);
 
   // Mark the document root with demo state — the WorkspaceSwitcher
   // and any other demo-aware component reads this. Cleanup on unmount

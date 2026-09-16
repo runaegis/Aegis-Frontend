@@ -22,7 +22,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { GenerativeAvatar } from '@/components/ui/GenerativeAvatar';
+import { avatarColorsForSeed, GenerativeAvatar } from '@/components/ui/GenerativeAvatar';
 
 export type AgentHue = 'feature' | 'info' | 'success' | 'warning' | 'primary';
 
@@ -160,6 +160,15 @@ const GLYPH_SIZE = {
   lg: { px: 32, radius: 8 },
 } as const;
 
+export function agentAvatarSeed(handle: string) {
+  return `agent:${handle.toLowerCase()}`;
+}
+
+/** Saturated avatar background — use for lane stripes, not for status. */
+export function agentIdentityColor(handle: string): string {
+  return avatarColorsForSeed(agentAvatarSeed(handle)).bg;
+}
+
 /**
  * Agent identity mark — same generative profile photo as the user
  * avatar in the sidebar footer, seeded by handle so each agent is
@@ -180,7 +189,7 @@ export function AgentGlyph({
   const dims = GLYPH_SIZE[size];
   return (
     <GenerativeAvatar
-      seed={`agent:${handle.toLowerCase()}`}
+      seed={agentAvatarSeed(handle)}
       variant="user"
       size={dims.px}
       radius={dims.radius}

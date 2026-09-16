@@ -29,6 +29,7 @@ import { Composer } from './Composer';
 import { MentionText, AgentHueProvider } from './agent-visuals';
 import { SampleDataChip, useIsDemo } from './WorkspaceDemoGate';
 import { DEMO_VIEWER } from '@/lib/workspace-preview';
+import { recordRecentWorkspace, resolveRecentWorkspaces } from '@/lib/recentWorkspaces';
 import { TaskChecklist } from './TaskChecklist';
 import { RoomSidebar, type SiblingMeta } from './RoomSidebar';
 import { InlineEdit } from './InlineEdit';
@@ -80,6 +81,7 @@ export function WorkspaceRoom({ workspaceId }: { workspaceId: string }) {
   const [runsTotal, setRunsTotal] = useState<number | null>(null);
   const [people, setPeople] = useState<WorkspacePerson[]>([]);
   const [focusMessageId, setFocusMessageId] = useState<string | null>(null);
+  const [recentTick, setRecentTick] = useState(0);
 
   const load = useCallback(async () => {
     setError(null);
@@ -133,6 +135,12 @@ export function WorkspaceRoom({ workspaceId }: { workspaceId: string }) {
   }, [load]);
 
   useEffect(() => {
+    if (!detail?.workspace) return;
+    recordRecentWorkspace(detail.workspace.id, detail.workspace.title);
+    setRecentTick((n) => n + 1);
+  }, [detail?.workspace.id, detail?.workspace.title]);
+
+  useEffect(() => {
     if (isDemo) return;
 
     const es = new EventSource(getWorkspaceMessageStreamUrl(workspaceId), {
@@ -180,6 +188,11 @@ export function WorkspaceRoom({ workspaceId }: { workspaceId: string }) {
   const summary = siblings.find((s) => s.id === workspaceId);
   const runCount = summary?.run_count ?? 0;
   const tokenCount = summary?.total_tokens ?? 0;
+  const handles = agents.map((a) => a.handle);
+  const recents = useMemo(
+    () => resolveRecentWorkspaces(siblings),
+    [siblings, recentTick],
+  );
 
   const sendMessage = async (
     text: string,
@@ -221,10 +234,11 @@ export function WorkspaceRoom({ workspaceId }: { workspaceId: string }) {
     await load();
   };
 
-  const createPointer = async (title: string) => {
+  const createPointer = async (title: string, assigneeMemberId?: string | null) => {
     await api.createWorkspacePointer(workspaceId, {
       title,
       created_by_member_id: senderId,
+      ...(assigneeMemberId ? { assignee_member_id: assigneeMemberId } : {}),
     });
     await load();
   };
@@ -330,7 +344,6 @@ export function WorkspaceRoom({ workspaceId }: { workspaceId: string }) {
   }
 
   const workspace = detail!.workspace;
-  const handles = agents.map((a) => a.handle);
 
   const tabs: Array<{ key: Tab; label: string; count?: number | string }> = [
     { key: 'conversation', label: 'Conversation', count: detail!.messages.length },
@@ -344,7 +357,12 @@ export function WorkspaceRoom({ workspaceId }: { workspaceId: string }) {
     <AgentHueProvider handles={agents.map((a) => a.handle)}>
       <div className="workspace-room flex h-dvh overflow-hidden bg-[var(--bg-app)]">
         <aside className="hidden w-[248px] shrink-0 flex-col border-r border-[var(--stroke-soft-200)] bg-[var(--bg-app)] lg:flex">
-          <RoomSidebar workspaces={siblings} meta={siblingMeta} currentId={workspaceId} />
+          <RoomSidebar
+            workspaces={siblings}
+            meta={siblingMeta}
+            currentId={workspaceId}
+            recents={recents}
+          />
         </aside>
 
         <main className="flex min-w-0 flex-1 flex-col bg-[var(--white-0)]">
@@ -492,6 +510,7 @@ export function WorkspaceRoom({ workspaceId }: { workspaceId: string }) {
               <TaskChecklist
                 pointers={pointers}
                 agents={agents}
+                viewerAgentIds={viewerAgentIds}
                 onCreate={createPointer}
                 onUpdate={updatePointer}
                 onDelete={deletePointer}

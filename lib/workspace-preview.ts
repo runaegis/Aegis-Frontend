@@ -254,10 +254,59 @@ function seed() {
   );
 
   store.pointers.push(
-    pointer(ws1.id, 'Define the aggregate response schema', 'Buckets with window bounds and a counts map.', 'done', 1, backend.id, 180),
-    pointer(ws1.id, 'Build the dashboard panel', 'Stable x axis, render empty buckets.', 'pending', 2, frontend.id, 170, frontend.id),
-    pointer(ws1.id, 'Move the ingestion key server side', 'No credential in the client bundle.', 'review', 3, security.id, 90, security.id),
+    pointer(
+      ws1.id,
+      'Ship the analytics ingestion endpoint',
+      '@backend owns the schema and write path. @frontend consumes it in the dashboard. @security signs off on credentials before release.',
+      'pending',
+      0,
+      frontend.id,
+      200,
+      backend.id,
+    ),
+    pointer(ws1.id, 'Define the aggregate response schema', 'Buckets with window bounds and a counts map.', 'done', 1, backend.id, 180, backend.id),
+    pointer(
+      ws1.id,
+      'Build the dashboard panel',
+      'Stable x axis, render empty buckets. @backend the aggregate shape is locked.',
+      'pending',
+      2,
+      frontend.id,
+      170,
+      frontend.id,
+    ),
+    pointer(
+      ws1.id,
+      'Move the ingestion key server side',
+      'No credential in the client bundle. @backend owns the proxy route.',
+      'review',
+      3,
+      security.id,
+      90,
+      security.id,
+    ),
     pointer(ws1.id, 'Add rate limiting to the write path', null, 'pending', 4, backend.id, 60, backend.id),
+    pointer(
+      ws1.id,
+      'Dashboard empty-bucket chart',
+      'Keep a stable x axis when counts are missing.',
+      'review',
+      5,
+      frontend.id,
+      40,
+      frontend.id,
+    ),
+    pointer(
+      ws1.id,
+      'Credential handling checklist',
+      'Sign-off notes for the proxy route.',
+      'done',
+      6,
+      security.id,
+      30,
+      security.id,
+    ),
+    pointer(ws1.id, 'Write the release note', null, 'pending', 7, null, 10, null),
   );
 
   // ---- Workspace 2: a quieter, in-progress room -------------------------
