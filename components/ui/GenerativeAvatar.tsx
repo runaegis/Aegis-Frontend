@@ -93,6 +93,16 @@ const USER_PALETTE_PAIRS = [
 /** DEMO workspace pair — Linear accent, matching the primary chrome. */
 const DEMO_PAIR = { bg: '#3D63E8', fg: '#93B2FF' };
 
+/** Same pair the avatar itself uses for a seed, so stripes/rings stay in sync. */
+export function avatarColorsForSeed(
+  seed: string,
+  variant: 'demo' | 'user' = 'user',
+): { bg: string; fg: string } {
+  if (variant === 'demo') return DEMO_PAIR;
+  const hash = hashSeed(seed);
+  return USER_PALETTE_PAIRS[hash % USER_PALETTE_PAIRS.length];
+}
+
 /** Build the dither path string for a given seed + grid.
  *  Walks the grid row-by-row, emits `M<x> <y>h<run>` chunks for each
  *  run of consecutive "on" cells — mirrors the reference SVG's path

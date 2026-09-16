@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import type { WorkspaceAgent, WorkspaceSummary } from '@/lib/api';
+import type { RecentWorkspace } from '@/lib/recentWorkspaces';
 import { cn } from '@/lib/utils';
 import { AgentGlyph, AgentHueProvider } from './agent-visuals';
 
@@ -15,19 +16,19 @@ export type SiblingMeta = {
 /**
  * Room switcher.
  *
- * Every other surface carries identity and state, so a list of bare titles
- * read as the flattest thing on screen. Each row now answers the two
- * questions you actually switch rooms to ask: who is in there, and how far
- * along is it.
+ * Recent names sit at the top for one-click return. The full list below
+ * still has agents + progress so you can scan every room.
  */
 export function RoomSidebar({
   workspaces,
   meta,
   currentId,
+  recents = [],
 }: {
   workspaces: WorkspaceSummary[];
   meta: Record<string, SiblingMeta>;
   currentId: string;
+  recents?: RecentWorkspace[];
 }) {
   return (
     <>
@@ -42,6 +43,32 @@ export function RoomSidebar({
       </div>
 
       <nav className="flex-1 overflow-y-auto p-1.5">
+        {recents.length > 0 && (
+          <div className="mb-1.5">
+            <div className="flex items-center gap-1.5 px-2 pb-1 pt-1.5">
+              <span className="text-[10.5px] font-medium uppercase tracking-[0.05em] text-[var(--neutral-soft-400)]">
+                Recent
+              </span>
+            </div>
+            {recents.map((row) => (
+              <Link
+                key={row.id}
+                href={`/workspaces/${row.id}`}
+                aria-current={row.id === currentId ? 'page' : undefined}
+                className={cn(
+                  'relative block truncate rounded-md px-2.5 py-1.5 text-[12.5px] leading-[1.4]',
+                  row.id === currentId
+                    ? 'bg-[var(--bg-surface-alt)] font-semibold text-[var(--neutral-strong-950)]'
+                    : 'font-medium text-[var(--neutral-sub-600)] hover:bg-[var(--neutral-weak-50)] hover:text-[var(--neutral-strong-950)]',
+                )}
+                title={row.title}
+              >
+                {row.title}
+              </Link>
+            ))}
+          </div>
+        )}
+
         <div className="flex items-center gap-1.5 px-2 pb-1 pt-1.5">
           <span className="text-[10.5px] font-medium uppercase tracking-[0.05em] text-[var(--neutral-soft-400)]">
             Workspaces

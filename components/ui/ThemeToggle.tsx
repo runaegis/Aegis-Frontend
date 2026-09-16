@@ -15,13 +15,9 @@
  * is instant — no re-render flash. Source of truth = the DOM attribute,
  * with localStorage as the persistence layer. Both stay in sync.
  *
- * Scope reminder: the actual application of the theme is gated to
- * /dashboard by the FOUC-prevention script in app/layout.tsx and the
- * effect in app/dashboard/layout.tsx. Choosing dark while OUTSIDE the
- * dashboard would still persist to localStorage, but only take visible
- * effect once you're back inside the dashboard. In practice the toggle
- * is only rendered inside dashboard surfaces (profile menu, settings),
- * so this scoping is invisible to users.
+ * Theme is one preference for /dashboard and /workspaces. Auth is always
+ * dark; onboarding stays light. `AppThemeSync` reapplies the stored flag
+ * on client navigations so leaving the dashboard shell cannot wipe it.
  */
 
 import { useCallback, useEffect, useState } from 'react';
@@ -30,19 +26,53 @@ import { cn } from '@/lib/utils';
 
 type Theme = 'light' | 'dark';
 
+export function readPersistedTheme(): Theme {
+  if (typeof window === 'undefined') return 'light';
+  try {
+    return localStorage.getItem('aegis_theme') === 'dark' ? 'dark' : 'light';
+  } catch {
+    return 'light';
+  }
+}
+
 function currentTheme(): Theme {
   if (typeof document === 'undefined') return 'light';
-  return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
+  if (document.documentElement.dataset.theme === 'dark') return 'dark';
+  return readPersistedTheme();
+}
+
+function applyDomTheme(next: Theme) {
+  if (typeof document === 'undefined') return;
+  if (next === 'dark') document.documentElement.dataset.theme = 'dark';
+  else delete document.documentElement.dataset.theme;
 }
 
 function applyTheme(next: Theme) {
-  if (next === 'dark') {
-    document.documentElement.dataset.theme = 'dark';
-    localStorage.setItem('aegis_theme', 'dark');
-  } else {
-    delete document.documentElement.dataset.theme;
-    localStorage.removeItem('aegis_theme');
+  applyDomTheme(next);
+  try {
+    if (next === 'dark') localStorage.setItem('aegis_theme', 'dark');
+    else localStorage.removeItem('aegis_theme');
+  } catch {
+    // localStorage can throw in embedded contexts.
   }
+}
+
+/** Re-apply stored theme after client navigations. Does not rewrite storage. */
+export function applyPersistedAppTheme(pathname: string) {
+  if (pathname.startsWith('/auth')) {
+    applyDomTheme('dark');
+    return;
+  }
+  if (typeof window !== 'undefined') {
+    const fromQuery = new URLSearchParams(window.location.search).get('theme');
+    if (fromQuery === 'dark') applyTheme('dark');
+    else if (fromQuery === 'light') applyTheme('light');
+  }
+  if (pathname.startsWith('/dashboard') || pathname.startsWith('/workspaces')) {
+    applyDomTheme(readPersistedTheme());
+    return;
+  }
+  applyDomTheme('light');
 }
 
 // ─── Public hook (handy for any caller that wants raw read/write) ──────────
@@ -50,7 +80,14 @@ export function useTheme(): { theme: Theme; setTheme: (t: Theme) => void } {
   const [theme, setThemeState] = useState<Theme>('light');
 
   useEffect(() => {
-    setThemeState(currentTheme());
+    const sync = () => setThemeState(currentTheme());
+    sync();
+    const observer = new MutationObserver(sync);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme'],
+    });
+    return () => observer.disconnect();
   }, []);
 
   const setTheme = useCallback((next: Theme) => {

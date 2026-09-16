@@ -19,6 +19,12 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { api } from '@/lib/api';
+import {
+  readRecentWorkspaces,
+  resolveRecentWorkspaces,
+  subscribeRecentWorkspaces,
+  type RecentWorkspace,
+} from '@/lib/recentWorkspaces';
 import { AegisLogo } from '@/components/ui/AegisLogo';
 import { WorkspaceSwitcher } from '@/components/ui/WorkspaceSwitcher';
 
@@ -128,6 +134,7 @@ export default function Sidebar() {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [inboxCount, setInboxCount] = useState(0);
+  const [recents, setRecents] = useState<RecentWorkspace[]>([]);
   const { collapsed, toggle } = useSidebarCollapsed();
 
   useEffect(() => {
@@ -148,6 +155,32 @@ export default function Sidebar() {
       cancelled = true;
     };
   }, [pathname]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let available: Array<{ id: string; title: string }> | null = null;
+    const sync = () => {
+      if (cancelled) return;
+      setRecents(
+        available
+          ? resolveRecentWorkspaces(available, 4)
+          : readRecentWorkspaces().slice(0, 4),
+      );
+    };
+    sync();
+    const unsub = subscribeRecentWorkspaces(sync);
+    api
+      .getWorkspaces()
+      .then((list) => {
+        available = list;
+        sync();
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+      unsub();
+    };
+  }, []);
 
   const isActive = (href: string) => {
     if (href === '/dashboard/workspaces') {
@@ -277,7 +310,43 @@ export default function Sidebar() {
               {group.label}
             </div>
             <div className="space-y-0.5">
-              {group.items.map((item) => renderNavLink(item, desktop))}
+              {group.items.map((item) => {
+                const showRecents =
+                  item.href === '/dashboard/workspaces' && recents.length > 0;
+                if (!showRecents) return renderNavLink(item, desktop);
+                return (
+                  <div key={item.href}>
+                    {renderNavLink(item, desktop)}
+                    <div
+                      data-sidebar-hide={desktop ? '' : undefined}
+                      className="mt-0.5 mb-0.5 space-y-px pl-[30px]"
+                    >
+                      {recents.map((row) => {
+                        const href = `/workspaces/${row.id}`;
+                        const active =
+                          pathname === href || pathname.startsWith(`${href}/`);
+                        return (
+                          <Link
+                            key={row.id}
+                            href={href}
+                            title={row.title}
+                            onClick={() => setMobileOpen(false)}
+                            className={[
+                              'block truncate rounded-[7px] px-2 py-[3px] text-[12px] leading-[1.35] tracking-[-0.01em]',
+                              'transition-colors duration-200 ease-[cubic-bezier(0.2,0.8,0.2,1)]',
+                              active
+                                ? 'font-medium text-[var(--neutral-strong-950)]'
+                                : 'text-[var(--neutral-soft-400)] hover:text-[var(--neutral-strong-950)]',
+                            ].join(' ')}
+                          >
+                            {row.title}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         ))}

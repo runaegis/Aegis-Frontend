@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Inter, JetBrains_Mono } from "next/font/google";
 import { ToastProvider } from "@/components/ui/Toast";
+import { AppThemeSync } from "@/components/ui/AppThemeSync";
 import AgentationGate from "@/components/dev/AgentationGate";
 import "./globals.css";
 
@@ -143,6 +144,7 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-full bg-[var(--bg-app)] text-[var(--text-strong)] antialiased">
+        <AppThemeSync />
         <ToastProvider>{children}</ToastProvider>
         {/* Floating annotation toolbar — dev-only. AgentationGate is
             a thin client wrapper that does the next/dynamic + NODE_ENV
